@@ -17,7 +17,8 @@ const typedRow = (text: string, timestamp: string) => ({
   type: 'user',
   timestamp,
   message: { role: 'user', content: text },
-  origin: { kind: 'composer' },
+  origin: { kind: 'human' },
+  promptSource: 'typed',
 })
 
 const pluginOpening = (text: string) => ({
@@ -69,7 +70,7 @@ test('the transcript turn keeps the human context before the queued opening and 
     { type: 'attachment', attachment: { type: 'queued_command', prompt: '<task-notification>done</task-notification>', origin: { kind: 'task-notification' } } },
     { type: 'user', message: { content: 'open the PR when green' } },
     { type: 'user', message: { content: [{ type: 'tool_result', content: 'ok' }] } },
-    { type: 'attachment', attachment: { type: 'queued_command', prompt: 'ask me one by one before you push', origin: { kind: 'human' } } },
+    { type: 'attachment', attachment: { type: 'queued_command', commandMode: 'prompt', prompt: 'ask me one by one before you push', origin: { kind: 'human' } } },
     { type: 'assistant', message: { content: [{ type: 'text', text: 'Green.' }, { type: 'text', text: undefined }, { type: 'text', text: 'Want me to open the PR?' }] } },
   ]
 

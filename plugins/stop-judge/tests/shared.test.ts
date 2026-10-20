@@ -43,9 +43,9 @@ test('an SDK opening is available to the judge but not transcript derivation', (
   expect(typedText(opening, { sdk: true })).toBe('inspect the result')
 })
 
-test('only an ordinary human row survives the text-level filters', () => {
+test('only a person-authored row survives the text-level filters', () => {
   expect(typedText(humanRow('  write the tests  '), { sdk: false })).toBe('write the tests')
-  expect(typedText({ ...humanRow('system message'), promptSource: 'system' }, { sdk: false })).toBe('system message')
+  expect(typedText({ ...humanRow('system message'), promptSource: 'system' }, { sdk: false })).toBeNull()
   expect(typedText({ ...humanRow('not human'), origin: { kind: 'plugin' } }, { sdk: false })).toBeNull()
   expect(typedText({ type: 'user', message: { role: 'user', content: 'unattributed system row' }, promptSource: 'system' }, { sdk: false })).toBeNull()
   expect(typedText({ ...humanRow([{ type: 'tool_result', text: 'result' }]) }, { sdk: false })).toBeNull()
