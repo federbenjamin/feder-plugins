@@ -303,6 +303,8 @@ async function deriveRun($: EngineInterface, run: DeriveRun, plan: DerivePlan): 
     $.ui.status('derive failed: invalid file, old one kept')
     return
   }
+  // Every bullet dropped as unverified: an empty file would replace a good one.
+  if (bulletCount(checked.text) === 0) throw new Error(`no bullet kept (${checked.dropped} dropped as unverified)`)
   const file = fitContext(checked.text, CONTEXT_MAX_CHARS)
   if (current !== null) await $.fs.write(`${path}.prev`, current)
   await $.fs.write(path, file)
@@ -329,7 +331,7 @@ async function deriveInBackground($: EngineInterface, state: State, run: DeriveR
 // Scan and confirm inside the command; on Run, the model calls go on after it returns.
 async function startDerive($: EngineInterface, state: State, all: boolean, settings: Settings): Promise<{ text: string }> {
   if (!state.isInteractive) return { text: 'derive needs an interactive session' }
-  if (state.derive) return { text: state.derive.total === 0 ? 'derive is scanning the transcripts' : `derive is running (${state.derive.done}/${state.derive.total} batches)` }
+  if (state.derive) return { text: state.derive.total === 0 ? 'derive is already started' : `derive is running (${state.derive.done}/${state.derive.total} batches)` }
   const { home, dir } = await stateDir($)
   if (home === '' || dir === '') return { text: 'derive needs HOME' }
   const run: DeriveRun = { controller: new AbortController(), done: 0, total: 0 }
