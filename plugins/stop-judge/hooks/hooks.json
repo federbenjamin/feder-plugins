@@ -1,1 +1,15 @@
-{ "modules": ["./register.ts"] }
+{
+  "modules": ["./register.ts"],
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "D=\"${STOPSTOPPING_DIR:-$HOME/.claude/stopstopping}\"; test -f \"$D/DECISIONS.md\" && test ! -f \"$D/context-off\" && cat \"$D/DECISIONS.md\" || true"
+          }
+        ]
+      }
+    ]
+  }
+}
