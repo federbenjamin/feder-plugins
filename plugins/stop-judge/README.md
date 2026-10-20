@@ -38,7 +38,7 @@ It starts in the next session.
 | `/stop-judge derive [all]` | Derive `DECISIONS.md` from your sessions |
 | anything else | Print the usage line |
 
-The command is registered in every session, `claude -p` included, so a script can run `claude -p "/stop-judge off"`. `context` and `derive` answer "lands in the next build" until the derivation ships.
+The command is registered in every session, `claude -p` included, so a script can run `claude -p "/stop-judge off"`. `derive` alone needs an interactive session (it asks before it spends).
 
 `STOP_JUDGE_NESTED=1` in the environment opts a process out: it logs `pass-nested` and makes no model call.
 
@@ -74,8 +74,43 @@ awk '{print $2}' ~/.claude/stopstopping/logs/stop-judge.log | sort | uniq -c
 
 ## Settings
 
-On/off lives in the engine's store under this plugin's name. Installing the bundle instead of this plugin starts from the defaults (on), and so does switching back.
+On/off and context on/off live in the engine's store under this plugin's name; `/stop-judge` shows them from there. Installing the bundle instead of this plugin starts from the defaults (on), and so does switching back. What the session-start hook obeys is the `context-off` file, which both installs share.
 
 ## Derive
 
-`/stop-judge derive` is not built yet in this version.
+`/stop-judge derive` writes `~/.claude/stopstopping/DECISIONS.md` from your own sessions: which kinds of choice you want brought to you, and how you want the rest decided. The agent reads it at the start of every session; the judge never does.
+
+- **What it reads.** Your top-level Claude Code transcripts under `~/.claude/projects/` (subagent transcripts and scripted runs in temporary folders are skipped), and only the messages you typed, each with what the agent had just done. Nothing leaves your machine except the model calls themselves.
+- **Estimate first.** It counts your typed turns, then asks `<n> sessions, <t> of <total> typed turns, ~$X.XX. Run?`. Cancel spends nothing. The first estimate uses a measured $0.0013 per turn plus an allowance for the final call; after a run, that run's measured cost per turn replaces it.
+- **The newest 2,000 typed turns** by default (about 20 reader batches, about $3); `/stop-judge derive all` reads every session.
+- **In the background.** After Run, readers (Sonnet, four at a time, 120 turns per batch) look for where you delegated, took a choice back, or stated a standing rule; a finding survives only if its quote is your exact words in that batch. One more call writes the file from those findings and the current file. The status line counts the batches; ending the session stops the run, and the next one starts over.
+- **Refresh overwrites.** The old file is kept as `DECISIONS.md.prev`, and is an input to the new one: a rule whose transcripts have aged out survives until newer sessions contradict it. A file that fails the format check, or keeps no bullet, is not written, and the old one stays.
+
+The file:
+
+```
+# Decisions (derived 2026-10-20, 117 sessions, 2000 turns, 2026-09-20 to 2026-10-20)
+
+Decide everything you can yourself. Bring only what is listed under "Bring to me" to the operator.
+
+## Bring to me
+- Ask before renaming anything public. -- "ask me before you rename anything public" (2026-10-12)
+## How to decide
+### Scope
+- Fix the cause, with the smallest change that does it. -- "smallest fix, root cause" (2026-10-15)
+```
+
+Every bullet ends in one or two of your quotes (at most 200 characters, `"` written as `'`) and the date of the session they came from. A bullet whose quote matches no finding and no quote of the current file is dropped. The file is kept under 9,000 characters, dropping "How to decide" bullets from the end: a hook's output over 10,000 characters reaches the model only as a short preview.
+
+**Session start.** A `SessionStart` command hook in `hooks/hooks.json` prints the file when it exists. `/stop-judge context off` writes `~/.claude/stopstopping/context-off`, which the hook checks, and `context on` removes it.
+
+**Editing it by hand** is fine; the next derive reads your edits as the current file. An agent editing a file under `~/.claude/stopstopping/` may need an allow rule for that folder in your permission settings.
+
+**Log lines** in `stop-judge.log`, outcome first, then the line as the reason:
+
+| Outcome | Reason |
+| --- | --- |
+| `context` | `context chars=<n>`: the file was printed at session start |
+| `derive` | `derive sessions=<n> turns=<t> batches=<b> cost=$<usd> failed-batches=<k> dropped-lines=<l> dropped-bullets=<m>` |
+| `derive-cancelled` | `derive-cancelled sessions=<n> turns=<t>` |
+| `derive-error` | `derive-error reason=<why>`: nothing was written |
