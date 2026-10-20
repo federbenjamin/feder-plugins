@@ -1,0 +1,6 @@
+{
+  "name": "stop-judge-eval",
+  "version": "0.1.0",
+  "description": "Dev-only: measures the stop judge over graded firings; load with --plugin-dir, never install",
+  "author": { "name": "Benjamin Feder" }
+}
