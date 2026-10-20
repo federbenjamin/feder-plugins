@@ -1,0 +1,71 @@
+import { expect, test } from 'claude-code/testing'
+import { fitContext, validateDecisions } from '../hooks/decisions.ts'
+
+const DEFAULT_LINE = 'Decide everything you can yourself. Bring only what is listed under "Bring to me" to the operator.'
+
+function decisions(bringBullets: readonly string[], howBullets: readonly string[]): string {
+  return [
+    '# Decisions (derived 2026-10-20, 3 sessions, latest 2,000 turns)',
+    '',
+    DEFAULT_LINE,
+    '',
+    '## Bring to me',
+    ...bringBullets,
+    '## How to decide',
+    '### Delivery',
+    ...howBullets,
+  ].join('\n')
+}
+
+const bring = '- Ask before changing the agreed scope. -- "ask before changing scope" (2026-10-20)'
+const how = '- Prefer the smallest useful change. -- "keep it focused" "avoid speculative layers" (2026-10-19)'
+
+test('a decisions file accepts bullets with one or two dated, quote-safe sources', () => {
+  const oneQuote = decisions([bring], [])
+  const twoQuotes = decisions([], [how])
+
+  expect(validateDecisions(oneQuote)).toEqual({ ok: true })
+  expect(validateDecisions(twoQuotes)).toEqual({ ok: true })
+})
+
+test('a decisions bullet without its required date is rejected', () => {
+  const text = decisions(['- Ask before changing the agreed scope. -- "ask before changing scope"'], [])
+
+  expect(validateDecisions(text).ok).toBe(false)
+})
+
+test('a decisions bullet rejects overlong quotes and inner double quotes', () => {
+  const overlong = decisions([`- Keep the scope visible. -- "${'x'.repeat(201)}" (2026-10-20)`], [])
+  const innerQuote = decisions(['- Keep the scope visible. -- "say "yes" first" (2026-10-20)'], [])
+
+  expect(validateDecisions(overlong).ok).toBe(false)
+  expect(validateDecisions(innerQuote).ok).toBe(false)
+})
+
+test('context fitting removes the newest How-to-decide bullets before losing a Bring-to-me rule', () => {
+  const earlyHow = '- Prefer the direct fix. -- "fix the cause" (2026-10-19)'
+  const lateHow = `- Verify the result before reporting it. -- "${'verify before reporting '.repeat(12)}" (2026-10-20)`
+  const source = decisions([bring], [earlyHow, lateHow])
+  const beforeLateBullet = decisions([bring], [earlyHow]).length
+
+  const fitted = fitContext(source, beforeLateBullet)
+
+  expect(fitted).toContain(bring)
+  expect(fitted).toContain(earlyHow)
+  expect(fitted).not.toContain(lateHow)
+  expect(fitted.length).toBeLessThanOrEqual(beforeLateBullet)
+})
+
+test('context fitting preserves Bring-to-me rules even when every How-to-decide bullet must go', () => {
+  const firstHow = `- Keep a focused plan. -- "${'focus the plan '.repeat(12)}" (2026-10-19)`
+  const secondHow = `- Use evidence before claiming success. -- "${'show the evidence '.repeat(12)}" (2026-10-20)`
+  const source = decisions([bring], [firstHow, secondHow])
+  const maxChars = decisions([bring], []).length + 24
+
+  const fitted = fitContext(source, maxChars)
+
+  expect(fitted).toContain(bring)
+  expect(fitted).not.toContain(firstHow)
+  expect(fitted).not.toContain(secondHow)
+  expect(fitted.length).toBeLessThanOrEqual(maxChars)
+})
