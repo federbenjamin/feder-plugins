@@ -226,7 +226,7 @@ export function parseReaderLines(text: string, sessionDates: Record<string, stri
   return out
 }
 
-export const normalizeWhitespace = (text: string): string => text.replace(/\s+/g, ' ').trim()
+const normalizeWhitespace =(text: string): string => text.replace(/\s+/g, ' ').trim()
 
 // A quote survives only when it is the operator's own words in this batch, and short enough for
 // the file's format.
