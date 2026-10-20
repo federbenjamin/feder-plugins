@@ -1,0 +1,37 @@
+{
+  "name": "stopstopping",
+  "description": "Four plugins that keep a Claude Code agent working instead of stopping to ask, in one bundle or one by one",
+  "owner": { "name": "federbenjamin" },
+  "plugins": [
+    {
+      "name": "dialog-timeout",
+      "source": "./plugins/dialog-timeout",
+      "description": "Ends a turn left on an open dialog (permission prompt, question) for 30 min by default and tells the agent the user is /afk; /dialog-timeout <minutes>|off|on",
+      "category": "productivity"
+    },
+    {
+      "name": "cache-keepalive",
+      "source": "./plugins/cache-keepalive",
+      "description": "Keeps an idle session's prompt cache warm with a short prompt 2 min before it expires; capped per model, the last one a handoff",
+      "category": "productivity"
+    },
+    {
+      "name": "stop-judge",
+      "source": "./plugins/stop-judge",
+      "description": "Nudges the agent on when it stops early, and derives DECISIONS.md from your own sessions; /stop-judge",
+      "category": "productivity"
+    },
+    {
+      "name": "session-log",
+      "source": "./plugins/session-log",
+      "description": "Keeps one markdown session log per session, pruned at compaction; ships the handoff and finish-session skills",
+      "category": "productivity"
+    },
+    {
+      "name": "stopstopping",
+      "source": "./plugins/stopstopping",
+      "description": "dialog-timeout + cache-keepalive + stop-judge + session-log in one plugin",
+      "category": "productivity"
+    }
+  ]
+}
