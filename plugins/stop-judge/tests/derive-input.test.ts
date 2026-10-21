@@ -133,13 +133,13 @@ test('batches split a long session at the turn ceiling without losing its operat
     { sessions: ['alpha'], turns: 2 },
     { sessions: ['alpha'], turns: 1 },
   ])
-  expect(packed[0].operatorText).toContain('first operator message')
-  expect(packed[0].operatorText).toContain('second operator message')
-  expect(packed[1].operatorText).toBe('third operator message')
-  expect(packed[0].text).toContain("# session alpha")
-  expect(packed[0].text).toContain("## turn 1 — 2026-10-20T09:00:00.000Z")
-  expect(packed[0].text).toContain("### agent's preceding action\nTEXT: first action")
-  expect(packed[0].text).not.toContain('Decisions log:')
+  expect(packed[0]!.operatorText).toContain('first operator message')
+  expect(packed[0]!.operatorText).toContain('second operator message')
+  expect(packed[1]!.operatorText).toBe('third operator message')
+  expect(packed[0]!.text).toContain("# session alpha")
+  expect(packed[0]!.text).toContain("## turn 1 — 2026-10-20T09:00:00.000Z")
+  expect(packed[0]!.text).toContain("### agent's preceding action\nTEXT: first action")
+  expect(packed[0]!.text).not.toContain('Decisions log:')
 })
 
 test('a character ceiling starts the next session in a fresh batch even when turns fit', () => {
