@@ -1,19 +1,26 @@
 import { confidenceOf, judgeOutcome } from './judge/judge.ts'
-import type { JudgeReply } from './judge/judge.ts'
+import type { JudgeReply, MinutesGap } from './judge/judge.ts'
 
-// One judged record of a run, and the score of a run against the graders' labels.
+// One model call of a run, the graders' labels, and the command's arguments.
 
-export type RunRecord = {
-  id: string
+// `off`: the round-3 request alone. `on`: the same request with the minutes fact.
+export type Arm = 'off' | 'on'
+export const ARMS: readonly Arm[] = ['off', 'on']
+
+export type Call = { id: string; arm: Arm; repeat: number }
+
+export type RunRecord = Call & {
   live: string
   new: 'stop' | 'continue' | null
   new_outcome: string
   conf: number | null
   shape: string | null
   reason: string
+  text: string
   ms: number
   error: string
   minutes_since_operator: number | null
+  is_lower_bound: boolean
 }
 
 export type Grade = { id: string; verdict: 'stop' | 'continue'; case: string; confidence: string }
@@ -22,9 +29,18 @@ export type { JudgeReply }
 
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
 
-// The production path's outcome for one reply (judge.ts's judgeOutcome): what the judge would have logged.
-export function runRecordOf(id: string, live: string, reply: JudgeReply, ms: number, minutes: number | null): RunRecord {
-  const base = { id, live, ms, minutes_since_operator: minutes }
+// Every call of a run: each repeat of each record in each arm, a record's arms side by side so
+// both meet the same API conditions.
+export function callsOf(ids: readonly string[], arms: readonly Arm[], repeats: number): Call[] {
+  const calls: Call[] = []
+  for (let repeat = 1; repeat <= repeats; repeat++) for (const id of ids) for (const arm of arms) calls.push({ id, arm, repeat })
+  return calls
+}
+
+// The production path's outcome for one reply (judge.ts's judgeOutcome): what the judge would
+// have logged. `gap` is the record's minutes fact, kept on both arms' calls.
+export function runRecordOf(call: Call, live: string, reply: JudgeReply, ms: number, gap: MinutesGap | null): RunRecord {
+  const base = { ...call, live, ms, text: reply.isAnswered ? reply.text : '', minutes_since_operator: gap?.minutes ?? null, is_lower_bound: gap?.isLowerBound ?? false }
   const { outcome, reason, verdict } = judgeOutcome(reply)
   if (verdict === null) return { ...base, new: null, new_outcome: outcome, conf: null, shape: null, reason: '', error: reason }
   const shape = verdict.fields.shape
@@ -56,35 +72,6 @@ export function gradesFrom(texts: readonly string[]): Record<string, Grade> {
     }
   }
   return grades
-}
-
-const isBlock = (outcome: string) => outcome === 'continue'
-const ratio = (n: number, of: number) => `${n}/${of} = ${of === 0 ? 'n/a' : `${((100 * n) / of).toFixed(1)}%`}`
-
-export function scoreRun(run: readonly RunRecord[], key: Record<string, { outcome: string }>, grades: Record<string, Grade>): string {
-  const errors = run.filter(r => r.error !== '').length
-  const scored = run.filter(r => r.error === '' && grades[r.id] !== undefined && key[r.id] !== undefined)
-  const ungraded = run.filter(r => r.error === '').length - scored.length
-  const gradeOf = (r: RunRecord) => grades[r.id]!
-  const liveOf = (r: RunRecord) => key[r.id]!.outcome
-  const lines: string[] = []
-  for (const arm of ['live', 'new'] as const) {
-    const outcome = (r: RunRecord) => (arm === 'live' ? liveOf(r) : r.new_outcome)
-    const stops = scored.filter(r => gradeOf(r).verdict === 'stop')
-    const continues = scored.filter(r => gradeOf(r).verdict === 'continue')
-    const falseBlocks = stops.filter(r => isBlock(outcome(r))).length
-    const caught = continues.filter(r => isBlock(outcome(r))).length
-    lines.push(`${arm}: false-block ${ratio(falseBlocks, stops.length)} | catch ${ratio(caught, continues.length)}`)
-  }
-  const high = scored.filter(r => gradeOf(r).verdict === 'continue' && gradeOf(r).confidence === 'high')
-  lines.push(
-    `high-confidence continue caught: live ${high.filter(r => isBlock(liveOf(r))).length} new ${high.filter(r => isBlock(r.new_outcome)).length} of ${high.length}`,
-  )
-  const falseBlocks = scored.filter(r => gradeOf(r).verdict === 'stop' && isBlock(r.new_outcome)).map(r => `${r.id} ${gradeOf(r).case} ${r.conf}`)
-  const misses = scored.filter(r => gradeOf(r).verdict === 'continue' && !isBlock(r.new_outcome)).map(r => `${r.id} ${gradeOf(r).confidence} ${gradeOf(r).case}`)
-  lines.push(`new false blocks: [${falseBlocks.join(', ')}]`, `new misses: [${misses.join(', ')}]`, `errors ${errors}`)
-  if (ungraded > 0) lines.push(`ungraded (not scored): ${ungraded}`)
-  return lines.join('\n')
 }
 
 // `--key x --ids "a b"` → { key: 'x', ids: 'a b' }; a flag with no value is 'true', a bare word goes to `_`.
