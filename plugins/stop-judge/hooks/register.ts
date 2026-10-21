@@ -112,14 +112,17 @@ type State = {
   transcript: { id: string; path: string } | undefined
   isInteractive: boolean
   derive: DeriveRun | undefined
+  statusCalls: number // showStatus calls begun; only the newest writes the line
 }
 
-// Found by session id: the project folder is named for where the session started, which a
-// worktree move changes. Looked up on a turn, not at session start, when the file may not exist yet.
 // The status line from the settings stored now and the run in flight, so a judge-off marker set
-// mid-run and the run's progress never hide each other, and a run's end restores the marker.
+// mid-run and the run's progress never hide each other, and a run's end restores the marker. Of
+// two calls in flight, the one begun later read the store later: an earlier one finishing last
+// would put an older setting back, so it writes nothing.
 async function showStatus($: EngineInterface, state: State): Promise<void> {
-  $.ui.status(statusLine(settingsFrom(await $.store.get(SETTING)), state.derive?.progress))
+  const call = ++state.statusCalls
+  const settings = settingsFrom(await $.store.get(SETTING))
+  if (call === state.statusCalls) $.ui.status(statusLine(settings, state.derive?.progress))
 }
 
 async function setProgress($: EngineInterface, state: State, run: DeriveRun, progress: string): Promise<void> {
@@ -127,6 +130,8 @@ async function setProgress($: EngineInterface, state: State, run: DeriveRun, pro
   if (state.derive === run) await showStatus($, state)
 }
 
+// Found by session id: the project folder is named for where the session started, which a
+// worktree move changes. Looked up on a turn, not at session start, when the file may not exist yet.
 async function transcriptPath($: EngineInterface, state: State, home: string): Promise<string | undefined> {
   const id = await $.session.id()
   if (state.transcript?.id === id) return state.transcript.path
@@ -365,7 +370,7 @@ async function startDerive($: EngineInterface, state: State, all: boolean): Prom
 }
 
 export const register: Register = on => {
-  const state: State = { nudgedThisPrompt: false, transcript: undefined, isInteractive: false, derive: undefined }
+  const state: State = { nudgedThisPrompt: false, transcript: undefined, isInteractive: false, derive: undefined, statusCalls: 0 }
 
   on('session.start', async ($, e, next) => {
     state.nudgedThisPrompt = false

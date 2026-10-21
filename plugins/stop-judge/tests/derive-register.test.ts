@@ -42,6 +42,8 @@ function world(on: On) {
     spawned: [] as string[][],
     // Held until released: the reader call waits on it, so a test can act mid-run.
     readerGate: undefined as Promise<void> | undefined,
+    // The next store read takes its value at once and answers when this is released.
+    holdNextGet: undefined as Promise<void> | undefined,
     files: new Map<string, string>(),
     writes: [] as string[],
     logged: [] as string[],
@@ -52,7 +54,13 @@ function world(on: On) {
     synthesis: VALID,
     runs: [] as string[][],
   }
-  on('store.get', async (_$, e) => ({ value: w.store.get(e.key) }))
+  on('store.get', async (_$, e) => {
+    const value = w.store.get(e.key)
+    const hold = w.holdNextGet
+    w.holdNextGet = undefined
+    if (hold) await hold
+    return { value }
+  })
   on('store.set', async (_$, e) => {
     w.store.set(e.key, e.value)
     return { value: undefined }
@@ -277,4 +285,26 @@ test('the scan lists the project folders POOL at once, and every folder still co
   await $.command.run(run('derive'))
   expect(w.listing.most).toBe(4)
   expect(w.asked).toEqual(['1 sessions, 3 of 3 typed turns, ~$0.30. Run?'])
+})
+
+test('a status update that read the store before /stop-judge off and lands after it does not hide the marker', async ($, on) => {
+  const { w, clock } = world(on)
+  w.answer = 'Run'
+  w.reader = finding('ask me before you rename anything public')
+  let releaseReader = () => {}
+  w.readerGate = new Promise<void>(resolve => (releaseReader = resolve))
+  await start($)
+  await $.command.run(run('derive'))
+  let releaseGet = () => {}
+  w.holdNextGet = new Promise<void>(resolve => (releaseGet = resolve))
+  releaseReader()
+  for (let i = 0; i < 5; i++) await clock.settle()
+  await $.command.run(run('off'))
+  expect(w.statuses.at(-1)).toBe('stop-judge off · derive 1/1')
+  releaseGet()
+  for (let i = 0; i < 20 && !w.writes.includes(`${DIR}/last-run.json`); i++) await clock.settle()
+  for (let i = 0; i < 5; i++) await clock.settle()
+  const marked = w.statuses.indexOf('stop-judge off · derive 1/1')
+  expect(w.statuses.slice(marked)).not.toContain('derive 1/1')
+  expect(w.statuses.at(-1)).toBe('stop-judge off')
 })

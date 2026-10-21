@@ -137,11 +137,14 @@ test('pool keeps item order, runs at most `limit` at once, and starts nothing af
   })
   expect(out).toEqual([30, 10, 20, 0])
   expect(most).toBe(2)
+  // Item 1 is still running when item 2 rejects in the other lane; its lane starts nothing after.
   const tried: number[] = []
-  await expect(pool([1, 2, 3, 4], 1, async n => {
+  await expect(pool([1, 2, 3, 4], 2, async n => {
     tried.push(n)
     if (n === 2) throw new Error('boom')
+    for (let i = 0; i < 10; i++) await Promise.resolve()
     return n
   })).rejects.toThrow('boom')
+  for (let i = 0; i < 30; i++) await Promise.resolve()
   expect(tried).toEqual([1, 2])
 })
