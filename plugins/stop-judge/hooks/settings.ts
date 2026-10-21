@@ -55,7 +55,7 @@ export function statusText(info: { settings: Settings; counts: Record<string, nu
     .map(([outcome, n]) => `${outcome} ${n}`)
   const decisions = info.decisions ? `${info.decisions.lines} lines (${info.decisions.date})` : 'none'
   return [
-    `stop-judge: ${info.settings.isOff ? 'off' : 'on'}`,
+    `${info.settings.isOff ? 'off' : 'on'}`,
     `context: ${info.settings.isContextOff ? 'off' : 'on'}`,
     `last 7 days: ${counts.length > 0 ? counts.join(', ') : 'none'}`,
     `DECISIONS.md: ${decisions}`,

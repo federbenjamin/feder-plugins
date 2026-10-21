@@ -32,7 +32,7 @@ test('the status report preserves its fixed fields and reports recorded outcomes
     settings: { isOff: true, isContextOff: false },
     counts: { continue: 3, stop: 40, 'pass-off': 1 },
     decisions: { lines: 24, date: '2026-10-20' },
-  })).toBe('stop-judge: off · context: on · last 7 days: continue 3, stop 40, pass-off 1 · DECISIONS.md: 24 lines (2026-10-20)')
+  })).toBe('off · context: on · last 7 days: continue 3, stop 40, pass-off 1 · DECISIONS.md: 24 lines (2026-10-20)')
 })
 
 test('the status report says none when no outcomes or decisions file exist', async () => {
@@ -40,7 +40,7 @@ test('the status report says none when no outcomes or decisions file exist', asy
     settings: { isOff: false, isContextOff: true },
     counts: {},
     decisions: null,
-  })).toBe('stop-judge: on · context: off · last 7 days: none · DECISIONS.md: none')
+  })).toBe('on · context: off · last 7 days: none · DECISIONS.md: none')
 })
 
 test('the status line carries the judge-off marker and a derive run, either or both', () => {

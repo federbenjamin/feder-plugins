@@ -230,7 +230,7 @@ test('/stop-judge off logs pass-off without a model call, on judges again, and t
   await complete($)
   expect(outcomes(w.logged)).toEqual(['pass-off'])
   expect(w.requests).toHaveLength(0)
-  expect((await $.command.run(run(''))).text).toMatch(/^stop-judge: off · context: on · last 7 days: none · DECISIONS\.md: /)
+  expect((await $.command.run(run(''))).text).toMatch(/^off · context: on · last 7 days: none · DECISIONS\.md: /)
   expect((await $.command.run(run('on'))).text).toContain('judge on')
   await complete($)
   expect(outcomes(w.logged)).toEqual(['pass-off', 'continue'])
