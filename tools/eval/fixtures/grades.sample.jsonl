@@ -1,0 +1,8 @@
+{"id":"F0001","verdict":"stop","case":"answer","confidence":"high","reason":"Answers the why question; no offer."}
+{"id":"F0002","verdict":"stop","case":"consulted","confidence":"high","reason":"The operator asked to discuss before building."}
+{"id":"F0003","verdict":"continue","case":"offer","confidence":"high","reason":"Run the integration suite."}
+{"id":"F0004","verdict":"continue","case":"doable-next","confidence":"high","reason":"Commit and open the PR; the request asked for it."}
+{"id":"F0005","verdict":"continue","case":"options","confidence":"medium","reason":"Take the recommended column and build it."}
+{"id":"F0006","verdict":"stop","case":"waiting-background","confidence":"medium","reason":"Waiting on CI with a watch armed."}
+{"id":"F0007","verdict":"stop","case":"operator-only","confidence":"high","reason":"Needs a key only the operator has."}
+{"id":"F0008","verdict":"continue","case":"permission","confidence":"low","reason":"Bump the dependency."}
