@@ -96,7 +96,7 @@ test('a session-start prompt carries an explicit empty preceding-action marker',
   expect(turns).toEqual([turn('2026-10-20T09:01:00.000Z', 'Start with this request.')])
 })
 
-test('the newest complete sessions fill a capped derivation while all removes that cap', () => {
+test('a capped derivation takes the newest turns that fit while all removes that cap', () => {
   const newest: Session = {
     id: 'newest',
     project: 'project-a',
@@ -109,7 +109,10 @@ test('the newest complete sessions fill a capped derivation while all removes th
     turns: [turn('2026-10-20T09:00:00.000Z', 'old one'), turn('2026-10-20T09:01:00.000Z', 'old two')],
   }
 
-  expect(packSessions([newest, sparse, older], 3)).toEqual({ kept: [newest], turns: 2 })
+  expect(packSessions([newest, sparse, older], 3)).toEqual({
+    kept: [{ ...newest }, { ...older, turns: [older.turns[1]!] }],
+    turns: 3,
+  })
   expect(packSessions([newest, sparse, older], null)).toEqual({ kept: [newest, older], turns: 4 })
 })
 

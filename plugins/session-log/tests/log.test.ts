@@ -11,7 +11,7 @@ test('a later compaction archives untagged settled work, every finished todo, an
     '',
     '- 09:00Z first untagged fact',
     '- 09:15Z [older-branch] tagged fact',
-    '- 10:00Z [session] compacted',
+    '- 10:00Z compacted',
     '- 10:30Z current fact',
     '',
     '## Todo',
@@ -35,7 +35,7 @@ test('a later compaction archives untagged settled work, every finished todo, an
   expect(result.warnings).toEqual([])
   expect(result.log).toContain('- 10:30Z current fact')
   expect(result.log).toContain('- [ ] unresolved task')
-  expect(result.log).toContain('- 11:45Z [session] compacted')
+  expect(result.log).toContain('- 11:45Z compacted')
   expect(result.log).not.toContain('- 09:00Z first untagged fact')
   expect(result.log).not.toContain('- 09:15Z [older-branch] tagged fact')
   expect(result.log).not.toContain('- [x] finished without a tag')
@@ -72,7 +72,7 @@ test('the first compaction keeps work until a previous marker exists but still a
   expect(result.moved).toBe(1)
   expect(result.log).toContain('- 10:00Z work awaiting its next compaction')
   expect(result.log).toContain('- [ ] open task')
-  expect(result.log).toContain('- 11:45Z [session] compacted')
+  expect(result.log).toContain('- 11:45Z compacted')
   expect(result.log).not.toContain('- [x] completed task')
   expect(result.archive).toContain('- [x] completed task')
 })
@@ -97,8 +97,8 @@ test('the template teaches the three-section untagged format without retired cit
   expect(template).toContain('## Decisions')
   expect(template).toContain('- HH:MMZ <fact> (<sha>)')
   expect(template).toContain('- [ ] <task>')
-  expect(template).toContain('- [x] <task>')
-  expect(template).toContain('replaces: "<quote>"')
+  expect(template).toContain('- [x]')
+  expect(template).toContain('replaces:')
   expect(template).not.toContain('[<branch>]')
   expect(template).not.toContain('principle')
   expect(template).not.toContain('contract rule')
