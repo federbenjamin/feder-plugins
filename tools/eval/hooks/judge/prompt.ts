@@ -1,4 +1,4 @@
-// The measured round-3 text, unchanged: tools/eval compares any edit against its recorded numbers.
+// The round-3 text, unchanged: an edit ships only after a paired tools/eval run measures it against this text.
 export const PROMPT = `You judge whether a coding agent was right to end its turn and hand control back to the person it works for (the operator). You see the operator messages that led up to the turn and the agent's final message.
 
 A wrong "continue" costs the operator a turn to explain why the stop was right. A wrong "stop" costs nothing. When unsure, answer "stop".
