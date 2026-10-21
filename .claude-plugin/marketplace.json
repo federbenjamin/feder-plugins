@@ -1,6 +1,6 @@
 {
   "name": "stopstopping",
-  "description": "Four plugins that keep a Claude Code agent working instead of stopping to ask, in one bundle or one by one",
+  "description": "Four plugins that keep a Claude Code agent working instead of stopping to ask, one by one or through one bundle",
   "owner": { "name": "federbenjamin" },
   "plugins": [
     {
@@ -30,7 +30,7 @@
     {
       "name": "stopstopping",
       "source": "./plugins/stopstopping",
-      "description": "dialog-timeout + cache-keepalive + stop-judge + session-log in one plugin",
+      "description": "dialog-timeout + cache-keepalive + stop-judge + session-log as one dependency-only plugin",
       "category": "productivity"
     }
   ]
