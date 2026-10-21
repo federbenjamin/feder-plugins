@@ -35,12 +35,17 @@ function world(on: On, rows: unknown[] = [user('ship the fix'), assistant(OFFER)
     requests: [] as ModelCompleteRequest[],
     commands: [] as string[],
     tailArgv: [] as string[][],
+    awkArgv: [] as string[][],
+    statuses: [] as (string | undefined)[],
+    toasts: [] as string[],
   }
-  on('fs.exists', async () => ({ value: true }))
+  // Only the firing log exists: no DECISIONS.md, no context-off flag.
+  on('fs.exists', async (_$, e) => ({ value: e.path.endsWith('.log') }))
   on('session.id', async () => ({ value: 'sess-1' }))
   on('process.run', async (_$, e) => {
     const stdout = e.argv[0] === 'find' ? (w.transcript ? `${w.transcript}\n` : '') : e.argv[0] === 'awk' ? w.awk : ''
     if (e.argv[0] === 'tee') w.logged.push(e.init?.stdin ?? '')
+    if (e.argv[0] === 'awk') w.awkArgv.push([...e.argv])
     return { value: { ...done, stdout } }
   })
   on('process.spawn', async function* (_$, e) {
@@ -61,7 +66,14 @@ function world(on: On, rows: unknown[] = [user('ship the fix'), assistant(OFFER)
     }
     return { text: e.text }
   })
-  on('ui.status', async () => ({ value: undefined }))
+  on('ui.status', async (_$, e) => {
+    w.statuses.push(e.text)
+    return { value: undefined }
+  })
+  on('ui.toast', async (_$, e) => {
+    w.toasts.push(e.text)
+    return { value: undefined }
+  })
   on('command.register', async (_$, e) => {
     w.commands.push(e.name)
     return { value: { command: e.name } }
@@ -222,12 +234,32 @@ test('/stop-judge off logs pass-off without a model call, on judges again, and t
   expect(outcomes(w.logged)).toEqual(['pass-off', 'continue'])
 })
 
-test('the status line counts the last seven days from the log', async ($, on) => {
+test('the status line counts the last seven days from the log through countOutcomes', async ($, on) => {
   const w = world(on)
-  w.awk = 'continue\nstop\nstop\npass-off\n'
+  const line = (minutesAgo: number, outcome: string) => `${at(minutesAgo).slice(0, 19)}Z ${outcome} session=s ms=0 reason=r`
+  // awk keeps the lines from the cutoff on; one older line it let through is still not counted.
+  w.awk = [line(10, 'continue'), line(20, 'stop'), line(30, 'stop'), line(40, 'pass-off'), line(8 * 24 * 60, 'stop'), 'not a firing line', ''].join('\n')
   await start($)
   const text = (await $.command.run(run(''))).text
-  expect(text).toContain('last 7 days: continue 1, stop 2, pass-off 1')
+  expect(text).toContain('last 7 days: continue 1, stop 2, pass-off 1 · ')
+  const since = `${new Date(T0 - 7 * 86_400_000).toISOString().slice(0, 19)}Z`
+  expect(w.awkArgv).toEqual([['awk', '-v', `since=${since}`, '$1 >= since', '/tmp/ss/logs/stop-judge.log']])
+})
+
+test('a transcript tail with no typed row still states the gap, as more than the minutes since its oldest row', async ($, on) => {
+  const w = world(on, [{ type: 'system', timestamp: at(95), subtype: 'turn_duration' }, pluginRow('automessage: user is /afk'), assistant(OFFER)])
+  await start($)
+  await complete($)
+  expect(String(w.requests[0]?.prompt)).toContain("Minutes since the operator's last typed message: more than 95\n\nOne JSON line.")
+})
+
+test('/stop-judge off mid-session shows the marker; on clears it, from the stored setting', async ($, on) => {
+  const w = world(on)
+  await start($)
+  await $.command.run(run('off'))
+  expect(w.statuses.at(-1)).toBe('stop-judge off')
+  await $.command.run(run('on'))
+  expect(w.statuses.at(-1)).toBe(undefined)
 })
 
 test('the command registers once in a non-interactive session too, and an unknown argument prints usage', async ($, on) => {

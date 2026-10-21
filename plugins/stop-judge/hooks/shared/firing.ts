@@ -34,3 +34,26 @@ export function countOutcomes(lines: readonly string[], sinceIso: string): Recor
 export function logPath(dir: string, plugin: string): string {
   return `${dir}/logs/${plugin}.log`
 }
+
+// Where every plugin keeps what it writes for the person: STOPSTOPPING_DIR, else
+// `$HOME/.claude/stopstopping`; '' when neither is set, so nothing is written relative to cwd.
+export function stateDir(home: string | undefined, override: string | undefined): string {
+  return override || (home ? `${home}/.claude/stopstopping` : '')
+}
+
+// The one firing: the log a plugin appends to and the line it appends, from the two env values.
+// null when there is no state dir. The hooks file does the write: `tee -a` on the path.
+export function firingRecord(f: {
+  home: string | undefined
+  override: string | undefined
+  plugin: string
+  outcome: string
+  session: string
+  ms: number
+  reason: string
+  now: Date
+}): { path: string; line: string } | null {
+  const dir = stateDir(f.home, f.override)
+  if (dir === '') return null
+  return { path: logPath(dir, f.plugin), line: firingLine(f.outcome, f.session, f.ms, f.reason, f.now) }
+}

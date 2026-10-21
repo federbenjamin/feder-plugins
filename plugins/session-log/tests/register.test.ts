@@ -1,6 +1,6 @@
 import { expect, mock, test } from 'claude-code/testing'
 import type { On } from 'claude-code'
-import { isConversationReplaced } from '../hooks/register'
+import { isConversationReplaced } from '../hooks/shared/events.ts'
 import { compactSessionLog, logPaths, templateText } from '../hooks/log'
 import { logPath } from '../hooks/shared/firing'
 
@@ -29,8 +29,8 @@ const LOG = [
 ].join('\n')
 
 // The engine beneath: a file system held in `files`, a tee double that records log lines, a
-// compaction that is `skip` when asked.
-function world(on: On, files: Record<string, string>, skip?: string) {
+// compaction that is `skip` when asked, and a write to `failing` that is refused.
+function world(on: On, files: Record<string, string>, skip?: string, failing?: string) {
   mock.clock(on, { now: Date.UTC(2026, 9, 20, 10, 30) })
   mock.env(on, { STOPSTOPPING_DIR: DIR })
   const writes: string[] = []
@@ -40,6 +40,7 @@ function world(on: On, files: Record<string, string>, skip?: string) {
   on('fs.exists', async (_$, e) => ({ value: e.path in files }))
   on('fs.read', async (_$, e) => ({ value: files[e.path] ?? '' }))
   on('fs.write', async (_$, e) => {
+    if (e.path === failing) return { deny: 'disk full' }
     writes.push(e.path)
     files[e.path] = e.text
     return { value: undefined }
@@ -79,10 +80,11 @@ test('a main compaction writes the archive before the log, then logs the prune',
 
 test('a subagent compaction, a skipped one and a precompute prune nothing', async ($, on) => {
   const files: Record<string, string> = { [paths.log]: LOG }
-  const { writes } = world(on, files)
+  const { writes, logged } = world(on, files)
   await $.session.compact({ trigger: 'auto', messages: SUMMARY, agentId: 'a1' })
   await $.session.compact({ trigger: 'precompute', messages: SUMMARY })
   expect(writes).toEqual([])
+  expect(logged).toEqual([])
   expect(files[paths.log]).toBe(LOG)
 })
 
@@ -93,12 +95,33 @@ test('a skipped compaction prunes nothing', async ($, on) => {
   expect(writes).toEqual([])
 })
 
-test('a compaction with no log file does nothing', async ($, on) => {
+test('a compaction with no log file writes nothing and logs prune-skipped, so no earlier prune passes for it', async ($, on) => {
   const files: Record<string, string> = {}
   const { writes, logged } = world(on, files)
   await $.session.compact({ trigger: 'auto', messages: SUMMARY })
   expect(writes).toEqual([])
-  expect(logged).toEqual([])
+  expect(logged).toHaveLength(1)
+  expect(logged[0]).toMatch(/^\S+ prune-skipped session=sess-1 ms=0 reason=no log\n$/)
+})
+
+test('a prune whose log write fails logs prune-failed, not prune', async ($, on) => {
+  const files: Record<string, string> = { [paths.log]: LOG }
+  const { logged } = world(on, files, undefined, paths.log)
+  await $.session.compact({ trigger: 'auto', messages: SUMMARY })
+  expect(files[paths.log]).toBe(LOG)
+  expect(logged.map(l => l.split(' ')[1])).toEqual(['prune-failed'])
+  expect(logged[0]).toMatch(/ reason=.*disk full\n$/)
+})
+
+test('each compaction of the main conversation logs exactly one prune-family line', async ($, on) => {
+  const files: Record<string, string> = { [paths.log]: LOG }
+  const { logged } = world(on, files)
+  await $.session.compact({ trigger: 'auto', messages: SUMMARY })
+  files[paths.log] = '# damaged\n'
+  await $.session.compact({ trigger: 'auto', messages: SUMMARY })
+  delete files[paths.log]
+  await $.session.compact({ trigger: 'manual', messages: SUMMARY })
+  expect(logged.map(l => l.split(' ')[1])).toEqual(['prune', 'prune-skipped', 'prune-skipped'])
 })
 
 test('a log without the three sections is left as it was and logged', async ($, on) => {

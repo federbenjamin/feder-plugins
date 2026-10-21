@@ -85,8 +85,11 @@ export function quotesOf(text: string): string[] {
   return datedQuotesOf(text).map(q => q.quote)
 }
 
-// The file writes a transcript's `"` as `'`; whitespace runs count as one space.
-const quoteKey = (text: string): string => text.replace(/"/g, "'").replace(/\s+/g, ' ').trim()
+// The one quote normalizer: the file writes a transcript's `"` as `'`, and whitespace runs count
+// as one space. Reader quotes are checked against the batch through it, file quotes against those.
+export function quoteKey(text: string): string {
+  return text.replace(/"/g, "'").replace(/\s+/g, ' ').trim()
+}
 
 // Keeps a bullet only when each of its quotes is part of an allowed quote of the same date: a
 // verified reader quote, or one already in the current file. A topic left empty goes with it.

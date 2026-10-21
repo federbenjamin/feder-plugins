@@ -1,7 +1,7 @@
 import { expect, mock, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
-import type { EngineInterface, On } from 'claude-code'
-import { COMMAND, DEFAULT_MINUTES, dialogTimeoutCommand, observe, record, settingFrom, TICK_MS } from '../hooks/register'
+import type { EngineInterface, On, PluginOptions } from 'claude-code'
+import { COMMAND, DEFAULT_MINUTES, dialogTimeoutCommand, observe, record, register, settingFrom, TICK_MS } from '../hooks/register'
 
 const T0 = 1_000_000
 const TIMEOUT = DEFAULT_MINUTES * 60_000
@@ -111,4 +111,66 @@ test('a firing appends one line to the shared log with tee', async () => {
   await record($, 'afk', 'dialog open 30 min, sent /afk')
   expect(argv).toEqual([['tee', '-a', '/tmp/ss/logs/dialog-timeout.log']])
   expect(stdin[0]).toBe('1970-01-01T00:16:40Z afk session=sess-1 ms=0 reason=dialog open 30 min, sent /afk\n')
+})
+
+// The kit strips the `dialog` refusal a test hook gives prompt.fill (only the engine's own cause
+// passes up), so these drive the registered hooks with a hand-made `$` that holds a dialog open.
+function hooked(opts: { isAbortRefused?: boolean } = {}) {
+  const handlers = new Map<string, (...args: unknown[]) => Promise<unknown>>()
+  const fakeOn = ((event: string, a: unknown, b?: unknown) => {
+    handlers.set(event, (typeof a === 'function' ? a : b) as (...args: unknown[]) => Promise<unknown>)
+  }) as unknown as On
+  register(fakeOn, {} as PluginOptions)
+  const clock = { now: T0, tick: undefined as (() => Promise<void>) | undefined }
+  const logged: string[] = []
+  const done = { exitCode: 0, stdout: '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false }
+  const $ = {
+    env: { get: async (name: string) => (name === 'STOPSTOPPING_DIR' ? '/tmp/ss' : undefined) },
+    fs: { exists: async () => true, write: async () => {} },
+    session: { id: async () => 'sess-1' },
+    store: { get: async () => undefined, set: async () => {} },
+    ui: { status: () => {} },
+    command: { register: async () => ({ command: COMMAND }) },
+    prompt: { fill: async () => ({ isFilled: false, refusal: 'dialog', text: '' }), submit: async () => ({ text: '' }) },
+    turn: {
+      abort: async () => {
+        if (opts.isAbortRefused) throw new Error('refused')
+      },
+    },
+    clock: {
+      now: async () => clock.now,
+      every: (_ms: number, cb: () => Promise<void>) => ((clock.tick = cb), { cancel: () => {} }),
+    },
+    process: {
+      run: async (cmd: readonly string[], init?: { stdin?: string }) => {
+        if (cmd[0] === 'tee') logged.push(init?.stdin ?? '')
+        return done
+      },
+    },
+  } as unknown as EngineInterface
+  const next = async (e: unknown) => e
+  const fire = (event: string, e: unknown) => handlers.get(event)!($, e, next)
+  return { clock, logged, fire }
+}
+
+const overdue = async (h: ReturnType<typeof hooked>) => {
+  await h.fire('session.start', { isInteractive: true })
+  await h.fire('turn.start', { turnId: 't1' })
+  await h.clock.tick!()
+  h.clock.now = T0 + TIMEOUT
+  await h.clock.tick!()
+  h.clock.now = T0 + 2 * TIMEOUT
+  await h.clock.tick!()
+}
+
+test('a dialog left open past the timeout ends the turn and logs afk once', async () => {
+  const h = hooked()
+  await overdue(h)
+  expect(h.logged).toEqual([`1970-01-01T00:46:40Z afk session=sess-1 ms=0 reason=dialog open ${DEFAULT_MINUTES} min, sent /afk\n`])
+})
+
+test('a turn that could not be ended logs afk-failed once', async () => {
+  const h = hooked({ isAbortRefused: true })
+  await overdue(h)
+  expect(h.logged).toEqual(['1970-01-01T00:46:40Z afk-failed session=sess-1 ms=0 reason=could not end the waiting turn\n'])
 })

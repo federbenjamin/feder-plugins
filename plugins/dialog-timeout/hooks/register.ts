@@ -1,5 +1,6 @@
 import type { EngineInterface, Register } from 'claude-code'
-import { firingLine, logPath } from './shared/firing.ts'
+import { PERSON_ORIGINS } from './shared/events.ts'
+import { firingRecord } from './shared/firing.ts'
 
 // Ends a main turn that has sat on an open dialog (a permission prompt, an AskUserQuestion) for
 // the set minutes, then submits AFK_TEXT so the agent runs the afk skill and moves on. No tool
@@ -13,7 +14,6 @@ export const TICK_MS = 30_000
 export const AFK_TEXT = 'automessage: user is /afk'
 export const COMMAND = 'dialog-timeout'
 const SETTING = 'setting'
-const PERSON_ORIGINS: ReadonlySet<string> = new Set(['composer', 'bridge', 'slack-ping'])
 
 export type DialogTimeoutSetting = {
   minutes: number // how long a dialog may stay open before the turn ends with /afk
@@ -54,12 +54,11 @@ export function dialogTimeoutCommand(args: string, s: DialogTimeoutSetting): { s
 export async function record($: EngineInterface, outcome: string, reason: string): Promise<void> {
   try {
     const home = await $.env.get('HOME')
-    const dir = (await $.env.get('STOPSTOPPING_DIR')) || (home ? `${home}/.claude/stopstopping` : '')
-    if (dir === '') return
-    const path = logPath(dir, 'dialog-timeout')
-    if (!(await $.fs.exists(path))) await $.fs.write(path, '')
-    const line = firingLine(outcome, await $.session.id(), 0, reason, new Date(await $.clock.now()))
-    await $.process.run(['tee', '-a', path], { stdin: line })
+    const override = await $.env.get('STOPSTOPPING_DIR')
+    const entry = firingRecord({ home, override, plugin: COMMAND, outcome, session: await $.session.id(), ms: 0, reason, now: new Date(await $.clock.now()) })
+    if (entry === null) return
+    if (!(await $.fs.exists(entry.path))) await $.fs.write(entry.path, '')
+    await $.process.run(['tee', '-a', entry.path], { stdin: entry.line })
   } catch {
     // the log is a convenience
   }

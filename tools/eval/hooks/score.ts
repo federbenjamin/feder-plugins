@@ -1,4 +1,5 @@
-import { confidenceOf, decide, parseVerdict } from './judge/judge.ts'
+import { confidenceOf, judgeOutcome } from './judge/judge.ts'
+import type { JudgeReply } from './judge/judge.ts'
 
 // One judged record of a run, and the score of a run against the graders' labels.
 
@@ -17,28 +18,24 @@ export type RunRecord = {
 
 export type Grade = { id: string; verdict: 'stop' | 'continue'; case: string; confidence: string }
 
-// What the record needs of a `$.model.complete` result.
-export type JudgeReply = { isAnswered: true; text: string } | { isAnswered: false; reason: string; error?: string }
+export type { JudgeReply }
 
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
 
-// The production path's outcome for one reply: what the judge would have logged.
+// The production path's outcome for one reply (judge.ts's judgeOutcome): what the judge would have logged.
 export function runRecordOf(id: string, live: string, reply: JudgeReply, ms: number, minutes: number | null): RunRecord {
   const base = { id, live, ms, minutes_since_operator: minutes }
-  const failed = (outcome: string, error: string): RunRecord => ({ ...base, new: null, new_outcome: outcome, conf: null, shape: null, reason: '', error })
-  if (!reply.isAnswered) return failed(reply.reason === 'aborted' ? 'pass-timeout' : 'pass-error', reply.error ? `${reply.reason} ${reply.error}` : reply.reason)
-  const verdict = parseVerdict(reply.text)
-  if (!verdict) return failed('pass-error', `no verdict in: ${reply.text.slice(0, 160)}`)
-  const decision = decide(verdict)
+  const { outcome, reason, verdict } = judgeOutcome(reply)
+  if (verdict === null) return { ...base, new: null, new_outcome: outcome, conf: null, shape: null, reason: '', error: reason }
   const shape = verdict.fields.shape
   return {
     ...base,
     new: verdict.verdict,
-    new_outcome: decision.outcome,
+    new_outcome: outcome,
     conf: confidenceOf(verdict.fields),
     shape: typeof shape === 'string' ? shape : null,
     reason: verdict.reason,
-    error: decision.outcome === 'pass-error' ? decision.reason : '',
+    error: outcome === 'pass-error' ? reason : '',
   }
 }
 

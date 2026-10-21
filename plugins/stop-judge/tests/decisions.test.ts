@@ -1,5 +1,7 @@
 import { expect, test } from 'claude-code/testing'
-import { fitContext, validateDecisions } from '../hooks/decisions.ts'
+import { fitContext, keepVerifiedBullets, quoteKey, validateDecisions } from '../hooks/decisions.ts'
+import { verifyReaderLines } from '../hooks/derive.ts'
+import type { ReaderLine } from '../hooks/derive.ts'
 
 const DEFAULT_LINE = 'Decide everything you can yourself. Bring only what is listed under "Bring to me" to the operator.'
 
@@ -68,4 +70,12 @@ test('context fitting preserves Bring-to-me rules even when every How-to-decide 
   expect(fitted).not.toContain(firstHow)
   expect(fitted).not.toContain(secondHow)
   expect(fitted.length).toBeLessThanOrEqual(maxChars)
+})
+
+test('one quote key: double quotes become single and whitespace runs one space, for reader and file quotes alike', () => {
+  expect(quoteKey('  say  "no"\n\tfirst ')).toBe("say 'no' first")
+  const line: ReaderLine = { side: 'bring', topic: 't', claim: 'c', quote: 'say "no"   first', session: 's', turn: 1, strength: 'strong', date: '2026-10-20' }
+  expect(verifyReaderLines([line], 'then I said: say "no" first, always')).toEqual([line])
+  const file = "- Refuse first. -- \"say 'no' first\" (2026-10-20)"
+  expect(keepVerifiedBullets(file, [{ quote: line.quote, date: line.date }])).toEqual({ text: file, dropped: 0 })
 })

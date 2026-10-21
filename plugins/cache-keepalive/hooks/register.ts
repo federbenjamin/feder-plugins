@@ -1,6 +1,9 @@
 import type { EngineInterface, Register } from 'claude-code'
 import type { KeepaliveTiming } from '../types'
-import { firingLine, logPath } from './shared/firing.ts'
+import { isConversationReplaced, PERSON_ORIGINS } from './shared/events.ts'
+import { firingRecord } from './shared/firing.ts'
+
+export { isConversationReplaced }
 
 // Keeps the main conversation's prompt cache warm while the session sits open and idle: a short
 // prompt LEAD_MS before the cache would expire. The cache lifetime runs from the start of the
@@ -45,7 +48,6 @@ export const COLD_LIMIT = 2
 export const COMMAND = 'keepalive'
 const TIMING = { plugin: 'cache-keepalive', key: 'timing' } as const
 export const AUTH_STATUS = ['claude', 'auth', 'status', '--json'] as const
-const PERSON_ORIGINS: ReadonlySet<string> = new Set(['composer', 'bridge', 'slack-ping'])
 
 export function capFor(model: string): number {
   const m = model.toLowerCase()
@@ -96,12 +98,6 @@ export function followsFirstRequest(t: Pick<KeepaliveTiming, 'bumpedFor' | 'firs
   return t.firstSend > 0 && t.bumpedFor === t.firstSend
 }
 
-// Whether a compaction replaced the main conversation: not a subagent's own, not a skipped one,
-// and not a `precompute`, which only keeps its summary for later.
-export function isConversationReplaced(e: { trigger: string; agentId?: string }, result: { skip?: string }): boolean {
-  return e.agentId === undefined && e.trigger !== 'precompute' && result.skip === undefined
-}
-
 // Whether the account the session would send under now is another than the one the cache was
 // written under. An unknown account on either side (logged out, a failed read) is no change.
 export function isAccountChanged(cachedUnder: string, current: string): boolean {
@@ -140,12 +136,11 @@ async function currentAccount($: EngineInterface): Promise<string | undefined> {
 async function record($: EngineInterface, outcome: string, reason: string): Promise<void> {
   try {
     const home = await $.env.get('HOME')
-    const dir = (await $.env.get('STOPSTOPPING_DIR')) || (home ? `${home}/.claude/stopstopping` : '')
-    if (dir === '') return
-    const path = logPath(dir, 'cache-keepalive')
-    if (!(await $.fs.exists(path))) await $.fs.write(path, '')
-    const line = firingLine(outcome, await $.session.id(), 0, reason, new Date(await $.clock.now()))
-    await $.process.run(['tee', '-a', path], { stdin: line })
+    const override = await $.env.get('STOPSTOPPING_DIR')
+    const entry = firingRecord({ home, override, plugin: 'cache-keepalive', outcome, session: await $.session.id(), ms: 0, reason, now: new Date(await $.clock.now()) })
+    if (entry === null) return
+    if (!(await $.fs.exists(entry.path))) await $.fs.write(entry.path, '')
+    await $.process.run(['tee', '-a', entry.path], { stdin: entry.line })
   } catch {
     // the log is a convenience
   }

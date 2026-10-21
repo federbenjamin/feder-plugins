@@ -1,5 +1,5 @@
 import { expect, test } from 'claude-code/testing'
-import { buildUser, clip, FRAMING, framingAndPrior, guardOutcome, minutesSinceOperator, parseRows, splitTurn } from '../hooks/judge.ts'
+import { buildUser, clip, FRAMING, framingAndPrior, guardOutcome, minutesFact, minutesSinceOperator, parseRows, splitTurn } from '../hooks/judge.ts'
 import type { TranscriptRow } from '../hooks/shared/typed.ts'
 
 const at = (minute: number) => `2026-10-20T12:${String(minute).padStart(2, '0')}:00.000Z`
@@ -103,4 +103,16 @@ test('a plugin keepalive opening is passed without judging the short reply', asy
 
 test('clipping preserves both the instruction at the start and question at the end', async () => {
   expect(clip('a'.repeat(50) + 'b'.repeat(50), 20)).toBe('a'.repeat(10) + '\n…\n' + 'b'.repeat(10))
+})
+
+test('the minutes fact is exact with a typed row in the tail, a lower bound from the oldest timed row without one, and absent with no time', () => {
+  const now = new Date('2026-10-20T12:00:00Z')
+  const typedAt = (iso: string) => ({ type: 'user', timestamp: iso, message: { role: 'user', content: 'go on' } })
+  const plugin = (iso: string) => ({ type: 'user', timestamp: iso, message: { role: 'user', content: 'keepalive ping' }, origin: { kind: 'plugin' }, promptSource: 'system' })
+  const agent = (iso: string) => ({ type: 'assistant', timestamp: iso, message: { content: [{ type: 'text', text: 'ok' }] } })
+  expect(minutesFact([agent('2026-10-20T10:00:00Z'), typedAt('2026-10-20T11:53:00Z'), agent('2026-10-20T11:59:00Z')], now)).toEqual({ minutes: 7, isLowerBound: false })
+  expect(minutesFact([{ type: 'assistant' }, agent('2026-10-20T10:20:30Z'), plugin('2026-10-20T11:00:00Z'), agent('2026-10-20T11:59:00Z')], now)).toEqual({ minutes: 99, isLowerBound: true })
+  expect(minutesFact([], now)).toBeNull()
+  expect(minutesFact([{ type: 'assistant', timestamp: 'garbled' }], now)).toBeNull()
+  expect(minutesSinceOperator([plugin('2026-10-20T11:00:00Z')], now)).toBeNull()
 })

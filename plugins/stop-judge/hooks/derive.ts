@@ -1,4 +1,7 @@
-import { typedText } from './shared/typed.ts'
+import { quoteKey } from './decisions.ts'
+import { parseRow, typedText } from './shared/typed.ts'
+
+export { pool } from './shared/pool.ts'
 
 // The derivation's pure side: which transcripts to read, their typed turns, the reader batches,
 // the estimate, and the reader lines that may reach the synthesis. register.ts holds every `$` call.
@@ -18,9 +21,10 @@ export const SONNET_USD_PER_MTOK_IN = 3
 export const SONNET_USD_PER_MTOK_OUT = 15
 // Scripted runs (`claude -p` in a scratch dir) are not the operator's sessions.
 export const EXCLUDED_PROJECT_PREFIXES: readonly string[] = ['-private-tmp-', '-private-var-', '-tmp-', '-var-folders-']
-export const ROW_GREP_PATTERN = '"user"|compact_boundary|"queued_command"|"type":"assistant"'
-
+// What a line must hold to be a row typedTurnsOf reads: a user row, a compaction, a queued
+// prompt, or the agent message before a turn. The host's `grep -E` gets them as one alternation.
 const ROW_MARKERS = ['"user"', 'compact_boundary', '"queued_command"', '"type":"assistant"']
+export const ROW_GREP_PATTERN = ROW_MARKERS.join('|')
 // Only a real tool-result block puts this key unescaped on a line; such a row is never typed.
 const TOOL_RESULT_MARKER = '"type":"tool_result"'
 const TYPED_LIMIT = 2500
@@ -85,15 +89,10 @@ export function typedTurnsOf(lines: Iterable<string>): { turns: Turn[]; compacti
   let before: unknown
   for (const line of lines) {
     if (!mayHoldTurn(line)) continue
-    let row: unknown
-    try {
-      row = JSON.parse(line)
-    } catch {
-      continue
-    }
-    if (!isRecord(row)) continue
+    const row = parseRow(line)
+    if (row === null) continue
     if (row.type === 'assistant') {
-      if (!row.isSidechain) before = row.message
+      before = row.message
       continue
     }
     const ts = row.timestamp
@@ -226,14 +225,12 @@ export function parseReaderLines(text: string, sessionDates: Record<string, stri
   return out
 }
 
-const normalizeWhitespace =(text: string): string => text.replace(/\s+/g, ' ').trim()
-
 // A quote survives only when it is the operator's own words in this batch, and short enough for
 // the file's format.
 export function verifyReaderLines(lines: readonly ReaderLine[], operatorText: string): ReaderLine[] {
-  const haystack = normalizeWhitespace(operatorText)
+  const haystack = quoteKey(operatorText)
   return lines.filter(l => {
-    const quote = normalizeWhitespace(l.quote)
+    const quote = quoteKey(l.quote)
     return quote !== '' && quote.length <= QUOTE_MAX && haystack.includes(quote)
   })
 }
@@ -262,31 +259,6 @@ export function synthesisInput(lines: readonly ReaderLine[], currentFile: string
 }
 
 // from federbenjamin/morning-report hooks/pipeline.ts
-// Once one item rejects, no lane starts another; items already running finish.
-export async function pool<T, R>(
-  items: readonly T[],
-  limit: number,
-  work: (item: T) => Promise<R>,
-): Promise<R[]> {
-  const out: R[] = new Array(items.length)
-  let next = 0
-  let failed = false
-  const lane = async () => {
-    while (!failed && next < items.length) {
-      const i = next++
-      try {
-        out[i] = await work(items[i]!)
-      } catch (err) {
-        failed = true
-        throw err
-      }
-    }
-  }
-  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, lane))
-  return out
-}
-
-// from federbenjamin/morning-report hooks/pipeline.ts
 export type CallFailure = { reason: string; status?: number | null; error?: string }
 
 // Errors no wait will clear: retrying only repeats them, so the run stops at the first one.
@@ -307,9 +279,9 @@ export function isPermanent(f: CallFailure): boolean {
   return f.error !== undefined && PERMANENT_ERRORS.has(f.error)
 }
 
-// Seconds to wait before retry number `attempt` (0-based), or undefined to give up.
-// Rate limits, overload, server errors and dropped connections back off and retry;
-// a timed-out call gets one retry, since a second timeout costs another full wait.
+// Seconds to wait before retry number `attempt` (0-based), or undefined to give up. The derive
+// readers (register.ts completeWithRetry) ask once, for attempt 0, and only after a non-permanent
+// api-error: one retry, never for a timed-out call.
 export function retryDelayS(f: CallFailure, attempt: number): number | undefined {
   if (isPermanent(f)) return undefined
   if (f.reason === 'aborted') return attempt === 0 ? RETRY_DELAYS_S[0] : undefined

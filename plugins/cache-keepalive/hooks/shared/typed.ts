@@ -3,8 +3,18 @@
 
 export type TranscriptRow = Record<string, unknown>
 
-// Texts that open a row no person typed: harness wrappers, `!` shell mode, and the messages the
-// sibling plugins and the morning-report mod send as the user.
+// Message texts the sibling plugins send as the user. scripts/sync-shared.ts asserts the
+// keepalive and afk texts appear in their plugin's hooks/register.ts; the judge builds its nudge
+// prefix from `nudge`.
+export const SIBLING_TEXTS = {
+  keepalivePing: 'keepalive ping',
+  keepaliveLast: 'Last keepalive ping',
+  afk: 'automessage:',
+  nudge: 'STOP JUDGE —',
+} as const
+
+// Texts that open a row no person typed: harness wrappers, `!` shell mode, the morning-report
+// mod's prompt, and the sibling plugins' messages.
 export const NOT_TYPED: readonly string[] = [
   '<command-name>',
   '<command-message>',
@@ -18,27 +28,28 @@ export const NOT_TYPED: readonly string[] = [
   '<bash-input>',
   '<bash-stdout>',
   '<bash-stderr>',
-  'keepalive ping',
-  'Last keepalive ping',
-  'automessage:',
   'Run my morning review.',
-  'STOP JUDGE —',
+  ...Object.values(SIBLING_TEXTS),
 ]
 
 // Another session's message, bare or pasted: "From the session …", "From the owning session",
 // "Relayed by the orchestrating session". A pasted "From the docs: …" is the person's.
 export const RELAY = /^(?:<pasted_content[^>]*>\s*)?(?:From|Relayed by) the (?:\S+ )?session\b/
 
-// Message texts the sibling plugins send; scripts/sync-shared.ts asserts each appears in its
-// plugin's hooks/register.ts.
-export const SIBLING_TEXTS = {
-  keepalivePing: 'keepalive ping',
-  keepaliveLast: 'Last keepalive ping',
-  afk: 'automessage:',
-  nudge: 'STOP JUDGE —',
-} as const
-
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
+
+// One transcript line as a row; null for a blank or unparsable line (a tail's first line may be
+// cut) and for a sidechain row, which is a subagent's, not the session's.
+export function parseRow(line: string): TranscriptRow | null {
+  if (line.trim() === '') return null
+  let row: unknown
+  try {
+    row = JSON.parse(line)
+  } catch {
+    return null
+  }
+  return isRecord(row) && !row.isSidechain ? row : null
+}
 
 export function contentText(content: unknown): string {
   if (Array.isArray(content)) {

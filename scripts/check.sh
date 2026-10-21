@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Every gate for the repo, from the repo root: per plugin test, tsc and validate (the bundle is a
-# dependency list with no code: validate only), then the marketplace, the generated copies, and the
-# public-repo grep. Exits non-zero on the first failure.
+# dependency list with no code: validate only), then the marketplace, the generated copies, the
+# script tests, and the public-repo grep. Exits non-zero on the first failure.
 set -eu
 cd "$(dirname "$0")/.."
 
@@ -25,6 +25,9 @@ claude plugin validate . --strict
 
 echo "== generated copies"
 node scripts/sync-shared.ts --check
+
+echo "== script tests (the sync check, and directive.sh against log.ts)"
+node --test scripts/
 
 echo "== public paths"
 if git ls-files -z --cached --others --exclude-standard -- . ':(exclude)scripts/check.sh' |

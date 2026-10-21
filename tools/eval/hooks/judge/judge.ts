@@ -1,5 +1,5 @@
 import { PROMPT } from './prompt.ts'
-import { contentText, SIBLING_TEXTS, typedText } from './shared/typed.ts'
+import { contentText, parseRow, SIBLING_TEXTS, typedText } from './shared/typed.ts'
 import type { TranscriptRow } from './shared/typed.ts'
 
 // The stop judge's pure side: which transcript rows frame a turn, the request to the model, its
@@ -9,7 +9,9 @@ export const PRIOR_N = 4
 export const FRAMING_N = 3
 export const MIN_CONFIDENCE = 0.7
 export const TAIL_BYTES = 8_000_000
-export const NUDGE_PREFIX = 'STOP JUDGE — '
+export const NUDGE_PREFIX = `${SIBLING_TEXTS.nudge} ` as const
+// The judge's model request: the production path the eval measures.
+export const JUDGE_REQUEST = { model: 'haiku', maxTokens: 300, effort: 'low', timeoutMs: 20_000 } as const
 
 // The minutes-since-the-operator's-last-message fact is one switch: off, the request is the
 // measured round-3 text and nothing else.
@@ -21,20 +23,24 @@ export const MINUTES_SENTENCE =
 export const FRAMING =
   /\bdiscuss|ask me|one by one|one at a time|confirm with me|check with me|show me (first|before)|i want to (approve|see|review)|before (you|we) (build|start|do|change)|do(n'?t| not) (build|start|do|change)|\bwait\b/i
 
-export type Outcome =
-  | 'continue'
-  | 'stop'
-  | 'stop-lowconf'
-  | 'pass-off'
-  | 'pass-subagent'
-  | 'pass-aborted'
-  | 'pass-nested'
-  | 'pass-nudged'
-  | 'pass-keepalive'
-  | 'pass-notext'
-  | 'pass-typing'
-  | 'pass-timeout'
-  | 'pass-error'
+// Every outcome the judge logs, in the order the status line prints them.
+export const OUTCOMES = [
+  'continue',
+  'stop',
+  'stop-lowconf',
+  'pass-off',
+  'pass-subagent',
+  'pass-aborted',
+  'pass-nested',
+  'pass-nudged',
+  'pass-keepalive',
+  'pass-notext',
+  'pass-typing',
+  'pass-timeout',
+  'pass-error',
+] as const
+
+export type Outcome = (typeof OUTCOMES)[number]
 
 type Opening = 'human' | 'plugin' | 'none'
 type Verdict = { verdict: 'stop' | 'continue'; reason: string; fields: Record<string, unknown> }
@@ -45,14 +51,8 @@ const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'obj
 export function parseRows(text: string): TranscriptRow[] {
   const rows: TranscriptRow[] = []
   for (const line of text.split('\n')) {
-    if (line.trim() === '') continue
-    let row: unknown
-    try {
-      row = JSON.parse(line)
-    } catch {
-      continue
-    }
-    if (isRecord(row) && !row.isSidechain) rows.push(row)
+    const row = parseRow(line)
+    if (row) rows.push(row)
   }
   return rows
 }
@@ -141,16 +141,49 @@ export function minutesSinceOperator(rows: readonly TranscriptRow[], now: Date):
   return null
 }
 
+// The minutes fact for a tail: the gap to the newest typed row; with none in the tail, the
+// operator wrote before its oldest row, so the gap to that row is a lower bound. null when no row
+// carries a readable time.
+export function minutesFact(rows: readonly TranscriptRow[], now: Date): { minutes: number; isLowerBound: boolean } | null {
+  if (rows.some(r => typedText(r, { sdk: true }) !== null)) {
+    const minutes = minutesSinceOperator(rows, now)
+    return minutes === null ? null : { minutes, isLowerBound: false }
+  }
+  for (const row of rows) {
+    const at = typeof row.timestamp === 'string' ? Date.parse(row.timestamp) : Number.NaN
+    if (!Number.isNaN(at)) return { minutes: Math.max(0, Math.floor((now.getTime() - at) / 60_000)), isLowerBound: true }
+  }
+  return null
+}
+
 export function buildSystem(): string {
   return MINUTES_FACT ? `${PROMPT}\n${MINUTES_SENTENCE}\n` : PROMPT
 }
 
-export function buildUser(final: string, opening: string, prior: readonly string[], minutesSince?: number | null): string {
+// `isLowerBound`: the operator wrote before the transcript tail began, so the gap is "more than".
+export function buildUser(final: string, opening: string, prior: readonly string[], minutesSince?: number | null, isLowerBound = false): string {
   let user = ''
   if (prior.length > 0) user += `## Earlier operator messages, oldest first\n\n${prior.map(p => clip(p, 600)).join('\n\n---\n\n')}\n\n`
   user += `## Operator message that opened the turn\n\n${clip(opening, 3000) || '(none captured)'}\n\n## Agent's final message\n\n${final.slice(-4000)}\n\n`
-  if (MINUTES_FACT && typeof minutesSince === 'number') user += `Minutes since the operator's last typed message: ${minutesSince}\n\n`
+  if (MINUTES_FACT && typeof minutesSince === 'number') user += `Minutes since the operator's last typed message: ${isLowerBound ? 'more than ' : ''}${minutesSince}\n\n`
   return `${user}One JSON line.`
+}
+
+// The whole model request for one turn; `prior` is already picked (framingAndPrior).
+export function judgeRequest(final: string, opening: string, prior: readonly string[], minutesSince: number | null, isLowerBound = false) {
+  return { ...JUDGE_REQUEST, system: buildSystem(), prompt: buildUser(final, opening, prior, minutesSince, isLowerBound) }
+}
+
+// What the outcome needs of a model reply.
+export type JudgeReply = { isAnswered: true; text: string } | { isAnswered: false; reason: string; error?: string }
+
+// A reply's outcome, as the judge logs it: an unanswered call passes (a cut one as a timeout),
+// a reply with no verdict is an error, and a verdict goes through the gate.
+export function judgeOutcome(reply: JudgeReply): { outcome: 'continue' | 'stop' | 'stop-lowconf' | 'pass-error' | 'pass-timeout'; reason: string; verdict: Verdict | null } {
+  if (!reply.isAnswered) return { outcome: reply.reason === 'aborted' ? 'pass-timeout' : 'pass-error', reason: reply.error ? `${reply.reason} ${reply.error}` : reply.reason, verdict: null }
+  const verdict = parseVerdict(reply.text)
+  if (!verdict) return { outcome: 'pass-error', reason: `no verdict in: ${reply.text.slice(0, 160)}`, verdict: null }
+  return { ...decide(verdict), verdict }
 }
 
 // The end of the JSON object that starts at `start`, honouring strings; -1 when it never closes.

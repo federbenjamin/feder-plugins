@@ -1,8 +1,14 @@
 import { expect, test } from 'claude-code/testing'
 import {
   FRAMING,
+  JUDGE_REQUEST,
   MINUTES_FACT,
+  NUDGE_PREFIX,
+  OUTCOMES,
+  buildSystem,
   buildUser,
+  judgeOutcome,
+  judgeRequest,
   decide,
   guardOutcome,
   minutesSinceOperator,
@@ -141,4 +147,31 @@ test('the transcript lookup is scoped to one session file below the projects dir
     '-name',
     'session-42.jsonl',
   ])
+})
+
+test('the nudge prefix is the sibling nudge text and a space', () => {
+  expect(NUDGE_PREFIX).toBe('STOP JUDGE — ')
+})
+
+test('the model request is the one request constant plus the system text and the user message', () => {
+  expect(JUDGE_REQUEST).toEqual({ model: 'haiku', maxTokens: 300, effort: 'low', timeoutMs: 20_000 })
+  expect(judgeRequest('Done.', 'go', ['earlier'], 7)).toEqual({ ...JUDGE_REQUEST, system: buildSystem(), prompt: buildUser('Done.', 'go', ['earlier'], 7) })
+  expect(judgeRequest('Done.', 'go', [], 40, true).prompt).toContain("Minutes since the operator's last typed message: more than 40\n")
+})
+
+test('a reply maps to the logged outcome: cut call, failed call, no verdict, the gate', () => {
+  expect(judgeOutcome({ isAnswered: false, reason: 'aborted' })).toEqual({ outcome: 'pass-timeout', reason: 'aborted', verdict: null })
+  expect(judgeOutcome({ isAnswered: false, reason: 'api-error', error: 'rate_limit' })).toEqual({ outcome: 'pass-error', reason: 'api-error rate_limit', verdict: null })
+  expect(judgeOutcome({ isAnswered: false, reason: 'empty-reply' })).toEqual({ outcome: 'pass-error', reason: 'empty-reply', verdict: null })
+  expect(judgeOutcome({ isAnswered: true, text: 'no json' })).toEqual({ outcome: 'pass-error', reason: 'no verdict in: no json', verdict: null })
+  const sure = judgeOutcome({ isAnswered: true, text: '{"verdict":"continue","confidence":0.9,"reason":"Run it"}' })
+  expect(sure).toMatchObject({ outcome: 'continue', reason: 'Run it', verdict: { verdict: 'continue', reason: 'Run it' } })
+  expect(judgeOutcome({ isAnswered: true, text: '{"verdict":"continue","confidence":0.5,"reason":"Run it"}' }).outcome).toBe('stop-lowconf')
+  expect(judgeOutcome({ isAnswered: true, text: '{"verdict":"stop","reason":"asks"}' }).outcome).toBe('stop')
+})
+
+test('every outcome the judge logs is in the one outcome list, once', () => {
+  expect(new Set(OUTCOMES).size).toBe(OUTCOMES.length)
+  expect(OUTCOMES).toHaveLength(13)
+  for (const o of ['continue', 'stop', 'stop-lowconf', 'pass-off', 'pass-keepalive', 'pass-typing', 'pass-timeout', 'pass-error']) expect(OUTCOMES).toContain(o)
 })

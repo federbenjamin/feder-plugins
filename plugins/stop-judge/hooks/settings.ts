@@ -1,3 +1,5 @@
+import { OUTCOMES } from './judge.ts'
+
 // The /stop-judge command's pure side: the stored settings, the grammar, the status line.
 
 export type Settings = { isOff: boolean; isContextOff: boolean }
@@ -13,8 +15,8 @@ export type Action =
 
 export const USAGE = '/stop-judge [off|on|context off|context on|derive [all]]'
 
-// Printed in this order; any other outcome follows alphabetically.
-const OUTCOME_ORDER = ['continue', 'stop', 'stop-lowconf', 'pass-off', 'pass-subagent', 'pass-aborted', 'pass-nested', 'pass-nudged', 'pass-keepalive', 'pass-notext', 'pass-typing', 'pass-timeout', 'pass-error']
+// Printed in the judge's outcome order; any other outcome follows alphabetically.
+const OUTCOME_ORDER: readonly string[] = OUTCOMES
 
 export function settingsFrom(value: unknown): Settings {
   const v = (typeof value === 'object' && value !== null ? value : {}) as Partial<Settings>
@@ -53,4 +55,11 @@ export function statusText(info: { settings: Settings; counts: Record<string, nu
     `last 7 days: ${counts.length > 0 ? counts.join(', ') : 'none'}`,
     `DECISIONS.md: ${decisions}`,
   ].join(' · ')
+}
+
+// The plugin's one status line: the judge-off marker and a derive run's progress, either or both.
+// Every writer of the line goes through this, so neither hides the other.
+export function statusLine(settings: Pick<Settings, 'isOff'>, derive?: string): string | undefined {
+  const parts = [...(settings.isOff ? ['stop-judge off'] : []), ...(derive ? [derive] : [])]
+  return parts.length > 0 ? parts.join(' · ') : undefined
 }

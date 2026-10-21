@@ -188,7 +188,7 @@ export function templateText(): string {
       '',
       '## Work log',
       '',
-      '<!-- Things we DID. Append one line per landed fact: "- HH:MMZ <fact> (<commit sha if any>)". At a compaction the lines older than the previous compaction move to the archive beside this log; never rewrite or delete a line by hand. -->',
+      '<!-- Things we DID. Append one line per landed fact: "- HH:MMZ <fact> (<sha>)", the sha when a commit holds it. At a compaction the lines older than the previous compaction move to the archive beside this log; never rewrite or delete a line by hand. -->',
       '',
       '## Todo',
       '',
@@ -199,6 +199,11 @@ export function templateText(): string {
       '<!-- Who chose is the first field. "- <date> [user] <ruling>: "<their words>"" only for words said in this session, never an inferred one or one relayed by another session. "- <date> [agent] <what you picked> over <A>, <B>", with " -- <reason>" when the reason is not obvious. A line that supersedes an earlier one ends replaces: "<quote from that line>"; the next compaction then moves the old line to the archive. -->',
     ].join('\n') + '\n'
   )
+}
+
+// The `reason=` of a `prune` log line; scripts/directive.sh reads the count and the archive back.
+export function pruneReason(moved: number, archive: string): string {
+  return `moved=${moved} archive=${archive}`
 }
 
 export function directiveText(logPath: string, templatePath: string): string {

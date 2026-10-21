@@ -1,6 +1,8 @@
 import { expect, test } from 'claude-code/testing'
-import { countOutcomes, firingLine } from '../hooks/shared/firing.ts'
-import { contentText, isTypedText, typedText } from '../hooks/shared/typed.ts'
+import { isConversationReplaced, PERSON_ORIGINS } from '../hooks/shared/events.ts'
+import { countOutcomes, firingLine, firingRecord, stateDir } from '../hooks/shared/firing.ts'
+import { pool } from '../hooks/shared/pool.ts'
+import { contentText, isTypedText, NOT_TYPED, parseRow, SIBLING_TEXTS, typedText } from '../hooks/shared/typed.ts'
 
 const humanRow = (content: unknown) => ({
   type: 'user',
@@ -76,4 +78,70 @@ test('outcome counts exclude malformed and older firing rows at the cutoff', () 
   expect(counts.stop).toBe(1)
   expect(counts.continue).toBe(1)
   expect(counts['pass-error']).toBeUndefined()
+})
+
+test('the state dir is STOPSTOPPING_DIR, else under HOME, else none', () => {
+  expect(stateDir('/home/u', '/tmp/ss')).toBe('/tmp/ss')
+  expect(stateDir('/home/u', '')).toBe('/home/u/.claude/stopstopping')
+  expect(stateDir('/home/u', undefined)).toBe('/home/u/.claude/stopstopping')
+  expect(stateDir(undefined, undefined)).toBe('')
+  expect(stateDir('', '')).toBe('')
+})
+
+test('a firing record is the plugin log path and its line, or null with no state dir', () => {
+  const now = new Date('2026-10-20T12:00:00.500Z')
+  const f = { plugin: 'session-log', outcome: 'prune', session: 's1', ms: 4, reason: 'moved=2  archive=/a b', now }
+  expect(firingRecord({ ...f, home: '/home/u', override: undefined })).toEqual({
+    path: '/home/u/.claude/stopstopping/logs/session-log.log',
+    line: '2026-10-20T12:00:00Z prune session=s1 ms=4 reason=moved=2 archive=/a b\n',
+  })
+  expect(firingRecord({ ...f, home: '/home/u', override: '/tmp/ss' })?.path).toBe('/tmp/ss/logs/session-log.log')
+  expect(firingRecord({ ...f, home: undefined, override: undefined })).toBeNull()
+})
+
+test('every sibling plugin text opens a row no person typed', () => {
+  for (const text of Object.values(SIBLING_TEXTS)) {
+    expect(NOT_TYPED).toContain(text)
+    expect(isTypedText(`${text} and more`)).toBe(false)
+  }
+})
+
+test('a transcript line is a row unless blank, cut, not an object, or a sidechain row', () => {
+  expect(parseRow('{"type":"user","timestamp":"t"}')).toEqual({ type: 'user', timestamp: 't' })
+  expect(parseRow('')).toBeNull()
+  expect(parseRow('   ')).toBeNull()
+  expect(parseRow('{"type":"us')).toBeNull()
+  expect(parseRow('[1,2]')).toBeNull()
+  expect(parseRow('{"type":"user","isSidechain":true}')).toBeNull()
+})
+
+test('a person prompt comes from the composer, a bridge or a Slack ping; a compaction replaces only the main, unskipped, installed conversation', () => {
+  for (const kind of ['composer', 'bridge', 'slack-ping']) expect(PERSON_ORIGINS.has(kind)).toBe(true)
+  expect(PERSON_ORIGINS.has('plugin')).toBe(false)
+  expect(isConversationReplaced({ trigger: 'auto' }, {})).toBe(true)
+  expect(isConversationReplaced({ trigger: 'precompute' }, {})).toBe(false)
+  expect(isConversationReplaced({ trigger: 'auto', agentId: 'a' }, {})).toBe(false)
+  expect(isConversationReplaced({ trigger: 'manual' }, { skip: 'x' })).toBe(false)
+})
+
+test('pool keeps item order, runs at most `limit` at once, and starts nothing after a rejection', async () => {
+  let running = 0
+  let most = 0
+  const started: number[] = []
+  const out = await pool([3, 1, 2, 0], 2, async n => {
+    started.push(n)
+    most = Math.max(most, ++running)
+    for (let i = 0; i < n * 3; i++) await Promise.resolve()
+    running--
+    return n * 10
+  })
+  expect(out).toEqual([30, 10, 20, 0])
+  expect(most).toBe(2)
+  const tried: number[] = []
+  await expect(pool([1, 2, 3, 4], 1, async n => {
+    tried.push(n)
+    if (n === 2) throw new Error('boom')
+    return n
+  })).rejects.toThrow('boom')
+  expect(tried).toEqual([1, 2])
 })

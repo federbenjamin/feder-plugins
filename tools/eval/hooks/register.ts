@@ -1,7 +1,8 @@
 import type { EngineInterface, Register } from 'claude-code'
 import { extractRecord, firingsOf, keyFrom, minutesBefore, operatorRows, ROW_GREP, transcriptRows } from './extract.ts'
 import type { EvalRecord } from './extract.ts'
-import { buildSystem, buildUser, MINUTES_FACT, transcriptFindArgv } from './judge/judge.ts'
+import { judgeRequest, MINUTES_FACT, transcriptFindArgv } from './judge/judge.ts'
+import { pool } from './judge/shared/pool.ts'
 import type { TranscriptRow } from './judge/shared/typed.ts'
 import { gradesFrom, parseArgs, runRecordOf, scoreRun } from './score.ts'
 import type { RunRecord } from './score.ts'
@@ -17,27 +18,6 @@ const DEFAULT_WORKERS = 4
 const GRADES_FILE = /^grade-out-.*\.jsonl$/
 
 type Answer = { text: string; exitCode?: number }
-
-// from federbenjamin/morning-report hooks/pipeline.ts
-// Once one item rejects, no lane starts another; items already running finish.
-async function pool<T, R>(items: readonly T[], limit: number, work: (item: T) => Promise<R>): Promise<R[]> {
-  const out: R[] = new Array(items.length)
-  let next = 0
-  let failed = false
-  const lane = async () => {
-    while (!failed && next < items.length) {
-      const i = next++
-      try {
-        out[i] = await work(items[i]!)
-      } catch (err) {
-        failed = true
-        throw err
-      }
-    }
-  }
-  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, lane))
-  return out
-}
 
 // A command's whole stdout through spawn: `$.process.run` keeps only the first 4 MiB.
 async function stdoutOf($: EngineInterface, argv: string[]): Promise<{ text: string; code: number | null }> {
@@ -91,7 +71,6 @@ async function judgeOne(
   $: EngineInterface,
   r: EvalRecord | undefined,
   id: string,
-  system: string,
   operatorRowsOf: (session: string | null) => Promise<TranscriptRow[] | null>,
 ): Promise<Judged> {
   if (r === undefined) return { record: runRecordOf(id, '', { isAnswered: false, reason: 'not in key' }, 0, null), usage: null, hasTranscript: false }
@@ -99,17 +78,9 @@ async function judgeOne(
   const minutes = rows === null ? null : minutesBefore(rows, r.ts)
   if (r.final === null) return { record: runRecordOf(id, r.outcome, { isAnswered: false, reason: 'no final message' }, 0, minutes), usage: null, hasTranscript: rows !== null }
   const startedAt = await $.clock.now()
-  const reply = await $.model.complete({
-    model: 'haiku',
-    system,
-    prompt: buildUser(r.final.slice(-4000), r.opening, r.context_users, minutes),
-    maxTokens: 300,
-    effort: 'low',
-    timeoutMs: 20_000,
-  })
+  const reply = await $.model.complete(judgeRequest(r.final, r.opening, r.context_users, minutes))
   const ms = (await $.clock.now()) - startedAt
-  const judged = reply.isAnswered ? reply : { isAnswered: false as const, reason: reply.reason, error: reply.reason === 'api-error' ? reply.error : undefined }
-  return { record: runRecordOf(id, r.outcome, judged, ms, minutes), usage: reply.usage, hasTranscript: rows !== null }
+  return { record: runRecordOf(id, r.outcome, reply, ms, minutes), usage: reply.usage, hasTranscript: rows !== null }
 }
 
 async function evalJudge($: EngineInterface, args: string): Promise<Answer> {
@@ -135,8 +106,7 @@ async function evalJudge($: EngineInterface, args: string): Promise<Answer> {
     }
     return rows
   }
-  const system = buildSystem()
-  const judged = await pool(ids, workers, id => judgeOne($, key[id], id, system, operatorRowsOf))
+  const judged = await pool(ids, workers, id => judgeOne($, key[id], id, operatorRowsOf))
   const lines = judged.map(({ record: r, usage }) =>
     JSON.stringify({ id: r.id, live: r.live, new: r.new, new_outcome: r.new_outcome, conf: r.conf, shape: r.shape, reason: r.reason, ms: r.ms, error: r.error, usage, minutes_since_operator: r.minutes_since_operator }),
   )

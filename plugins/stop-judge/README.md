@@ -10,7 +10,7 @@ A [Claude Code](https://docs.anthropic.com/en/docs/claude-code) plugin for peopl
 
 ## Install
 
-Needs Claude Code. This is one part of the [stopstopping](../../README.md) marketplace: install `stopstopping` or this plugin, not both (both would run the judge twice).
+Needs Claude Code. This is one part of the [stopstopping](../../README.md) marketplace: install `stopstopping`, which installs this plugin under its own name as a dependency, or this plugin alone; installing both changes nothing.
 
 ```
 claude plugin install stop-judge --marketplace federbenjamin/stopstopping
@@ -26,7 +26,7 @@ It starts in the next session.
 - **Headless runs too.** `claude -p` sessions are judged as well; an unattended run is where a caught early stop pays most.
 - **Passes without a model call** for subagent turns, interrupted turns, a keepalive ping turn, and a turn with no final text.
 - **No per-user text.** The judge reads one fixed prompt and nothing from your files. Measured over 190 graded firings (22 that should have continued, 168 that were right to stop), that fixed prompt blocked 8 of 168 right stops and caught 7 of 22 early ones; adding per-user rules scored no better (12 of 168, 6 of 22). A "continue" counts only at confidence 0.7 or above.
-- **Minutes since you last wrote.** The request also states the whole minutes since your last typed message, and the prompt says how to read the gap (short: an active discussion, lean stop; long: unattended work, lean continue). `MINUTES_FACT` in `hooks/judge.ts` is the one switch; with it off the request is the measured text alone. Shipped value: on, pending the eval run that compares it against the numbers above.
+- **Minutes since you last wrote.** The request also states the whole minutes since your last typed message (when the transcript tail the judge reads holds none, "more than" the minutes since the tail's oldest row), and the prompt says how to read the gap (short: an active discussion, lean stop; long: unattended work, lean continue). `MINUTES_FACT` in `hooks/judge.ts` is the one switch; with it off the request is the measured text alone. Shipped value: on, pending the eval run that compares it against the numbers above.
 
 ## Usage
 
@@ -74,7 +74,7 @@ awk '{print $2}' ~/.claude/stopstopping/logs/stop-judge.log | sort | uniq -c
 
 ## Settings
 
-On/off and context on/off live in the engine's store under this plugin's name; `/stop-judge` shows them from there. Installing the bundle instead of this plugin starts from the defaults (on), and so does switching back. What the session-start hook obeys is the `context-off` file, which both installs share.
+The judge's on/off lives in the engine's store under this plugin's name, so it carries whether the plugin is installed alone or through the `stopstopping` bundle. Context on/off is the `context-off` file alone: the session-start hook obeys it, and `/stop-judge` reports what the file says.
 
 ## Derive
 
@@ -83,7 +83,7 @@ On/off and context on/off live in the engine's store under this plugin's name; `
 - **What it reads.** Your top-level Claude Code transcripts under `~/.claude/projects/` (subagent transcripts and scripted runs in temporary folders are skipped), and only the messages you typed, each with what the agent had just done. Nothing leaves your machine except the model calls themselves.
 - **Estimate first.** It counts your typed turns, then asks `<n> sessions, <t> of <total> typed turns, ~$X.XX. Run?`. Cancel spends nothing. The first estimate uses a measured $0.0013 per turn plus an allowance for the final call; after a run, that run's measured cost per turn replaces it.
 - **The newest 2,000 typed turns** by default (about 20 reader batches, about $3); `/stop-judge derive all` reads every session.
-- **In the background.** After Run, readers (Sonnet, four at a time, 120 turns per batch) look for where you delegated, took a choice back, or stated a standing rule; a finding survives only if its quote is your exact words in that batch. One more call writes the file from those findings and the current file. The status line counts the batches; ending the session stops the run, and the next one starts over.
+- **In the background.** After Run, readers (Sonnet, four at a time, 120 turns per batch) look for where you delegated, took a choice back, or stated a standing rule; a finding survives only if its quote is your exact words in that batch. One more call writes the file from those findings and the current file. The status line counts the batches beside the `stop-judge off` marker when the judge is off; a toast says how the run ended, and the status line goes back to the marker alone. Ending the session stops the run, and the next one starts over.
 - **Refresh overwrites.** The old file is kept as `DECISIONS.md.prev`, and is an input to the new one: a rule whose transcripts have aged out survives until newer sessions contradict it. A file that fails the format check, or keeps no bullet, is not written, and the old one stays.
 
 The file:
@@ -106,11 +106,11 @@ Every bullet ends in one or two of your quotes (at most 200 characters, `"` writ
 
 **Editing it by hand** is fine; the next derive reads your edits as the current file. An agent editing a file under `~/.claude/stopstopping/` may need an allow rule for that folder in your permission settings.
 
-**Log lines** in `stop-judge.log`, outcome first, then the line as the reason:
+**Log lines** in `stop-judge.log`, the outcome as the line's second field and the rest as the reason (`<utc> context session=<id> ms=0 reason=chars=<n>`):
 
 | Outcome | Reason |
 | --- | --- |
-| `context` | `context chars=<n>`: the file was printed at session start |
-| `derive` | `derive sessions=<n> turns=<t> batches=<b> cost=$<usd> failed-batches=<k> dropped-lines=<l> dropped-bullets=<m>` |
-| `derive-cancelled` | `derive-cancelled sessions=<n> turns=<t>` |
-| `derive-error` | `derive-error reason=<why>`: nothing was written |
+| `context` | `chars=<n>`: the file was printed at session start |
+| `derive` | `sessions=<n> turns=<t> batches=<b> cost=$<usd> failed-batches=<k> dropped-lines=<l> dropped-bullets=<m>` |
+| `derive-cancelled` | `sessions=<n> turns=<t>` |
+| `derive-error` | `<why>`: nothing was written |

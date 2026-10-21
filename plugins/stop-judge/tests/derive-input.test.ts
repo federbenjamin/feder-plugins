@@ -1,5 +1,5 @@
 import { expect, test } from 'claude-code/testing'
-import { batches, packSessions, selectCandidates, typedTurnsOf } from '../hooks/derive.ts'
+import { batches, packSessions, ROW_GREP_PATTERN, selectCandidates, typedTurnsOf } from '../hooks/derive.ts'
 import type { Session } from '../hooks/derive.ts'
 
 const turn = (ts: string, text: string, before = '(session start)') => ({ ts, text, before })
@@ -152,4 +152,29 @@ test('a character ceiling starts the next session in a fresh batch even when tur
     { sessions: ['one'], turns: 1, operatorText: 'first' },
     { sessions: ['two'], turns: 1, operatorText: 'second' },
   ])
+})
+
+test('the row pattern the host grep gets matches every row shape typedTurnsOf reads, so filtering by it keeps every turn', () => {
+  const lines = [
+    { type: 'assistant', message: { content: [{ type: 'text', text: 'Shall I?' }] } },
+    { type: 'user', timestamp: '2026-10-20T09:00:00Z', message: { role: 'user', content: 'typed turn' }, origin: { kind: 'human' }, promptSource: 'typed' },
+    { type: 'attachment', timestamp: '2026-10-20T09:01:00Z', attachment: { type: 'queued_command', commandMode: 'prompt', prompt: 'queued turn', origin: { kind: 'human' } } },
+    { type: 'system', subtype: 'compact_boundary', timestamp: '2026-10-20T09:02:00Z' },
+    { type: 'progress', timestamp: '2026-10-20T09:03:00Z', data: { kind: 'tick' } },
+  ].map(r => JSON.stringify(r))
+  const pattern = new RegExp(ROW_GREP_PATTERN)
+  expect(lines.map(l => pattern.test(l))).toEqual([true, true, true, true, false])
+  const all = typedTurnsOf(lines)
+  expect(all.turns.map(t => t.text)).toEqual(['typed turn', 'queued turn'])
+  expect(all.compactions).toEqual(['2026-10-20T09:02:00Z'])
+  expect(typedTurnsOf(lines.filter(l => pattern.test(l)))).toEqual(all)
+})
+
+test('a sidechain agent message is not the action before a typed turn', () => {
+  const rows = [
+    { type: 'assistant', message: { content: [{ type: 'text', text: 'main ask' }] } },
+    { type: 'assistant', isSidechain: true, message: { content: [{ type: 'text', text: 'subagent noise' }] } },
+    { type: 'user', timestamp: '2026-10-20T09:00:00Z', message: { role: 'user', content: 'yes' } },
+  ].map(r => JSON.stringify(r))
+  expect(typedTurnsOf(rows).turns).toEqual([{ ts: '2026-10-20T09:00:00Z', text: 'yes', before: 'TEXT: main ask' }])
 })

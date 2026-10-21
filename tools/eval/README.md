@@ -24,7 +24,7 @@ Dev tooling, never installed: it measures the stop judge (`plugins/stop-judge`) 
 
    One model call per id. `--key` takes the extract's JSON lines or a JSON object of records by id; `--graders` takes a folder (its `grade-out-*.jsonl`) or one grades file. `--setting-sources ""` keeps the installed plugins from loading beside it.
 
-`tools/eval/out/` is ignored by git. Records and grades come from real transcripts: never commit them. `fixtures/records.sample.jsonl` and `fixtures/grades.sample.jsonl` are synthetic: eight records and their grades, the shapes above.
+`tools/eval/out/` is ignored by git. Records and grades come from real transcripts: never commit them. `fixtures/records.sample.jsonl` and `fixtures/grades.sample.jsonl` are synthetic: eight records and their grades, the shapes above. Their source is `fixtures/samples.ts`, which the tests import; edit it and run `node scripts/sync-shared.ts` to rewrite the two files (`--check` fails on drift).
 
 ## Output
 

@@ -1,5 +1,5 @@
 import { expect, test } from 'claude-code/testing'
-import { settingsFrom, statusText, stopJudgeCommand, USAGE } from '../hooks/settings.ts'
+import { settingsFrom, statusLine, statusText, stopJudgeCommand, USAGE } from '../hooks/settings.ts'
 
 test('an invalid stored field defaults to on without discarding an independent setting', async () => {
   const defaults = { isOff: false, isContextOff: false }
@@ -41,4 +41,16 @@ test('the status report says none when no outcomes or decisions file exist', asy
     counts: {},
     decisions: null,
   })).toBe('stop-judge: on · context: off · last 7 days: none · DECISIONS.md: none')
+})
+
+test('the status line carries the judge-off marker and a derive run, either or both', () => {
+  expect(statusLine({ isOff: false })).toBeUndefined()
+  expect(statusLine({ isOff: true })).toBe('stop-judge off')
+  expect(statusLine({ isOff: false }, 'derive 2/5')).toBe('derive 2/5')
+  expect(statusLine({ isOff: true }, 'derive 2/5')).toBe('stop-judge off · derive 2/5')
+})
+
+test('a judge outcome the order does not name sorts after every named one', () => {
+  const text = statusText({ settings: { isOff: false, isContextOff: false }, counts: { 'pass-error': 1, zeta: 1, continue: 2, 'pass-typing': 3 }, decisions: null })
+  expect(text).toContain('last 7 days: continue 2, pass-typing 3, pass-error 1, zeta 1 · ')
 })

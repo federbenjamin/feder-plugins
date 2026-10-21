@@ -6,7 +6,7 @@ Claude Code caches the conversation's prompt for an hour (five minutes on some p
 
 ## Install
 
-Needs Claude Code; tested on 2.1.295. This is one part of the [stopstopping](../../README.md) marketplace: install `stopstopping` or this plugin, not both (both would load the same hooks twice).
+Needs Claude Code; tested on 2.1.295. This is one part of the [stopstopping](../../README.md) marketplace: install `stopstopping`, which installs this plugin under its own name as a dependency, or this plugin alone; installing both changes nothing.
 
 ```
 claude plugin install cache-keepalive --marketplace federbenjamin/stopstopping
@@ -53,7 +53,7 @@ awk '{print $2}' ~/.claude/stopstopping/logs/cache-keepalive.log | sort | uniq -
 
 ## Settings
 
-The settings live in the engine's store under this plugin's name. Switching between the `stopstopping` bundle and this plugin starts from the defaults.
+The settings live in the engine's store under this plugin's name, so they carry whether it is installed alone or through the `stopstopping` bundle.
 
 ## Contributing
 
