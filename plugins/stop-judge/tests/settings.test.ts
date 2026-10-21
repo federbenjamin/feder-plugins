@@ -1,12 +1,12 @@
 import { expect, test } from 'claude-code/testing'
 import { settingsFrom, statusText, stopJudgeCommand, USAGE } from '../hooks/settings.ts'
 
-test('a corrupt stored setting cannot silently disable the judge or its context', async () => {
+test('an invalid stored field defaults to on without discarding an independent setting', async () => {
   const defaults = { isOff: false, isContextOff: false }
 
   expect(settingsFrom(undefined)).toEqual(defaults)
   expect(settingsFrom(null)).toEqual(defaults)
-  expect(settingsFrom({ isOff: true, isContextOff: 'yes' })).toEqual(defaults)
+  expect(settingsFrom({ isOff: true, isContextOff: 'yes' })).toEqual({ isOff: true, isContextOff: false })
   expect(settingsFrom({ isOff: true, isContextOff: false })).toEqual({ isOff: true, isContextOff: false })
 })
 

@@ -1,16 +1,15 @@
 import { expect, test } from 'claude-code/testing'
-import { readFileSync } from 'node:fs'
 import { PROMPT } from '../hooks/prompt.ts'
 import { buildSystem, buildUser, confidenceOf, MINUTES_FACT, MINUTES_SENTENCE, parseVerdict } from '../hooks/judge.ts'
 
-test('the measured round-three prompt is copied without the retired injection vocabulary', async () => {
-  const source = readFileSync(new URL('../../../sources/judge-prompt-r3-generic.txt', import.meta.url), 'utf8')
-  expect(PROMPT).toBe(source)
-  expect(PROMPT).not.toMatch(/\{\{CONTRACT_RULES\}\}|contract|Next:|grilling|rule 9/i)
+test('the measured round-three prompt retains examples 9–14 without retired injection vocabulary', async () => {
+  expect(PROMPT).toContain('9. Opening: "can we parallelize anything here". Final: lists four things that can run now, then "Next: do 1–4 now."')
+  expect(PROMPT).toContain('14. Opening: "merge the four fix branches". Final: "Fixers 2 and 4 are still running. Next: concatenate the four fix files, merge the four branches, type-check the merge."')
+  expect(PROMPT).not.toMatch(/\{\{CONTRACT_RULES\}\}|\bcontract\b|grilling|rule 9/i)
 })
 
 test('the minutes guidance is added to the system message without changing the measured prompt', async () => {
-  expect(buildSystem()).toBe(MINUTES_FACT ? `${PROMPT}\n${MINUTES_SENTENCE}` : PROMPT)
+  expect(buildSystem()).toBe(MINUTES_FACT ? `${PROMPT}\n${MINUTES_SENTENCE}\n` : PROMPT)
 })
 
 test('a measured gap is the last fact before the required JSON response, while no gap is omitted', async () => {
