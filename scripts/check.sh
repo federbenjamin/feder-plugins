@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
-# Every gate for the repo, from the repo root: per plugin test, tsc and validate, then the
-# marketplace, the generated copies, and the public-repo grep. Exits non-zero on the first failure.
+# Every gate for the repo, from the repo root: per plugin test, tsc and validate (the bundle is a
+# dependency list with no code: validate only), then the marketplace, the generated copies, and the
+# public-repo grep. Exits non-zero on the first failure.
 set -eu
 cd "$(dirname "$0")/.."
 
-for dir in plugins/dialog-timeout plugins/cache-keepalive plugins/stop-judge plugins/session-log plugins/stopstopping tools/eval; do
+for dir in plugins/dialog-timeout plugins/cache-keepalive plugins/stop-judge plugins/session-log tools/eval; do
   [ -d "$dir" ] || continue
   echo "== $dir"
   claude plugin test "$dir"
@@ -15,6 +16,9 @@ for dir in plugins/dialog-timeout plugins/cache-keepalive plugins/stop-judge plu
   fi
   claude plugin validate "$dir" --strict
 done
+
+echo "== plugins/stopstopping"
+claude plugin validate plugins/stopstopping --strict
 
 echo "== marketplace"
 claude plugin validate . --strict

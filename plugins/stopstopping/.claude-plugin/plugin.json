@@ -1,0 +1,8 @@
+{
+  "name": "stopstopping",
+  "version": "0.1.0",
+  "description": "dialog-timeout + cache-keepalive + stop-judge + session-log, installed together",
+  "author": { "name": "Benjamin Feder" },
+  "license": "MIT",
+  "dependencies": ["dialog-timeout", "cache-keepalive", "stop-judge", "session-log"]
+}

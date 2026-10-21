@@ -1,5 +1,5 @@
 // Writes the generated copies (a plugin cannot import across its folder, and a symlink is refused
-// by the loader): shared/ into each plugin, each part into the bundle, the judge into tools/eval.
+// by the loader): shared/ into each plugin, the judge into tools/eval.
 //   node scripts/sync-shared.ts           write every target
 //   node scripts/sync-shared.ts --check   write nothing; exit 1 on a drifted, missing or stale
 //                                         target, or a sibling text that left its plugin
@@ -9,7 +9,6 @@ import { SIBLING_TEXTS } from '../shared/typed.ts'
 
 const ROOT = join(import.meta.dirname, '..')
 const PARTS = ['dialog-timeout', 'cache-keepalive', 'stop-judge', 'session-log'] as const
-const BUNDLE = 'plugins/stopstopping'
 
 export type Job = {
   name: string
@@ -17,28 +16,13 @@ export type Job = {
   to: string // a folder under the repo root
   needs?: string // a path that must exist besides `from`: the target's own plugin, so a part's build never writes another part's folder
   include?: (rel: string) => boolean
-  rewrite?: (text: string, rel: string) => string
   owns?: boolean // `to` holds only generated files: any other file in it is stale
 }
 
 const isTs = (rel: string) => rel.endsWith('.ts')
 
-// The bundle's copy of a part: its state-ref plugin literal and its `PluginState` key become the
-// bundle's name, since only the owner writes a state value (D6).
-export function rewriteForBundle(text: string, part: string): string {
-  return text.replaceAll(`plugin: '${part}'`, "plugin: 'stopstopping'").replaceAll(`'${part}': {`, "'stopstopping': {")
-}
-
 export const JOBS: readonly Job[] = [
   ...PARTS.map(p => ({ name: `shared -> ${p}`, from: 'shared', to: `plugins/${p}/hooks/shared`, needs: `plugins/${p}`, include: isTs, owns: true })),
-  ...PARTS.flatMap((p): Job[] => [
-    { name: `${p} hooks -> bundle`, from: `plugins/${p}/hooks`, to: `${BUNDLE}/parts/${p}/hooks`, needs: `${BUNDLE}/hooks`, include: rel => rel !== 'hooks.json', rewrite: (t, rel) => (isTs(rel) ? rewriteForBundle(t, p) : t), owns: true },
-    { name: `${p} types -> bundle`, from: `plugins/${p}/types`, to: `${BUNDLE}/parts/${p}/types`, needs: `${BUNDLE}/hooks`, rewrite: (t, rel) => (isTs(rel) ? rewriteForBundle(t, p) : t), owns: true },
-    { name: `${p} scripts -> bundle`, from: `plugins/${p}/scripts`, to: `${BUNDLE}/parts/${p}/scripts`, needs: `${BUNDLE}/hooks`, owns: true },
-  ]),
-  { name: 'afk skill -> bundle', from: 'plugins/dialog-timeout/skills/afk', to: `${BUNDLE}/skills/afk`, needs: `${BUNDLE}/hooks`, owns: true },
-  { name: 'handoff skill -> bundle', from: 'plugins/session-log/skills/handoff', to: `${BUNDLE}/skills/handoff`, needs: `${BUNDLE}/hooks`, owns: true },
-  { name: 'finish-session skill -> bundle', from: 'plugins/session-log/skills/finish-session', to: `${BUNDLE}/skills/finish-session`, needs: `${BUNDLE}/hooks`, owns: true },
   { name: 'judge -> eval', from: 'plugins/stop-judge/hooks', to: 'tools/eval/hooks/judge', needs: 'tools/eval/hooks', include: rel => rel === 'judge.ts' || rel === 'prompt.ts', owns: true },
   { name: 'judge shared -> eval', from: 'plugins/stop-judge/hooks/shared', to: 'tools/eval/hooks/judge/shared', needs: 'tools/eval/hooks', include: isTs },
 ]
@@ -85,7 +69,7 @@ export function expectedTargets(): { targets: Map<string, string>; skipped: stri
     for (const [path, text] of sources) {
       const rel = path.slice(job.from.length + 1)
       if (job.include && !job.include(rel)) continue
-      targets.set(`${job.to}/${rel}`, job.rewrite ? job.rewrite(text, rel) : text)
+      targets.set(`${job.to}/${rel}`, text)
     }
   }
   return { targets, skipped, owned }
