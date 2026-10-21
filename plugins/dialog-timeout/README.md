@@ -23,7 +23,7 @@ It starts in the next interactive session, with a 30-minute timeout.
 - **Unblocks an unattended session.** A permission prompt or question left open for the set time ends the turn. The agent then gets `automessage: user is /afk` as your next message.
 - **Comes with the `afk` skill.** It tells the agent to keep working through what is queued, decide what it can, write the questions only you can answer to `afk-questions.md` (in `docs/afk/` unless your agent instructions name a folder for docs), and end with a handoff doc beside it. Run `/dialog-timeout:afk` yourself when you step away.
 - **Leaves you alone while you are there.** It only counts while a turn is running and a dialog holds the prompt box. Answer the dialog and the count starts over.
-- **One setting for every session.** `/dialog-timeout` changes the minutes, or turns it off, in every open and future session at once.
+- **One setting for every session.** `/dialog-timeout` changes the minutes, or turns it off, in every open and future session at once. One session can take its own minutes from `DIALOG_TIMEOUT_MINUTES`.
 - **Shows when it acts.** The status line says when it ended a turn, and shows `dialog-timeout off` while it is off.
 
 ## Usage
@@ -38,6 +38,16 @@ It starts in the next interactive session, with a 30-minute timeout.
 | `/dialog-timeout off` | Dialogs wait for you, in every session |
 | `/dialog-timeout on` | Turn it back on at the last set minutes |
 | `/dialog-timeout` | Show the current setting |
+
+### One session's own minutes
+
+Set `DIALOG_TIMEOUT_MINUTES` in the environment a session starts in to give that session its own minutes:
+
+```
+DIALOG_TIMEOUT_MINUTES=2 claude
+```
+
+That session uses those minutes in place of the stored ones, and every other session keeps the stored ones. A script that starts unattended sessions can set it so they give up sooner. `/dialog-timeout off` still wins: while it is off, no session ends a turn, whatever the variable says. In that session, `/dialog-timeout` shows the stored setting and adds `(this session: 2 min, from DIALOG_TIMEOUT_MINUTES)`, and setting minutes there changes the stored ones for the other sessions. A value that is not a whole number of at least 1 is ignored.
 
 ## How it works
 
