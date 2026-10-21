@@ -1,7 +1,7 @@
 import { expect, mock, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 import type { EngineInterface, On, PluginOptions } from 'claude-code'
-import { COMMAND, DEFAULT_MINUTES, dialogTimeoutCommand, observe, register, settingFrom, TICK_MS } from '../hooks/register'
+import { COMMAND, DEFAULT_MINUTES, dialogTimeoutCommand, envMinutesFrom, observe, register, sessionSetting, settingFrom, TICK_MS } from '../hooks/register'
 
 const T0 = 1_000_000
 const TIMEOUT = DEFAULT_MINUTES * 60_000
@@ -33,11 +33,25 @@ test('a stored value that is not a setting reads as the default', async () => {
   expect(settingFrom({ minutes: 10, isOff: true })).toEqual({ minutes: 10, isOff: true })
 })
 
-// The engine beneath: a clock at T0, a store holding `stored`, and a prompt box that counts
-// each time it is asked.
-function world(on: On, stored: Record<string, unknown> = {}) {
+test('DIALOG_TIMEOUT_MINUTES replaces the stored minutes in this session alone, and off still wins', async () => {
+  for (const bad of [undefined, '', '0', '-3', '1.5', 'abc']) expect(envMinutesFrom(bad)).toBe(undefined)
+  expect(envMinutesFrom(' 2 ')).toBe(2)
+  expect(sessionSetting({ minutes: 10, isOff: false }, 2)).toEqual({ minutes: 2, isOff: false })
+  expect(sessionSetting({ minutes: 10, isOff: true }, 2)).toEqual({ minutes: 2, isOff: true })
+  expect(sessionSetting(undefined, undefined)).toEqual(on30)
+  const set = dialogTimeoutCommand('10', on30, 2)
+  expect(set.setting).toEqual({ minutes: 10, isOff: false })
+  expect(set.text).toBe('dialog-timeout 10 min: a dialog left open that long ends the turn with /afk (this session: 2 min, from DIALOG_TIMEOUT_MINUTES)')
+  expect(dialogTimeoutCommand('', on30, 2).text).toBe('dialog-timeout is 30 min; /dialog-timeout <minutes>, off, or on (this session: 2 min, from DIALOG_TIMEOUT_MINUTES)')
+  expect(dialogTimeoutCommand('off', on30, 2).text).toBe('dialog-timeout off: open dialogs wait for you, in every session')
+})
+
+// The engine beneath: a clock at T0, a store holding `stored`, an environment holding `env`, and
+// a prompt box that counts each time it is asked.
+function world(on: On, stored: Record<string, unknown> = {}, env: Record<string, string> = {}) {
   const clock = mock.clock(on, { now: T0 })
   mock.store(on, stored)
+  mock.env(on, env)
   const box = { fills: 0 }
   const statuses: (string | undefined)[] = []
   on('session.start', async (_$, e) => ({ cwd: e.cwd }))
@@ -87,6 +101,16 @@ test('a setting another session stored applies here from the start', async ($, o
   const { clock, box, statuses } = world(on, { setting: { minutes: 30, isOff: true } })
   await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
   expect(statuses.at(-1)).toBe('dialog-timeout off')
+  await $.turn.start({ text: 'hi', turnId: 't1' })
+  await clock.advance(10 * TICK_MS)
+  expect(box.fills).toBe(0)
+})
+
+test('a session reads DIALOG_TIMEOUT_MINUTES for itself, and a stored off still stops the asking', async ($, on) => {
+  const { clock, box } = world(on, { setting: { minutes: 30, isOff: false } }, { DIALOG_TIMEOUT_MINUTES: '2' })
+  await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
+  expect((await $.command.run(run(''))).text).toBe('dialog-timeout is 30 min; /dialog-timeout <minutes>, off, or on (this session: 2 min, from DIALOG_TIMEOUT_MINUTES)')
+  await $.command.run(run('off'))
   await $.turn.start({ text: 'hi', turnId: 't1' })
   await clock.advance(10 * TICK_MS)
   expect(box.fills).toBe(0)

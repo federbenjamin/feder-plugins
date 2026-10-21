@@ -1,6 +1,6 @@
 {
   "name": "dialog-timeout",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Ends a turn left on an open dialog (permission prompt, question) for 30 min by default and tells the agent the user is /afk; /dialog-timeout <minutes>|off|on",
   "author": { "name": "Benjamin Feder" }
 }
