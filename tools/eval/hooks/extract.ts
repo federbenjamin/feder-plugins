@@ -1,7 +1,8 @@
-import { framingAndPrior, minutesSinceOperator, parseRows, splitTurn } from './judge/judge.ts'
+import { framingAndPrior, minutesFact, parseRows, splitTurn, TAIL_BYTES } from './judge/judge.ts'
+import type { MinutesGap } from './judge/judge.ts'
 import { parseFiringLine } from './judge/shared/firing.ts'
 import type { FiringLine } from './judge/shared/firing.ts'
-import { typedText } from './judge/shared/typed.ts'
+import { parseRow, typedText } from './judge/shared/typed.ts'
 import type { TranscriptRow } from './judge/shared/typed.ts'
 
 // Records of judged stops: what the judge saw at each firing, rebuilt from the session's
@@ -41,18 +42,71 @@ export function transcriptRows(grepped: string): TranscriptRow[] {
   )
 }
 
-export function operatorRows(rows: readonly TranscriptRow[]): TranscriptRow[] {
-  return rows.filter(row => typedText(row, { sdk: true }) !== null)
+// One transcript line as the judge's tail would hold it: its bytes in the file, its row's time,
+// and the row cut to what minutesFact reads (whole when the person typed it, else its time).
+// A null row is a line parseRow drops (cut, not an object, a sidechain row).
+export type LineMark = { start: number; end: number; at: number; row: TranscriptRow | null }
+
+function utf8Length(text: string): number {
+  let n = 0
+  for (let i = 0; i < text.length; i++) {
+    const c = text.charCodeAt(i)
+    if (c < 0x80) n += 1
+    else if (c < 0x800) n += 2
+    else if (c >= 0xd800 && c < 0xdc00 && (text.charCodeAt(i + 1) & 0xfc00) === 0xdc00) {
+      n += 4
+      i++
+    } else n += 3
+  }
+  return n
 }
 
-// Minutes from the operator's last typed row before `ts` to `ts`, as the judge would have read it then.
-export function minutesBefore(rows: readonly TranscriptRow[], ts: string | null): number | null {
+// Adds one line of `grep -a -b ''` output, `<byte offset>:<line>`. The host counts the offsets,
+// so a line ends where the next begins; only the last line's end is its own length.
+export function pushMark(marks: LineMark[], grepLine: string): void {
+  const colon = grepLine.indexOf(':')
+  const start = colon > 0 ? Number(grepLine.slice(0, colon)) : Number.NaN
+  if (!Number.isInteger(start)) return
+  const text = grepLine.slice(colon + 1)
+  const prev = marks.at(-1)
+  if (prev) prev.end = start
+  const row = parseRow(text)
+  const kept = row === null || typedText(row, { sdk: true }) !== null ? row : 'timestamp' in row ? { timestamp: row.timestamp } : {}
+  marks.push({ start, end: start + utf8Length(text) + 1, at: row === null ? lineTime(text) : timeOf(row), row: kept })
+}
+
+// The time of a line parseRow drops: a sidechain row was still in the file the judge read.
+function lineTime(text: string): number {
+  try {
+    const v: unknown = JSON.parse(text)
+    return isRecord(v) ? timeOf(v) : Number.NaN
+  } catch {
+    return Number.NaN
+  }
+}
+
+// The rows the judge's `tail -c tailBytes` read at `ts`: the file then ended after its last line
+// timed before `ts`, and the line the tail's first byte cut into does not parse. null with no time.
+export function tailRowsAt(marks: readonly LineMark[], ts: string | null, tailBytes: number = TAIL_BYTES): TranscriptRow[] | null {
   const at = ts === null ? Number.NaN : Date.parse(ts)
   if (Number.isNaN(at)) return null
-  return minutesSinceOperator(
-    rows.filter(row => timeOf(row) < at),
-    new Date(at),
-  )
+  let last = -1
+  for (let i = 0; i < marks.length; i++) if (marks[i]!.at < at) last = i
+  if (last < 0) return []
+  const from = Math.max(0, marks[last]!.end - tailBytes)
+  const rows: TranscriptRow[] = []
+  for (let i = 0; i <= last; i++) {
+    const m = marks[i]!
+    if (m.start >= from && m.row !== null) rows.push(m.row)
+  }
+  return rows
+}
+
+// The minutes fact the judge sent at `ts`: minutesFact over the tail it read then, lower-bound
+// flag included.
+export function tailMinutesFact(marks: readonly LineMark[], ts: string | null, tailBytes: number = TAIL_BYTES): MinutesGap | null {
+  const rows = tailRowsAt(marks, ts, tailBytes)
+  return rows === null || ts === null ? null : minutesFact(rows, new Date(ts))
 }
 
 // The judged lines of a firing log; the id is the line's index, as the graded set's ids are.

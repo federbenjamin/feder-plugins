@@ -12,6 +12,10 @@ const HEADER_RE = /^# Decisions \(derived (\d{4}-\d{2}-\d{2}), (\d+) sessions, [
 const TOPIC_RE = /^### \S/
 const QUOTES_RE = / -- ("[^"]{1,200}"(?: "[^"]{1,200}")?) \((\d{4}-\d{2}-\d{2})\)$/
 
+export function decisionsPath(dir: string): string {
+  return `${dir}/DECISIONS.md`
+}
+
 export function headerLine(date: string, sessions: number, window: string): string {
   return `# Decisions (derived ${date}, ${sessions} sessions, ${window})`
 }

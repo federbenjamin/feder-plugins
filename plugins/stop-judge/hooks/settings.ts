@@ -13,6 +13,11 @@ export type Action =
   | { kind: 'derive'; all: boolean }
   | { kind: 'usage' }
 
+// The command's name, which is also the plugin's log name.
+export const COMMAND = 'stop-judge'
+// The `$.store` key the judge switch is stored under.
+export const SETTINGS_KEY = 'settings'
+
 export const USAGE = '/stop-judge [off|on|context off|context on|derive [all]]'
 
 // Printed in the judge's outcome order; any other outcome follows alphabetically.

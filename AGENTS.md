@@ -15,7 +15,7 @@ A Claude Code marketplace of mods that keep an agent working instead of stopping
 
 ## Rules
 
-- Mod code: `$` is passed to functions only in `hooks/register.ts`; pure logic is exported from the other `hooks/*.ts` and tested in `tests/*.test.ts`.
+- Mod code: `$` only in hooks files (`hooks/register.ts` and the I/O modules it imports, `hooks/shared/record.ts` among them); decisions live in pure modules, exported from the other `hooks/*.ts` and tested in `tests/*.test.ts`.
 - Generated copies: `hooks/shared/`, `tools/eval/hooks/judge/` and `tools/eval/fixtures/*.sample.jsonl` (from `fixtures/samples.ts`) are written by `scripts/sync-shared.ts`. Edit the source, run `node scripts/sync-shared.ts`, commit both; `scripts/check.sh` fails on drift.
 - Logs: every mechanism appends one line per firing to `~/.claude/stopstopping/logs/<plugin>.log` in `shared/firing.ts`'s line shape; its README names the read-back command.
 - Public repo: nothing tracked names a path on a maintainer's machine or a private tool; `scripts/check.sh` greps for them.

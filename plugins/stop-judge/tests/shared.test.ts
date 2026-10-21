@@ -1,7 +1,9 @@
 import { expect, test } from 'claude-code/testing'
+import type { EngineInterface } from 'claude-code'
 import { isConversationReplaced, PERSON_ORIGINS } from '../hooks/shared/events.ts'
 import { countOutcomes, firingLine, firingRecord, stateDir } from '../hooks/shared/firing.ts'
 import { pool } from '../hooks/shared/pool.ts'
+import { record, stateDirs } from '../hooks/shared/record.ts'
 import { contentText, isTypedText, NOT_TYPED, parseRow, SIBLING_TEXTS, typedText } from '../hooks/shared/typed.ts'
 
 const humanRow = (content: unknown) => ({
@@ -97,6 +99,62 @@ test('a firing record is the plugin log path and its line, or null with no state
   })
   expect(firingRecord({ ...f, home: '/home/u', override: '/tmp/ss' })?.path).toBe('/tmp/ss/logs/session-log.log')
   expect(firingRecord({ ...f, home: undefined, override: undefined })).toBeNull()
+})
+
+// A structural `$` for the shared append: the env it is given, a log file that exists or not,
+// and every fs and process call in order.
+function appendWorld(env: Record<string, string>, opts: { exists?: boolean; failWrite?: boolean } = {}) {
+  const calls: string[] = []
+  const $ = {
+    env: { get: async (name: string) => env[name] },
+    session: { id: async () => 's1' },
+    clock: { now: async () => Date.parse('2026-10-20T12:00:00Z') },
+    fs: {
+      exists: async (path: string) => (calls.push(`exists ${path}`), opts.exists ?? true),
+      write: async (path: string, text: string) => {
+        calls.push(`write ${path} ${JSON.stringify(text)}`)
+        if (opts.failWrite) throw new Error('read-only')
+      },
+    },
+    process: {
+      run: async (argv: readonly string[], init?: { stdin?: string }) => {
+        calls.push(`run ${argv.join(' ')} ${JSON.stringify(init?.stdin ?? '')}`)
+        return { exitCode: 0, stdout: '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false }
+      },
+    },
+  } as unknown as EngineInterface
+  return { $, calls }
+}
+
+test('the one append writes the plugin line to its log with tee, making a missing log first, and nothing with no state dir', async () => {
+  const line = JSON.stringify('2026-10-20T12:00:00Z afk session=s1 ms=0 reason=dialog open 30 min\n')
+  const present = appendWorld({ HOME: '/home/u' })
+  await record(present.$, 'dialog-timeout', 'afk', 'dialog open  30 min')
+  expect(present.calls).toEqual(['exists /home/u/.claude/stopstopping/logs/dialog-timeout.log', `run tee -a /home/u/.claude/stopstopping/logs/dialog-timeout.log ${line}`])
+
+  const missing = appendWorld({ HOME: '/home/u', STOPSTOPPING_DIR: '/tmp/ss' }, { exists: false })
+  await record(missing.$, 'stop-judge', 'stop', 'fine', 42)
+  expect(missing.calls).toEqual([
+    'exists /tmp/ss/logs/stop-judge.log',
+    'write /tmp/ss/logs/stop-judge.log ""',
+    `run tee -a /tmp/ss/logs/stop-judge.log ${JSON.stringify('2026-10-20T12:00:00Z stop session=s1 ms=42 reason=fine\n')}`,
+  ])
+
+  const nowhere = appendWorld({})
+  await record(nowhere.$, 'session-log', 'template', '')
+  expect(nowhere.calls).toEqual([])
+})
+
+test('a failed log write never reaches the plugin', async () => {
+  const w = appendWorld({ HOME: '/home/u' }, { exists: false, failWrite: true })
+  await expect(record(w.$, 'cache-keepalive', 'bump', '1/6')).resolves.toBeUndefined()
+  expect(w.calls.some(c => c.startsWith('run tee'))).toBe(false)
+})
+
+test('the state dirs are HOME and the one state-dir rule over the environment', async () => {
+  expect(await stateDirs(appendWorld({ HOME: '/home/u' }).$)).toEqual({ home: '/home/u', dir: '/home/u/.claude/stopstopping' })
+  expect(await stateDirs(appendWorld({ HOME: '/home/u', STOPSTOPPING_DIR: '/tmp/ss' }).$)).toEqual({ home: '/home/u', dir: '/tmp/ss' })
+  expect(await stateDirs(appendWorld({}).$)).toEqual({ home: '', dir: '' })
 })
 
 test('every sibling plugin text opens a row no person typed', () => {

@@ -4,7 +4,7 @@ import { parseRow, typedText } from './shared/typed.ts'
 export { pool } from './shared/pool.ts'
 
 // The derivation's pure side: which transcripts to read, their typed turns, the reader batches,
-// the estimate, and the reader lines that may reach the synthesis. register.ts holds every `$` call.
+// the estimate, and the reader lines that may reach the synthesis. derive-run.ts holds every `$` call.
 
 export const TURN_CAP = 2000
 export const BATCH_TURNS = 120
@@ -280,7 +280,7 @@ export function isPermanent(f: CallFailure): boolean {
 }
 
 // Seconds to wait before retry number `attempt` (0-based), or undefined to give up. The derive
-// readers (register.ts completeWithRetry) ask once, for attempt 0, and only after a non-permanent
+// readers (derive-run.ts completeWithRetry) ask once, for attempt 0, and only after a non-permanent
 // api-error: one retry, never for a timed-out call.
 export function retryDelayS(f: CallFailure, attempt: number): number | undefined {
   if (isPermanent(f)) return undefined

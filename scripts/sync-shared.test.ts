@@ -1,6 +1,6 @@
 // The generated-copy check: green at the repo head, and red when any job's source, any target
 // plugin, or any literal's file is gone.
-//   node --test scripts/
+//   node --test scripts/*.test.ts
 import { cpSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'

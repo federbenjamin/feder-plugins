@@ -1,6 +1,6 @@
 import type { EngineInterface, Register } from 'claude-code'
-import { extractRecord, firingsOf, keyFrom, minutesBefore, operatorRows, ROW_GREP, transcriptRows } from './extract.ts'
-import type { EvalRecord } from './extract.ts'
+import { extractRecord, firingsOf, keyFrom, pushMark, ROW_GREP, tailMinutesFact, transcriptRows } from './extract.ts'
+import type { EvalRecord, LineMark } from './extract.ts'
 import { judgeRequest, MINUTES_FACT, transcriptFindArgv } from './judge/judge.ts'
 import { pool } from './judge/shared/pool.ts'
 import type { TranscriptRow } from './judge/shared/typed.ts'
@@ -45,13 +45,41 @@ async function writeLines($: EngineInterface, path: string, lines: readonly stri
   if (exitCode !== 0) throw new Error(`cannot write ${path}`)
 }
 
-// Found by id, as the judge finds it; null when the transcript is gone.
+// Found by id, as the judge finds it; undefined when the transcript is gone.
+async function transcriptOf($: EngineInterface, home: string, session: string | null): Promise<string | undefined> {
+  if (home === '' || !session) return undefined
+  return (await $.process.run(transcriptFindArgv(home, session))).stdout
+    .split('\n')
+    .find(l => l.trim() !== '')
+    ?.trim()
+}
+
 async function sessionRows($: EngineInterface, home: string, session: string | null): Promise<TranscriptRow[] | null> {
-  if (home === '' || !session) return null
-  const found = (await $.process.run(transcriptFindArgv(home, session))).stdout.split('\n').find(l => l.trim() !== '')
-  if (!found) return null
-  const { text, code } = await stdoutOf($, ['grep', '-a', '-E', ROW_GREP, found.trim()])
+  const path = await transcriptOf($, home, session)
+  if (path === undefined) return null
+  const { text, code } = await stdoutOf($, ['grep', '-a', '-E', ROW_GREP, path])
   return code === 0 || code === 1 ? transcriptRows(text) : null
+}
+
+// Every line of the transcript with its byte offset, so the judge's tail at any firing can be
+// cut again; a line split between two pieces is carried to the next.
+async function sessionMarks($: EngineInterface, home: string, session: string | null): Promise<LineMark[] | null> {
+  const path = await transcriptOf($, home, session)
+  if (path === undefined) return null
+  const marks: LineMark[] = []
+  let carry = ''
+  const pieces = $.process.spawn({ argv: ['grep', '-a', '-b', '', path] })
+  for (;;) {
+    const piece = await pieces.next()
+    if (piece.done) {
+      if (carry !== '') pushMark(marks, carry)
+      return piece.value.code === 0 || piece.value.code === 1 ? marks : null
+    }
+    if (piece.value.stream !== 'stdout') continue
+    const lines = (carry + piece.value.text).split('\n')
+    carry = lines.pop() ?? ''
+    for (const line of lines) pushMark(marks, line)
+  }
 }
 
 async function gradeTexts($: EngineInterface, path: string): Promise<string[]> {
@@ -71,16 +99,18 @@ async function judgeOne(
   $: EngineInterface,
   r: EvalRecord | undefined,
   id: string,
-  operatorRowsOf: (session: string | null) => Promise<TranscriptRow[] | null>,
+  marksOf: (session: string | null) => Promise<LineMark[] | null>,
 ): Promise<Judged> {
   if (r === undefined) return { record: runRecordOf(id, '', { isAnswered: false, reason: 'not in key' }, 0, null), usage: null, hasTranscript: false }
-  const rows = await operatorRowsOf(r.session)
-  const minutes = rows === null ? null : minutesBefore(rows, r.ts)
-  if (r.final === null) return { record: runRecordOf(id, r.outcome, { isAnswered: false, reason: 'no final message' }, 0, minutes), usage: null, hasTranscript: rows !== null }
+  const marks = await marksOf(r.session)
+  // The fact production sent at this firing: from the tail it read then, not the whole file.
+  const gap = marks === null ? null : tailMinutesFact(marks, r.ts)
+  const minutes = gap?.minutes ?? null
+  if (r.final === null) return { record: runRecordOf(id, r.outcome, { isAnswered: false, reason: 'no final message' }, 0, minutes), usage: null, hasTranscript: marks !== null }
   const startedAt = await $.clock.now()
-  const reply = await $.model.complete(judgeRequest(r.final, r.opening, r.context_users, minutes))
+  const reply = await $.model.complete(judgeRequest(r.final, r.opening, r.context_users, gap))
   const ms = (await $.clock.now()) - startedAt
-  return { record: runRecordOf(id, r.outcome, reply, ms, minutes), usage: reply.usage, hasTranscript: rows !== null }
+  return { record: runRecordOf(id, r.outcome, reply, ms, minutes), usage: reply.usage, hasTranscript: marks !== null }
 }
 
 async function evalJudge($: EngineInterface, args: string): Promise<Answer> {
@@ -94,19 +124,19 @@ async function evalJudge($: EngineInterface, args: string): Promise<Answer> {
     .filter(l => l !== '')
   const grades = gradesFrom(await gradeTexts($, a.graders))
   const home = (await $.env.get('HOME')) ?? ''
-  // One read per session, shared by its records and by lanes reading it at once; only the
-  // operator's rows are kept.
-  const sessions = new Map<string, Promise<TranscriptRow[] | null>>()
-  const operatorRowsOf = (session: string | null) => {
+  // One read per session, shared by its records and by lanes reading it at once; each line keeps
+  // its bytes and time, and only a typed row whole.
+  const sessions = new Map<string, Promise<LineMark[] | null>>()
+  const marksOf = (session: string | null) => {
     const k = session ?? ''
-    let rows = sessions.get(k)
-    if (rows === undefined) {
-      rows = sessionRows($, home, session).then(all => (all === null ? null : operatorRows(all)))
-      sessions.set(k, rows)
+    let marks = sessions.get(k)
+    if (marks === undefined) {
+      marks = sessionMarks($, home, session)
+      sessions.set(k, marks)
     }
-    return rows
+    return marks
   }
-  const judged = await pool(ids, workers, id => judgeOne($, key[id], id, operatorRowsOf))
+  const judged = await pool(ids, workers, id => judgeOne($, key[id], id, marksOf))
   const lines = judged.map(({ record: r, usage }) =>
     JSON.stringify({ id: r.id, live: r.live, new: r.new, new_outcome: r.new_outcome, conf: r.conf, shape: r.shape, reason: r.reason, ms: r.ms, error: r.error, usage, minutes_since_operator: r.minutes_since_operator }),
   )

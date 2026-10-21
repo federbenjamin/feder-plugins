@@ -55,7 +55,7 @@ Checks, from the repo root:
 bash scripts/check.sh
 ```
 
-`tsc` needs the engine's types, which an interactive `claude --plugin-dir plugins/<name>` load writes to `plugins/<name>/.claude-plugin/types/`; without them `check.sh` skips `tsc` and says so. Files under `hooks/shared/` and `tools/eval/hooks/judge/`, and the eval's two sample `.jsonl` fixtures, are generated: edit the source and run `node scripts/sync-shared.ts`. `node --test scripts/` runs the tests of the sync check and of the session-log directive script.
+`tsc` needs the engine's types, which an interactive `claude --plugin-dir plugins/<name>` load writes to `plugins/<name>/.claude-plugin/types/`; without them `check.sh` skips `tsc` and says so. Files under `hooks/shared/` and `tools/eval/hooks/judge/`, and the eval's two sample `.jsonl` fixtures, are generated: edit the source and run `node scripts/sync-shared.ts`. `node --test scripts/*.test.ts` runs the tests of the sync check, of the session-log directive script, and of the one-definition check (the firing-log append and the state dir live only in `shared/`).
 
 ## License
 

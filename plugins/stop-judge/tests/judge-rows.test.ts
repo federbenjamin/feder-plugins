@@ -42,8 +42,8 @@ test('the newest typed row determines whole minutes, while machine prompts leave
 })
 
 test('the minutes fact is the final line before the judge output instruction, and absent without a gap', async () => {
-  const withFact = buildUser('final text', 'opening text', ['prior text'], 7)
-  const withoutFact = buildUser('final text', 'opening text', ['prior text'], null)
+  const withFact = buildUser('final text', 'opening text', ['prior text'], 7, false, true)
+  const withoutFact = buildUser('final text', 'opening text', ['prior text'], null, false, true)
   const suffix = "Minutes since the operator's last typed message: 7\n\nOne JSON line."
 
   expect(withFact.slice(-suffix.length)).toBe(suffix)

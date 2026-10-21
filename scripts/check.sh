@@ -26,8 +26,8 @@ claude plugin validate . --strict
 echo "== generated copies"
 node scripts/sync-shared.ts --check
 
-echo "== script tests (the sync check, and directive.sh against log.ts)"
-node --test scripts/
+echo "== script tests (the sync check, directive.sh against log.ts, one definition per shared shape)"
+node --test scripts/*.test.ts
 
 echo "== public paths"
 if git ls-files -z --cached --others --exclude-standard -- . ':(exclude)scripts/check.sh' |

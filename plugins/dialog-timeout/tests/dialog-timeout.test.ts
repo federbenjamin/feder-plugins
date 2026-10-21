@@ -1,7 +1,7 @@
 import { expect, mock, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 import type { EngineInterface, On, PluginOptions } from 'claude-code'
-import { COMMAND, DEFAULT_MINUTES, dialogTimeoutCommand, observe, record, register, settingFrom, TICK_MS } from '../hooks/register'
+import { COMMAND, DEFAULT_MINUTES, dialogTimeoutCommand, observe, register, settingFrom, TICK_MS } from '../hooks/register'
 
 const T0 = 1_000_000
 const TIMEOUT = DEFAULT_MINUTES * 60_000
@@ -90,27 +90,6 @@ test('a setting another session stored applies here from the start', async ($, o
   await $.turn.start({ text: 'hi', turnId: 't1' })
   await clock.advance(10 * TICK_MS)
   expect(box.fills).toBe(0)
-})
-
-test('a firing appends one line to the shared log with tee', async () => {
-  const argv: string[][] = []
-  const stdin: string[] = []
-  const $ = {
-    env: { get: async (name: string) => (name === 'STOPSTOPPING_DIR' ? '/tmp/ss' : undefined) },
-    fs: { exists: async () => true, write: async () => {} },
-    session: { id: async () => 'sess-1' },
-    clock: { now: async () => T0 },
-    process: {
-      run: async (cmd: readonly string[], init?: { stdin?: string }) => {
-        argv.push([...cmd])
-        stdin.push(init?.stdin ?? '')
-        return { exitCode: 0, stdout: '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false }
-      },
-    },
-  } as unknown as EngineInterface
-  await record($, 'afk', 'dialog open 30 min, sent /afk')
-  expect(argv).toEqual([['tee', '-a', '/tmp/ss/logs/dialog-timeout.log']])
-  expect(stdin[0]).toBe('1970-01-01T00:16:40Z afk session=sess-1 ms=0 reason=dialog open 30 min, sent /afk\n')
 })
 
 // The kit strips the `dialog` refusal a test hook gives prompt.fill (only the engine's own cause

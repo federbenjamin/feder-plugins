@@ -16,6 +16,7 @@ import {
   splitTurn,
   transcriptFindArgv,
 } from '../hooks/judge.ts'
+import { PROMPT } from '../hooks/prompt.ts'
 
 const T0 = new Date('2026-10-20T12:00:00.000Z')
 
@@ -46,10 +47,9 @@ test('the minutes fact uses the newest typed message and ignores plugin text', (
 })
 
 test('the minutes fact is placed immediately before the JSON instruction and disappears without a typed message', () => {
-  const withMinutes = buildUser('final response', 'opening message', ['earlier message'], 7)
-  const withoutMinutes = buildUser('final response', 'opening message', ['earlier message'], null)
+  const withMinutes = buildUser('final response', 'opening message', ['earlier message'], 7, false, true)
+  const withoutMinutes = buildUser('final response', 'opening message', ['earlier message'], null, false, true)
 
-  expect(MINUTES_FACT).toBe(true)
   expect(withMinutes).toContain('7')
   expect(withMinutes.indexOf('7')).toBeGreaterThan(withMinutes.indexOf('final response'))
   expect(withMinutes.indexOf('7')).toBeLessThan(withMinutes.lastIndexOf('One JSON line.'))
@@ -155,8 +155,19 @@ test('the nudge prefix is the sibling nudge text and a space', () => {
 
 test('the model request is the one request constant plus the system text and the user message', () => {
   expect(JUDGE_REQUEST).toEqual({ model: 'haiku', maxTokens: 300, effort: 'low', timeoutMs: 20_000 })
-  expect(judgeRequest('Done.', 'go', ['earlier'], 7)).toEqual({ ...JUDGE_REQUEST, system: buildSystem(), prompt: buildUser('Done.', 'go', ['earlier'], 7) })
-  expect(judgeRequest('Done.', 'go', [], 40, true).prompt).toContain("Minutes since the operator's last typed message: more than 40\n")
+  expect(judgeRequest('Done.', 'go', ['earlier'], { minutes: 7, isLowerBound: false })).toEqual({ ...JUDGE_REQUEST, system: buildSystem(), prompt: buildUser('Done.', 'go', ['earlier'], 7) })
+  expect(judgeRequest('Done.', 'go', [], null)).toEqual({ ...JUDGE_REQUEST, system: buildSystem(), prompt: buildUser('Done.', 'go', [], null) })
+  const on = judgeRequest('Done.', 'go', [], { minutes: 40, isLowerBound: true }, true)
+  expect(on.system).toBe(buildSystem(true))
+  expect(on.prompt).toContain("Minutes since the operator's last typed message: more than 40\n")
+  expect(judgeRequest('Done.', 'go', [], { minutes: 40, isLowerBound: false }, true).prompt).toContain("Minutes since the operator's last typed message: 40\n")
+})
+
+test('the minutes fact ships off: the request is the measured round-3 text alone', () => {
+  expect(MINUTES_FACT).toBe(false)
+  const off = judgeRequest('Done.', 'go', ['earlier'], { minutes: 40, isLowerBound: true })
+  expect(off.system).toBe(PROMPT)
+  expect(off.prompt).toBe(buildUser('Done.', 'go', ['earlier'], null, false, true))
 })
 
 test('a reply maps to the logged outcome: cut call, failed call, no verdict, the gate', () => {

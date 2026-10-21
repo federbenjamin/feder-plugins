@@ -1,6 +1,6 @@
-import type { EngineInterface, Register } from 'claude-code'
+import type { Register } from 'claude-code'
 import { PERSON_ORIGINS } from './shared/events.ts'
-import { firingRecord } from './shared/firing.ts'
+import { record } from './shared/record.ts'
 
 // Ends a main turn that has sat on an open dialog (a permission prompt, an AskUserQuestion) for
 // the set minutes, then submits AFK_TEXT so the agent runs the afk skill and moves on. No tool
@@ -50,20 +50,6 @@ export function dialogTimeoutCommand(args: string, s: DialogTimeoutSetting): { s
   return { setting: s, text: `dialog-timeout is ${state}; /dialog-timeout <minutes>, off, or on` }
 }
 
-// One line per firing in the shared log; a failed write never stops the timeout.
-export async function record($: EngineInterface, outcome: string, reason: string): Promise<void> {
-  try {
-    const home = await $.env.get('HOME')
-    const override = await $.env.get('STOPSTOPPING_DIR')
-    const entry = firingRecord({ home, override, plugin: COMMAND, outcome, session: await $.session.id(), ms: 0, reason, now: new Date(await $.clock.now()) })
-    if (entry === null) return
-    if (!(await $.fs.exists(entry.path))) await $.fs.write(entry.path, '')
-    await $.process.run(['tee', '-a', entry.path], { stdin: entry.line })
-  } catch {
-    // the log is a convenience
-  }
-}
-
 const statusFor = (s: DialogTimeoutSetting): string | undefined => (s.isOff ? 'dialog-timeout off' : undefined)
 
 export const register: Register = on => {
@@ -93,10 +79,10 @@ export const register: Register = on => {
           await $.turn.abort({ turnId: id })
           await $.prompt.submit({ text: AFK_TEXT, asUser: true })
           $.ui.status(`dialog-timeout: dialog open ${setting.minutes} min, sent /afk`)
-          await record($, 'afk', `dialog open ${setting.minutes} min, sent /afk`)
+          await record($, COMMAND, 'afk', `dialog open ${setting.minutes} min, sent /afk`)
         } catch {
           $.ui.status('dialog-timeout: could not end the waiting turn')
-          await record($, 'afk-failed', 'could not end the waiting turn')
+          await record($, COMMAND, 'afk-failed', 'could not end the waiting turn')
         }
       })
       // After the timer, so a refused registration costs the command, not the timeout.

@@ -9,7 +9,9 @@ test('the measured round-three prompt retains examples 9–14 without retired in
 })
 
 test('the minutes guidance is added to the system message without changing the measured prompt', async () => {
-  expect(buildSystem()).toBe(MINUTES_FACT ? `${PROMPT}\n${MINUTES_SENTENCE}\n` : PROMPT)
+  expect(buildSystem(true)).toBe(`${PROMPT}\n${MINUTES_SENTENCE}\n`)
+  expect(buildSystem(false)).toBe(PROMPT)
+  expect(buildSystem()).toBe(buildSystem(MINUTES_FACT))
 })
 
 test('a measured gap is the last fact before the required JSON response, while no gap is omitted', async () => {
@@ -32,14 +34,12 @@ test('a measured gap is the last fact before the required JSON response, while n
     '',
     'One JSON line.',
   ].join('\n')
-  const withGap = buildUser('The update is ready.', 'make the update', ['first request', 'review this before you push'], 7)
+  const args = ['The update is ready.', 'make the update', ['first request', 'review this before you push']] as const
 
-  if (MINUTES_FACT) {
-    expect(withGap).toBe(withoutGap.replace('One JSON line.', "Minutes since the operator's last typed message: 7\n\nOne JSON line."))
-  } else {
-    expect(withGap).toBe(withoutGap)
-  }
-  expect(buildUser('The update is ready.', 'make the update', ['first request', 'review this before you push'], null)).toBe(withoutGap)
+  expect(buildUser(...args, 7, false, true)).toBe(withoutGap.replace('One JSON line.', "Minutes since the operator's last typed message: 7\n\nOne JSON line."))
+  expect(buildUser(...args, 7, false, false)).toBe(withoutGap)
+  expect(buildUser(...args, null, false, true)).toBe(withoutGap)
+  expect(buildUser(...args, 7)).toBe(buildUser(...args, 7, false, MINUTES_FACT))
 })
 
 test('a verdict wrapped in model prose preserves its decision, reason, and judging fields', async () => {

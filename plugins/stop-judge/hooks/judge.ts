@@ -3,7 +3,7 @@ import { contentText, parseRow, SIBLING_TEXTS, typedText } from './shared/typed.
 import type { TranscriptRow } from './shared/typed.ts'
 
 // The stop judge's pure side: which transcript rows frame a turn, the request to the model, its
-// verdict, and the gates between a verdict and a nudge. register.ts holds every `$` call.
+// verdict, and the gates between a verdict and a nudge. register.ts holds every `$` call of the judge.
 
 export const PRIOR_N = 4
 export const FRAMING_N = 3
@@ -14,8 +14,9 @@ export const NUDGE_PREFIX = `${SIBLING_TEXTS.nudge} ` as const
 export const JUDGE_REQUEST = { model: 'haiku', maxTokens: 300, effort: 'low', timeoutMs: 20_000 } as const
 
 // The minutes-since-the-operator's-last-message fact is one switch: off, the request is the
-// measured round-3 text and nothing else.
-export const MINUTES_FACT = true
+// measured round-3 text and nothing else. Off: the eval over the 190 graded firings showed no
+// gain with it on (stop-judge README).
+export const MINUTES_FACT = false
 export const MINUTES_SENTENCE =
   'The user message also gives the minutes since the operator\'s last typed message. A short gap means an active discussion: lean "stop". A long gap means unattended work: lean "continue".'
 
@@ -144,7 +145,9 @@ export function minutesSinceOperator(rows: readonly TranscriptRow[], now: Date):
 // The minutes fact for a tail: the gap to the newest typed row; with none in the tail, the
 // operator wrote before its oldest row, so the gap to that row is a lower bound. null when no row
 // carries a readable time.
-export function minutesFact(rows: readonly TranscriptRow[], now: Date): { minutes: number; isLowerBound: boolean } | null {
+export type MinutesGap = { minutes: number; isLowerBound: boolean }
+
+export function minutesFact(rows: readonly TranscriptRow[], now: Date): MinutesGap | null {
   if (rows.some(r => typedText(r, { sdk: true }) !== null)) {
     const minutes = minutesSinceOperator(rows, now)
     return minutes === null ? null : { minutes, isLowerBound: false }
@@ -156,22 +159,24 @@ export function minutesFact(rows: readonly TranscriptRow[], now: Date): { minute
   return null
 }
 
-export function buildSystem(): string {
-  return MINUTES_FACT ? `${PROMPT}\n${MINUTES_SENTENCE}\n` : PROMPT
+// `isMinutesFact` is MINUTES_FACT unless a test sets it.
+export function buildSystem(isMinutesFact = MINUTES_FACT): string {
+  return isMinutesFact ? `${PROMPT}\n${MINUTES_SENTENCE}\n` : PROMPT
 }
 
 // `isLowerBound`: the operator wrote before the transcript tail began, so the gap is "more than".
-export function buildUser(final: string, opening: string, prior: readonly string[], minutesSince?: number | null, isLowerBound = false): string {
+export function buildUser(final: string, opening: string, prior: readonly string[], minutesSince?: number | null, isLowerBound = false, isMinutesFact = MINUTES_FACT): string {
   let user = ''
   if (prior.length > 0) user += `## Earlier operator messages, oldest first\n\n${prior.map(p => clip(p, 600)).join('\n\n---\n\n')}\n\n`
   user += `## Operator message that opened the turn\n\n${clip(opening, 3000) || '(none captured)'}\n\n## Agent's final message\n\n${final.slice(-4000)}\n\n`
-  if (MINUTES_FACT && typeof minutesSince === 'number') user += `Minutes since the operator's last typed message: ${isLowerBound ? 'more than ' : ''}${minutesSince}\n\n`
+  if (isMinutesFact && typeof minutesSince === 'number') user += `Minutes since the operator's last typed message: ${isLowerBound ? 'more than ' : ''}${minutesSince}\n\n`
   return `${user}One JSON line.`
 }
 
-// The whole model request for one turn; `prior` is already picked (framingAndPrior).
-export function judgeRequest(final: string, opening: string, prior: readonly string[], minutesSince: number | null, isLowerBound = false) {
-  return { ...JUDGE_REQUEST, system: buildSystem(), prompt: buildUser(final, opening, prior, minutesSince, isLowerBound) }
+// The whole model request for one turn; `prior` is already picked (framingAndPrior). The gap
+// is minutesFact's, whole: its minutes never travel without their lower-bound flag.
+export function judgeRequest(final: string, opening: string, prior: readonly string[], gap: MinutesGap | null, isMinutesFact = MINUTES_FACT) {
+  return { ...JUDGE_REQUEST, system: buildSystem(isMinutesFact), prompt: buildUser(final, opening, prior, gap?.minutes ?? null, gap?.isLowerBound ?? false, isMinutesFact) }
 }
 
 // What the outcome needs of a model reply.

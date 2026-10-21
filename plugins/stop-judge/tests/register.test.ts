@@ -1,7 +1,7 @@
 import { expect, mock, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 import type { ModelCompleteRequest, On } from 'claude-code'
-import { buildSystem, TAIL_BYTES, transcriptFindArgv } from '../hooks/judge'
+import { buildSystem, judgeRequest, TAIL_BYTES, transcriptFindArgv } from '../hooks/judge'
 
 const T0 = Date.parse('2026-10-20T12:00:00Z')
 const TRANSCRIPT = '/home/u/.claude/projects/-work-app/sess-1.jsonl'
@@ -112,7 +112,9 @@ test('the request carries the final message, the opening, and the minutes since 
   expect(prompt).toContain('## Earlier operator messages, oldest first\n\nearlier ask')
   expect(prompt).toContain('## Operator message that opened the turn\n\nask me one by one before you push')
   expect(prompt).toContain("## Agent's final message\n\nTests pass.")
-  expect(prompt).toContain("Minutes since the operator's last typed message: 7\n\nOne JSON line.")
+  // The gap goes in whole; the shipped switch leaves it out of the text (judge-decide pins both).
+  expect(w.requests[0]).toEqual({ ...judgeRequest(OFFER, 'ask me one by one before you push', ['earlier ask'], { minutes: 7, isLowerBound: false }) })
+  expect(prompt).not.toContain('Minutes since')
 })
 
 test('confidence 0.5 logs stop-lowconf and submits nothing', async ($, on) => {
@@ -250,7 +252,7 @@ test('a transcript tail with no typed row still states the gap, as more than the
   const w = world(on, [{ type: 'system', timestamp: at(95), subtype: 'turn_duration' }, pluginRow('automessage: user is /afk'), assistant(OFFER)])
   await start($)
   await complete($)
-  expect(String(w.requests[0]?.prompt)).toContain("Minutes since the operator's last typed message: more than 95\n\nOne JSON line.")
+  expect(w.requests[0]).toEqual({ ...judgeRequest(OFFER, 'automessage: user is /afk', [], { minutes: 95, isLowerBound: true }) })
 })
 
 test('/stop-judge off mid-session shows the marker; on clears it, from the stored setting', async ($, on) => {

@@ -26,7 +26,7 @@ It starts in the next session.
 - **Headless runs too.** `claude -p` sessions are judged as well; an unattended run is where a caught early stop pays most.
 - **Passes without a model call** for subagent turns, interrupted turns, a keepalive ping turn, and a turn with no final text.
 - **No per-user text.** The judge reads one fixed prompt and nothing from your files. Measured over 190 graded firings (22 that should have continued, 168 that were right to stop), that fixed prompt blocked 8 of 168 right stops and caught 7 of 22 early ones; adding per-user rules scored no better (12 of 168, 6 of 22). A "continue" counts only at confidence 0.7 or above.
-- **Minutes since you last wrote.** The request also states the whole minutes since your last typed message (when the transcript tail the judge reads holds none, "more than" the minutes since the tail's oldest row), and the prompt says how to read the gap (short: an active discussion, lean stop; long: unattended work, lean continue). `MINUTES_FACT` in `hooks/judge.ts` is the one switch; with it off the request is the measured text alone. Shipped value: on, pending the eval run that compares it against the numbers above.
+- **Minutes since you last wrote.** The request also states the whole minutes since your last typed message (when the transcript tail the judge reads holds none, "more than" the minutes since the tail's oldest row), and the prompt says how to read the gap (short: an active discussion, lean stop; long: unattended work, lean continue). `MINUTES_FACT` in `hooks/judge.ts` is the one switch; with it off the request is the measured text alone. Shipped value: off. With the fact on, the same 190 graded firings scored 9 of 168 false blocks and 8 of 22 catches, against the fixed prompt's 8 of 168 and 7 of 22 without it: inside haiku's run-to-run variance of about 3 records, so the fact had no measured gain.
 
 ## Usage
 
@@ -114,3 +114,17 @@ Every bullet ends in one or two of your quotes (at most 200 characters, `"` writ
 | `derive` | `sessions=<n> turns=<t> batches=<b> cost=$<usd> failed-batches=<k> dropped-lines=<l> dropped-bullets=<m>` |
 | `derive-cancelled` | `sessions=<n> turns=<t>` |
 | `derive-error` | `<why>`: nothing was written |
+
+## Code
+
+`$` is called only in the hooks files; the decisions are pure modules with their tests in `tests/`.
+
+| File | Job |
+| --- | --- |
+| `hooks/register.ts` | the hooks: the judge on `turn.complete`, the `/stop-judge` command, the context log at session start |
+| `hooks/derive-run.ts` | `/stop-judge derive`: the scan, the confirm, and the detached reader and synthesis loop (`startDerive`) |
+| `hooks/status.ts` | the status line, written by the command and by a derive run |
+| `hooks/judge.ts`, `hooks/prompt.ts` | the judge's rows, request, verdict and gates; the fixed prompt |
+| `hooks/settings.ts` | the stored setting, the command grammar, the status texts |
+| `hooks/derive.ts`, `hooks/derive-prompts.ts`, `hooks/decisions.ts` | the derive pipeline, its prompts, and the `DECISIONS.md` format |
+| `hooks/shared/` | generated copies of the repo's `shared/` (the row filter, the firing log and its one append, the event predicates, `pool`) |

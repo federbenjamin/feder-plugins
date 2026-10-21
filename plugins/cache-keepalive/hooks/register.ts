@@ -1,7 +1,7 @@
 import type { EngineInterface, Register } from 'claude-code'
 import type { KeepaliveTiming } from '../types'
 import { isConversationReplaced, PERSON_ORIGINS } from './shared/events.ts'
-import { firingRecord } from './shared/firing.ts'
+import { record } from './shared/record.ts'
 
 export { isConversationReplaced }
 
@@ -46,6 +46,7 @@ export const HEADROOM_MS = 15_000 // the latest a bump may go: request latency b
 export const TICK_MS = 30_000
 export const COLD_LIMIT = 2
 export const COMMAND = 'keepalive'
+const PLUGIN = 'cache-keepalive'
 const TIMING = { plugin: 'cache-keepalive', key: 'timing' } as const
 export const AUTH_STATUS = ['claude', 'auth', 'status', '--json'] as const
 
@@ -132,20 +133,6 @@ async function currentAccount($: EngineInterface): Promise<string | undefined> {
   }
 }
 
-// One line per firing in the shared log; a failed write never stops the keepalive.
-async function record($: EngineInterface, outcome: string, reason: string): Promise<void> {
-  try {
-    const home = await $.env.get('HOME')
-    const override = await $.env.get('STOPSTOPPING_DIR')
-    const entry = firingRecord({ home, override, plugin: 'cache-keepalive', outcome, session: await $.session.id(), ms: 0, reason, now: new Date(await $.clock.now()) })
-    if (entry === null) return
-    if (!(await $.fs.exists(entry.path))) await $.fs.write(entry.path, '')
-    await $.process.run(['tee', '-a', entry.path], { stdin: entry.line })
-  } catch {
-    // the log is a convenience
-  }
-}
-
 // One load's timing writes: how many went out, and the newest of them that landed.
 type Writes = { issued: number; newestLanded: number }
 
@@ -195,7 +182,7 @@ export const register: Register = on => {
           if (account !== undefined && isAccountChanged(t.account, account)) {
             t.isStopped = true
             $.ui.status(accountChangedText(t.account, account))
-            await record($, 'stopped-account', 'account changed')
+            await record($, PLUGIN, 'stopped-account', 'account changed')
             await save($, writes, live)
             return
           }
@@ -206,7 +193,7 @@ export const register: Register = on => {
         const cap = capFor(t.model)
         if (t.bumps >= cap) {
           $.ui.status(`keepalive: done (${cap}/${cap}), cache left to expire`)
-          await record($, 'done', `${cap}/${cap}`)
+          await record($, PLUGIN, 'done', `${cap}/${cap}`)
           await save($, writes, live)
           return
         }
@@ -215,7 +202,7 @@ export const register: Register = on => {
         $.ui.status(`keepalive ${t.bumps}/${cap}`)
         try {
           await $.prompt.submit({ text: bumpText(t.bumps, cap), asUser: true })
-          await record($, 'bump', `${t.bumps}/${cap}`)
+          await record($, PLUGIN, 'bump', `${t.bumps}/${cap}`)
         } catch {
           isBumpPending = false
           $.ui.status('keepalive: submit failed')
@@ -297,13 +284,13 @@ export const register: Register = on => {
       isBusy = false
       if (isBumpTurn && t.lastSend > 0 && t.lastSend === t.bumpedFor) {
         $.ui.status('keepalive: ping got no response, cache left to expire')
-        await record($, 'no-response', 'ping got no response')
+        await record($, PLUGIN, 'no-response', 'ping got no response')
       } else if (isBumpTurn && e.usage && !followsFirstRequest(t)) {
         t.coldBumps = wasCold(e.usage) ? t.coldBumps + 1 : 0
         if (t.coldBumps >= COLD_LIMIT) {
           t.isStopped = true
           $.ui.status(`keepalive: cache cold ${COLD_LIMIT} pings in a row, stopped until your next prompt`)
-          await record($, 'stopped-cold', `${COLD_LIMIT} pings in a row`)
+          await record($, PLUGIN, 'stopped-cold', `${COLD_LIMIT} pings in a row`)
         } else if (t.coldBumps > 0) {
           $.ui.status('keepalive: cache was cold, rebuilt; pings go on')
         }
