@@ -56,7 +56,7 @@ test('the minutes fact is placed immediately before the JSON instruction and dis
 test('consultation framing catches discussion wording but leaves the grilling command to its own mode', () => {
   expect(FRAMING.test('lets discuss it before changing anything')).toBe(true)
   expect(FRAMING.test('ask me one by one')).toBe(true)
-  expect(FRAMING.test('/grilling this')).toBe(false)
+  expect(FRAMING.test('/some-skill this')).toBe(false)
 })
 
 test('the transcript turn keeps the human context before the queued opening and uses the transcript final', () => {

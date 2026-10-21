@@ -51,11 +51,11 @@ test('the minutes fact is the final line before the judge output instruction, an
 })
 
 test('consulting language frames prior context but a grilling skill name does not', async () => {
-  const users = ['first instruction', '/grilling this', 'lets discuss it', 'ask me one by one', 'older note', 'recent one', 'recent two', 'recent three', 'recent four']
+  const users = ['first instruction', '/some-skill this', 'lets discuss it', 'ask me one by one', 'older note', 'recent one', 'recent two', 'recent three', 'recent four']
 
   expect(FRAMING.test('lets discuss it')).toBe(true)
   expect(FRAMING.test('ask me one by one')).toBe(true)
-  expect(FRAMING.test('/grilling this')).toBe(false)
+  expect(FRAMING.test('/some-skill this')).toBe(false)
   expect(framingAndPrior(users)).toEqual(['first instruction', 'lets discuss it', 'ask me one by one', 'recent one', 'recent two', 'recent three', 'recent four'])
 })
 
