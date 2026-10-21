@@ -18,7 +18,7 @@ export const JUDGE_REQUEST = { model: 'haiku', maxTokens: 300, effort: 'low', ti
 // same records, same path) measures a gain past its own noise.
 export const MINUTES_FACT = false
 export const MINUTES_SENTENCE =
-  'The user message also gives the minutes since the operator\'s last typed message. A short gap means an active discussion: lean "stop". A long gap means unattended work: lean "continue".'
+  'The user message also gives the minutes since the operator\'s last typed message. A long gap means unattended work: lean "continue".'
 
 // Earlier messages that ask to be consulted.
 export const FRAMING =
