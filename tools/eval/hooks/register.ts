@@ -1,20 +1,23 @@
 import type { EngineInterface, Register } from 'claude-code'
-import { extractRecord, firingsOf, keyFrom, pushMark, ROW_GREP, tailMinutesFact, transcriptRows } from './extract.ts'
-import type { EvalRecord, LineMark } from './extract.ts'
-import { judgeRequest, MINUTES_FACT, transcriptFindArgv } from './judge/judge.ts'
+import { report } from './compare.ts'
+import { extractRecord, firingsOf, keyFrom, pushMark, ROW_GREP, tailFact, transcriptRows } from './extract.ts'
+import type { Cut, EvalRecord, LineMark } from './extract.ts'
+import { judgeRequest, MINUTES_SENTENCE, transcriptFindArgv } from './judge/judge.ts'
+import type { MinutesGap } from './judge/judge.ts'
 import { pool } from './judge/shared/pool.ts'
 import type { TranscriptRow } from './judge/shared/typed.ts'
-import { gradesFrom, parseArgs, runRecordOf, scoreRun } from './score.ts'
-import type { RunRecord } from './score.ts'
+import { ARMS, callsOf, gradesFrom, parseArgs, runRecordOf } from './score.ts'
+import type { Arm, Call, RunRecord } from './score.ts'
 
 // Dev-only commands that measure the stop judge on the production model path ($.model.complete,
 // which prepends the CLI identity block to `system`). Pure logic is in score.ts and extract.ts.
 
 const JUDGE = 'eval-judge'
 const EXTRACT = 'eval-extract'
-const JUDGE_USAGE = `/${JUDGE} --key <grade-key.json | records.jsonl> --ids <ids file> --graders <dir of grade-out-*.jsonl | one grades file> --out <run.jsonl> [--workers 4]`
+const JUDGE_USAGE = `/${JUDGE} --key <grade-key.json | records.jsonl> --ids <ids file> --graders <dir of grade-out-*.jsonl | one grades file> --out <run.jsonl> [--arms off,on] [--repeats 2] [--workers 4]`
 const EXTRACT_USAGE = `/${EXTRACT} --log <stop-judge.log> --out <records.jsonl>`
 const DEFAULT_WORKERS = 4
+const DEFAULT_REPEATS = 2
 const GRADES_FILE = /^grade-out-.*\.jsonl$/
 
 type Answer = { text: string; exitCode?: number }
@@ -93,30 +96,42 @@ async function gradeTexts($: EngineInterface, path: string): Promise<string[]> {
   return texts
 }
 
-type Judged = { record: RunRecord; usage: unknown; hasTranscript: boolean }
+// A record's minutes fact, the same for both arms' calls: computed once, before any call.
+type Fact = { gap: MinutesGap | null; cut: Cut | null; hasTranscript: boolean }
 
-async function judgeOne(
-  $: EngineInterface,
-  r: EvalRecord | undefined,
-  id: string,
-  marksOf: (session: string | null) => Promise<LineMark[] | null>,
-): Promise<Judged> {
-  if (r === undefined) return { record: runRecordOf(id, '', { isAnswered: false, reason: 'not in key' }, 0, null), usage: null, hasTranscript: false }
+async function factOf(r: EvalRecord | undefined, marksOf: (session: string | null) => Promise<LineMark[] | null>): Promise<Fact> {
+  if (r === undefined) return { gap: null, cut: null, hasTranscript: false }
   const marks = await marksOf(r.session)
-  // The fact production sent at this firing: from the tail it read then, not the whole file.
-  const gap = marks === null ? null : tailMinutesFact(marks, r.ts)
-  const minutes = gap?.minutes ?? null
-  if (r.final === null) return { record: runRecordOf(id, r.outcome, { isAnswered: false, reason: 'no final message' }, 0, minutes), usage: null, hasTranscript: marks !== null }
+  // The fact production sends at this firing: from the tail it read then, not the whole file.
+  const fact = marks === null ? null : tailFact(marks, r.ts)
+  return { gap: fact?.gap ?? null, cut: fact?.cut ?? null, hasTranscript: marks !== null }
+}
+
+type Judged = { record: RunRecord; usage: unknown; prompt: string }
+
+async function judgeOne($: EngineInterface, call: Call, r: EvalRecord | undefined, fact: Fact): Promise<Judged> {
+  if (r === undefined) return { record: runRecordOf(call, '', { isAnswered: false, reason: 'not in key' }, 0, null), usage: null, prompt: '' }
+  if (r.final === null) return { record: runRecordOf(call, r.outcome, { isAnswered: false, reason: 'no final message' }, 0, fact.gap), usage: null, prompt: '' }
+  const request = judgeRequest(r.final, r.opening, r.context_users, fact.gap, call.arm === 'on')
   const startedAt = await $.clock.now()
-  const reply = await $.model.complete(judgeRequest(r.final, r.opening, r.context_users, gap))
+  const reply = await $.model.complete(request)
   const ms = (await $.clock.now()) - startedAt
-  return { record: runRecordOf(id, r.outcome, reply, ms, minutes), usage: reply.usage, hasTranscript: marks !== null }
+  return { record: runRecordOf(call, r.outcome, reply, ms, fact.gap), usage: reply.usage, prompt: request.prompt }
+}
+
+function armsOf(value: string | undefined): Arm[] | null {
+  const words = (value ?? ARMS.join(',')).split(',').map(w => w.trim())
+  const arms = ARMS.filter(arm => words.includes(arm))
+  return arms.length === words.length && arms.length > 0 ? arms : null
 }
 
 async function evalJudge($: EngineInterface, args: string): Promise<Answer> {
   const a = parseArgs(args)
   const workers = a.workers === undefined ? DEFAULT_WORKERS : Number(a.workers)
-  if (!a.key || !a.ids || !a.graders || !a.out || !Number.isInteger(workers) || workers < 1) return { text: JUDGE_USAGE, exitCode: 2 }
+  const repeats = a.repeats === undefined ? DEFAULT_REPEATS : Number(a.repeats)
+  const arms = armsOf(a.arms)
+  const isCount = (n: number) => Number.isInteger(n) && n >= 1
+  if (!a.key || !a.ids || !a.graders || !a.out || !isCount(workers) || !isCount(repeats) || arms === null) return { text: JUDGE_USAGE, exitCode: 2 }
   const key = keyFrom(await readText($, a.key))
   const ids = (await readText($, a.ids))
     .split('\n')
@@ -136,17 +151,26 @@ async function evalJudge($: EngineInterface, args: string): Promise<Answer> {
     }
     return marks
   }
-  const judged = await pool(ids, workers, id => judgeOne($, key[id], id, marksOf))
-  const lines = judged.map(({ record: r, usage }) =>
-    JSON.stringify({ id: r.id, live: r.live, new: r.new, new_outcome: r.new_outcome, conf: r.conf, shape: r.shape, reason: r.reason, ms: r.ms, error: r.error, usage, minutes_since_operator: r.minutes_since_operator }),
+  const factList = await pool(ids, workers, id => factOf(key[id], marksOf))
+  const facts = new Map(ids.map((id, i) => [id, factList[i]!]))
+  const judged = await pool(callsOf(ids, arms, repeats), workers, call => judgeOne($, call, key[call.id], facts.get(call.id)!))
+  await writeLines(
+    $,
+    a.out,
+    judged.map(({ record, usage, prompt }) => JSON.stringify({ ...record, usage, prompt })),
   )
-  await writeLines($, a.out, lines)
-  const run = judged.map(j => j.record)
+  const cuts = (cut: Cut) => factList.filter(f => f.cut === cut).length
   return {
     text: [
-      scoreRun(run, key, grades),
-      `no transcript: ${judged.filter(j => !j.hasTranscript).length}`,
-      `minutes fact: ${MINUTES_FACT ? 'on' : 'off'}`,
+      report(
+        judged.map(j => j.record),
+        key,
+        grades,
+        arms,
+        repeats,
+      ),
+      `minutes cut at the judge's read: ${cuts('answer')} | at the log stamp: ${cuts('stamp')} | no transcript: ${factList.filter(f => !f.hasTranscript).length}`,
+      `system prompt: plugins/stop-judge/hooks/prompt.ts PROMPT${arms.includes('on') ? `; on adds the line "${MINUTES_SENTENCE}" and, in the user message, "Minutes since the operator's last typed message: [more than ]<n>"` : ''}`,
       `written ${a.out}`,
     ].join('\n'),
   }
@@ -182,7 +206,7 @@ async function answer(name: string, work: Promise<Answer>): Promise<Answer> {
 
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
-    await $.command.register({ name: JUDGE, description: 'Dev: run the stop judge over graded firings and score it', argumentHint: '--key --ids --graders --out [--workers]' })
+    await $.command.register({ name: JUDGE, description: 'Dev: run the stop judge over graded firings and score it', argumentHint: '--key --ids --graders --out [--arms] [--repeats] [--workers]' })
     await $.command.register({ name: EXTRACT, description: 'Dev: rebuild judged-stop records from a stop-judge firing log', argumentHint: '--log --out' })
     return next(e)
   })

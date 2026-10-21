@@ -1,43 +1,67 @@
 import { expect, test } from 'claude-code/testing'
-import { keyFrom } from '../hooks/extract'
-import { gradesFrom, parseArgs, scoreRun } from '../hooks/score'
-import type { RunRecord } from '../hooks/score'
-import { GRADES, RECORDS } from '../fixtures/samples'
+import { gradesFrom, callsOf, parseArgs, runRecordOf } from '../hooks/score'
 
-const rec = (id: string, outcome: string, conf: number | null, error = ''): RunRecord => ({
-  id,
-  live: '',
-  new: outcome === 'continue' || outcome === 'stop-lowconf' ? 'continue' : error ? null : 'stop',
-  new_outcome: outcome,
-  conf,
-  shape: null,
-  reason: '',
-  ms: 1,
-  error,
-  minutes_since_operator: null,
+test('callsOf puts a record\'s arms side by side and repeats outermost', () => {
+  expect(callsOf(['a', 'b'], ['off', 'on'], 2)).toEqual([
+    { id: 'a', arm: 'off', repeat: 1 },
+    { id: 'a', arm: 'on', repeat: 1 },
+    { id: 'b', arm: 'off', repeat: 1 },
+    { id: 'b', arm: 'on', repeat: 1 },
+    { id: 'a', arm: 'off', repeat: 2 },
+    { id: 'a', arm: 'on', repeat: 2 },
+    { id: 'b', arm: 'off', repeat: 2 },
+    { id: 'b', arm: 'on', repeat: 2 },
+  ])
+  expect(callsOf(['a'], ['on'], 1)).toEqual([{ id: 'a', arm: 'on', repeat: 1 }])
+  expect(callsOf([], ['off', 'on'], 2)).toEqual([])
 })
 
-test('scoreRun on the sample fixtures prints the hand-computed counts, errors left out of every ratio', () => {
-  const run = [
-    rec('F0001', 'stop', 0.9),
-    rec('F0002', 'stop', 0.8),
-    rec('F0003', 'continue', 0.9),
-    rec('F0004', 'continue', 0.8),
-    rec('F0005', 'stop-lowconf', 0.5),
-    rec('F0006', 'continue', 0.75),
-    rec('F0007', 'pass-timeout', null, 'aborted'),
-    rec('F0008', 'stop', 0.9),
-  ]
-  const key = keyFrom(RECORDS)
-  expect(Object.keys(key)).toHaveLength(8)
-  expect(scoreRun(run, key, gradesFrom([GRADES])).split('\n')).toEqual([
-    'live: false-block 1/3 = 33.3% | catch 2/4 = 50.0%',
-    'new: false-block 1/3 = 33.3% | catch 2/4 = 50.0%',
-    'high-confidence continue caught: live 1 new 2 of 2',
-    'new false blocks: [F0006 waiting-background 0.75]',
-    'new misses: [F0005 medium options, F0008 low permission]',
-    'errors 1',
-  ])
+const call = { id: 'F1', arm: 'on', repeat: 2 } as const
+const verdict = (v: string, confidence: number) => ({ isAnswered: true as const, text: JSON.stringify({ verdict: v, confidence, reason: 'why', shape: 'offer' }) })
+
+test('runRecordOf carries the call, the reply text and the fact, and the production outcome of a verdict', () => {
+  expect(runRecordOf(call, 'stop', verdict('continue', 0.9), 12, { minutes: 40, isLowerBound: true })).toEqual({
+    ...call,
+    live: 'stop',
+    new: 'continue',
+    new_outcome: 'continue',
+    conf: 0.9,
+    shape: 'offer',
+    reason: 'why',
+    text: verdict('continue', 0.9).text,
+    ms: 12,
+    error: '',
+    minutes_since_operator: 40,
+    is_lower_bound: true,
+  })
+  // Below the confidence gate a continue is logged as stop-lowconf, still a verdict.
+  const low = runRecordOf(call, 'stop', verdict('continue', 0.5), 1, null)
+  expect(low).toMatchObject({ new: 'continue', new_outcome: 'stop-lowconf', minutes_since_operator: null, is_lower_bound: false })
+})
+
+test('runRecordOf keeps an unanswered call as an error with no text, and still carries the fact', () => {
+  expect(runRecordOf(call, 'continue', { isAnswered: false, reason: 'aborted' }, 20_000, { minutes: 3, isLowerBound: false })).toEqual({
+    ...call,
+    live: 'continue',
+    new: null,
+    new_outcome: 'pass-timeout',
+    conf: null,
+    shape: null,
+    reason: '',
+    text: '',
+    ms: 20_000,
+    error: 'aborted',
+    minutes_since_operator: 3,
+    is_lower_bound: false,
+  })
+  const noVerdict = runRecordOf(call, 'stop', { isAnswered: true, text: 'not json' }, 1, null)
+  expect(noVerdict).toMatchObject({ new: null, new_outcome: 'pass-error', text: 'not json', conf: null })
+  expect(noVerdict.error).toContain('no verdict')
+})
+
+test('gradesFrom lets a later file win and skips lines that are not a grade', () => {
+  const grades = gradesFrom(['{"id":"a","verdict":"stop","case":"x","confidence":"high"}\nnot json\n{"id":"b","verdict":"maybe"}\n', '{"id":"a","verdict":"continue","case":"y","confidence":"low"}\n'])
+  expect(grades).toEqual({ a: { id: 'a', verdict: 'continue', case: 'y', confidence: 'low' } })
 })
 
 test('parseArgs reads flags, quoted values, a bare flag and stray words', () => {

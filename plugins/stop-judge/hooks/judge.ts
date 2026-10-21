@@ -14,8 +14,8 @@ export const NUDGE_PREFIX = `${SIBLING_TEXTS.nudge} ` as const
 export const JUDGE_REQUEST = { model: 'haiku', maxTokens: 300, effort: 'low', timeoutMs: 20_000 } as const
 
 // The minutes-since-the-operator's-last-message fact is one switch: off, the request is the
-// measured round-3 text and nothing else. Off: the eval over the 190 graded firings showed no
-// gain with it on (stop-judge README).
+// measured round-3 text and nothing else. Off until a paired run of tools/eval (fact off and on,
+// same records, same path) measures a gain past its own noise.
 export const MINUTES_FACT = false
 export const MINUTES_SENTENCE =
   'The user message also gives the minutes since the operator\'s last typed message. A short gap means an active discussion: lean "stop". A long gap means unattended work: lean "continue".'
@@ -58,7 +58,7 @@ export function parseRows(text: string): TranscriptRow[] {
   return rows
 }
 
-function assistantText(row: TranscriptRow): string {
+export function assistantText(row: TranscriptRow): string {
   if (row.type !== 'assistant') return ''
   const message = row.message
   return contentText(isRecord(message) ? message.content : undefined)
