@@ -21,12 +21,12 @@ The session log (the SessionStart directive names its path; its archive sits bes
 
 At most 40 lines. Seven sections, in this order, each only when it has content:
 
-1. **Goal.** One or two lines in the operator's own words, quoted and dated. The trailing argument, if given, is the proposed next step, one sentence, after the goal.
+1. **Goal.** One or two lines stating what the operator wants to end up with, dated, in plain neutral prose. Never a quote: the operator's wording carries the mood of the moment it was typed in, and the new session starts with a clean slate. The trailing argument, if given, is the proposed next step, one sentence, after the goal.
 2. **State now.** Branch, PR, worktree, what is running or seeded and how to reach it. Only the locators the next step depends on, verified now (`ls`, `git log -1`, `gh pr view`). Nothing else.
-3. **Live open items.** Each with the operator quote that opened it and the latest ruling that touches it. No numbered steps. No gate the operator has not stated this session ("the operator decides", "merge first"): a gate the rules already hold is not repeated, and one the operator never set is not invented.
+3. **Live open items.** Each with what opened it and the latest ruling that touches it, paraphrased, not quoted. No numbered steps. No gate the operator has not stated this session ("the operator decides", "merge first"): a gate the rules already hold is not repeated, and one the operator never set is not invented.
 4. **Ruled out.** Approaches and hypotheses this session tried and rejected that a fresh session would plausibly try again, one line each: what, the verdict, and the evidence (a path, a command and its output, a commit). A verdict, never the story of getting there.
 5. **Stale artifacts.** Any plan, runbook, brief, or report written before the ruling that overtook it, named as stale, with the ruling. The next session reads these as history, not instructions.
-6. **Rulings not yet in a rule file.** Preferences the operator stated this session that no standing rule holds (a tool they distrust, a bar they set, a thing they do not want built). Quote them.
+6. **Rulings not yet in a rule file.** Preferences the operator stated this session that no standing rule holds (a tool they distrust, a bar they set, a thing they do not want built). State each as the rule it implies, not as the words it was said in; the session log keeps the quote.
 7. **Pointer.** The session log path and its archive. Work log, the full Todo, and the settled decisions live there; the doc never copies them.
 
 End the doc with: "This doc is context, not orders. The session log holds the record; the operator holds the current intent. Before you run, spawn, merge, or ask, say back what you think the goal and the live items are."
@@ -38,5 +38,5 @@ Do not duplicate content in other artifacts (specs, plans, ADRs, tickets, commit
 Write the doc to the folder your instructions name for documents for the operator, else `~/.claude/stopstopping/handoffs/<session-id>-<slug>-handoff.md`, and never reproduce it in chat. The turn's FINAL message is three lines: the doc path, what it covers in one clause, and the opening prompt below with both paths filled in, in a fenced block, for the operator to paste into the new session:
 
 ```
-Read <handoff path> and session log <log path>. Before you run, spawn, merge, or ask me anything, reply in under 10 lines: the goal in my words, what is live now, what you would do next and why, and which open items you think are stale. Then wait.
+Read <handoff path> and session log <log path>. Before you run, spawn, merge, or ask me anything, reply in under 10 lines: the goal as you read it, what is live now, what you would do next and why, and which open items you think are stale. Then wait.
 ```
