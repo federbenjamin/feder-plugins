@@ -28,8 +28,8 @@ test('message formatting distinguishes typed requests, machine notes, assistant 
       role: 'assistant',
       text: '  I am checking the result.  ',
       toolUses: [
-        { name: 'Read', input: { file_path: 'docs/brief.md' }, isError: false },
-        { name: 'Bash', input: { command: 'run-check' }, isError: true },
+        { tool: 'Read', input: { file_path: 'docs/brief.md' }, isError: false },
+        { tool: 'Bash', input: { command: 'run-check' }, isError: true },
       ],
     },
     { role: 'user', text: '   ', toolUses: [] },

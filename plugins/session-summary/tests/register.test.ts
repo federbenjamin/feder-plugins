@@ -39,7 +39,7 @@ function world(on: On, capture = '') {
     return { value: { command: e.name } }
   })
   on('ui.open', async (_$, e) => {
-    opened.push(e.requestId)
+    opened.push(e.id)
     return { value: undefined }
   })
   on('session.start', async (_$, e) => ({ cwd: e.cwd }))

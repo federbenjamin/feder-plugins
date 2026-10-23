@@ -8,9 +8,9 @@ const assistant = (toolUses: unknown[]) => ({ role: 'assistant', text: '', toolU
 
 test('a later command makes an earlier written file the newest candidate', () => {
   const messages = [
-    assistant([{ name: 'Write', input: { file_path: 'src/first.ts' } }]),
-    assistant([{ name: 'Edit', input: { file_path: 'src/second.ts' } }]),
-    assistant([{ name: 'Bash', input: { command: 'node --check src/first.ts' } }]),
+    assistant([{ tool: 'Write', input: { file_path: 'src/first.ts' } }]),
+    assistant([{ tool: 'Edit', input: { file_path: 'src/second.ts' } }]),
+    assistant([{ tool: 'Bash', input: { command: 'node --check src/first.ts' } }]),
   ]
 
   expect(fileCandidates(messages as never, 8)).toEqual(['src/second.ts', 'src/first.ts'])
@@ -18,9 +18,9 @@ test('a later command makes an earlier written file the newest candidate', () =>
 
 test('uploaded files join written candidates without duplication and retain their most recent use', () => {
   const messages = [
-    assistant([{ name: 'Write', input: { file_path: 'src/one.ts' } }]),
-    assistant([{ name: 'SendUserFile', input: { files: ['notes/plan.md', 'src/one.ts', 7] } }]),
-    assistant([{ name: 'Edit', input: { file_path: 9 } }]),
+    assistant([{ tool: 'Write', input: { file_path: 'src/one.ts' } }]),
+    assistant([{ tool: 'SendUserFile', input: { files: ['notes/plan.md', 'src/one.ts', 7] } }]),
+    assistant([{ tool: 'Edit', input: { file_path: 9 } }]),
   ]
 
   expect(fileCandidates(messages as never, 8)).toEqual(['notes/plan.md', 'src/one.ts'])
@@ -28,9 +28,9 @@ test('uploaded files join written candidates without duplication and retain thei
 
 test('candidate limits keep the newest files in chronological order', () => {
   const messages = [
-    assistant([{ name: 'Write', input: { file_path: 'src/one.ts' } }]),
-    assistant([{ name: 'Edit', input: { file_path: 'src/two.ts' } }]),
-    assistant([{ name: 'Write', input: { file_path: 'src/three.ts' } }]),
+    assistant([{ tool: 'Write', input: { file_path: 'src/one.ts' } }]),
+    assistant([{ tool: 'Edit', input: { file_path: 'src/two.ts' } }]),
+    assistant([{ tool: 'Write', input: { file_path: 'src/three.ts' } }]),
   ]
 
   expect(fileCandidates(messages as never, 2)).toEqual(['src/two.ts', 'src/three.ts'])
@@ -77,13 +77,17 @@ test('a partial reply preserves only the fields it omitted', () => {
   expect(parsed).toEqual({ soFar: 'narrowed the fix', now: previous.now, files: [], outcome: 'parse-partial' })
 })
 
-test('a reply with no recognized fields retains running files but clears them after the session ends', () => {
+test('a reply with no recognized fields preserves every previous value at either session status', () => {
   expect(parseReply('The model did not follow the form.', previous, [], 'running')).toEqual({ ...previous, outcome: 'parse-failed' })
-  expect(parseReply('The model did not follow the form.', previous, [], 'ended')).toEqual({
-    soFar: previous.soFar,
+  expect(parseReply('The model did not follow the form.', previous, [], 'ended')).toEqual({ ...previous, outcome: 'parse-failed' })
+})
+
+test('a parsed reply with no candidates clears files after the session ends', () => {
+  expect(parseReply('SO FAR: ready to ship', previous, [], 'ended')).toEqual({
+    soFar: 'ready to ship',
     now: previous.now,
     files: [],
-    outcome: 'parse-failed',
+    outcome: 'parse-partial',
   })
 })
 
