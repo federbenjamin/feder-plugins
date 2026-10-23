@@ -1,4 +1,4 @@
-// What the pane draws, kept in $.state so a hot reload keeps it.
+// What the band draws, kept in $.state so a hot reload keeps it.
 export type Source = 'messages' | 'session-log'
 export type SummaryStatus = 'running' | 'ended'
 export type Summary = {

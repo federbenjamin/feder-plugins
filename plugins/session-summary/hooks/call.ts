@@ -9,7 +9,7 @@ import type { Previous } from './summary.ts'
 
 export type CallOutcome = 'summary' | 'parse-partial' | 'parse-failed' | 'api-error' | 'aborted'
 
-// `texts` is what the capture records; `isTaken` says the pane takes them, and only then does the
+// `texts` is what the capture records; `isTaken` says the band takes them, and only then does the
 // call count as having summarized its window. judge.ts's mapping: an unanswered reply cut by its
 // signal or timeout is `aborted`, any other unanswered one an `api-error` naming why.
 export type ReplyResult = { outcome: CallOutcome; failure: string; texts: Previous; isTaken: boolean }
