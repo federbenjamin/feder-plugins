@@ -6,7 +6,8 @@ export const BULLET_RE = /^- .+ -- "[^"]{1,200}"(?: "[^"]{1,200}")? \(\d{4}-\d{2
 export const CONTEXT_MAX_CHARS = 9000
 export const DEFAULT_LINE = 'Decide everything you can yourself. Bring only what is listed under "Bring to me" to the operator.'
 export const BRING = '## Bring to me'
-export const HOW = '## How to decide'
+export const HOW = '## How to work with me'
+export const PRINCIPLES = '## Principles'
 
 const HEADER_RE = /^# Decisions \(derived (\d{4}-\d{2}-\d{2}), (\d+) sessions, [^)]+\)$/
 const TOPIC_RE = /^### \S/
@@ -35,7 +36,7 @@ export function validateDecisions(text: string): { ok: true } | Fail {
   let i = 0
   while (i < lines.length && lines[i]!.trim() === '') i++
   if (!HEADER_RE.test(lines[i] ?? '')) return fail(i)
-  let stage: 'head' | 'default' | 'bring' | 'how' = 'head'
+  let stage: 'head' | 'default' | 'bring' | 'how' | 'principles' = 'head'
   let topic = false
   for (i++; i < lines.length; i++) {
     const line = lines[i]!
@@ -43,33 +44,39 @@ export function validateDecisions(text: string): { ok: true } | Fail {
     if (stage === 'head' && line === DEFAULT_LINE) stage = 'default'
     else if (stage === 'default' && line === BRING) stage = 'bring'
     else if (stage === 'bring' && line === HOW) stage = 'how'
-    else if (stage === 'how' && TOPIC_RE.test(line)) topic = true
-    else if ((stage === 'bring' || (stage === 'how' && topic)) && BULLET_RE.test(line)) continue
+    else if (stage === 'how' && line === PRINCIPLES) [stage, topic] = ['principles', false]
+    else if ((stage === 'how' || stage === 'principles') && TOPIC_RE.test(line)) topic = true
+    else if ((stage === 'bring' || topic) && BULLET_RE.test(line)) continue
     else return fail(i)
   }
-  return stage === 'how' ? { ok: true } : { ok: false, line: lines.length, text: `missing ${stage === 'bring' ? HOW : stage === 'default' ? BRING : 'the default line'}` }
+  const missing = { head: 'the default line', default: BRING, bring: HOW, how: PRINCIPLES, principles: '' }[stage]
+  return stage === 'principles' ? { ok: true } : { ok: false, line: lines.length, text: `missing ${missing}` }
 }
 
-export function parseDecisions(text: string): { date: string | null; sessions: number | null; bring: string[]; how: { heading: string; bullets: string[] }[] } {
+export type Topic = { heading: string; bullets: string[] }
+
+export function parseDecisions(text: string): { date: string | null; sessions: number | null; bring: string[]; how: Topic[]; principles: Topic[] } {
   let date: string | null = null
   let sessions: number | null = null
   const bring: string[] = []
-  const how: { heading: string; bullets: string[] }[] = []
-  let section: 'none' | 'bring' | 'how' = 'none'
+  const how: Topic[] = []
+  const principles: Topic[] = []
+  let section: 'none' | 'bring' | Topic[] = 'none'
   for (const line of text.split('\n')) {
     const header = HEADER_RE.exec(line)
     if (header && date === null) {
       date = header[1]!
       sessions = Number(header[2])
     } else if (line === BRING) section = 'bring'
-    else if (line === HOW) section = 'how'
-    else if (section === 'how' && TOPIC_RE.test(line)) how.push({ heading: line.slice(4).trim(), bullets: [] })
+    else if (line === HOW) section = how
+    else if (line === PRINCIPLES) section = principles
+    else if (Array.isArray(section) && TOPIC_RE.test(line)) section.push({ heading: line.slice(4).trim(), bullets: [] })
     else if (line.startsWith('- ')) {
       if (section === 'bring') bring.push(line)
-      else if (section === 'how') how.at(-1)?.bullets.push(line)
+      else if (Array.isArray(section)) section.at(-1)?.bullets.push(line)
     }
   }
-  return { date, sessions, bring, how }
+  return { date, sessions, bring, how, principles }
 }
 
 export type DatedQuote = { quote: string; date: string }
@@ -137,15 +144,20 @@ export function rulesOnly(text: string): string {
   return text.split('\n').map(line => line.replace(QUOTES_RE, '')).join('\n')
 }
 
-// Drops How-to-decide bullets from the end until what the hook prints fits; Bring to me is never
+// Drops bullets from the end of whichever of How to work with me and Principles holds more, until
+// what the hook prints fits, so neither section crowds the other out. Bring to me is never
 // dropped, so a file whose Bring to me alone is over the budget stays over it.
 export function fitContext(text: string, maxChars: number): string {
   let lines = text.split('\n')
-  const how = lines.indexOf(HOW)
-  if (how === -1) return text
+  const bulletsOf = (from: number, to: number) => lines.flatMap((line, i) => (i > from && i < to && line.startsWith('- ') ? [i] : []))
   while (rulesOnly(lines.join('\n')).length > maxChars) {
-    const last = lines.findLastIndex((line, i) => i > how && line.startsWith('- '))
-    if (last === -1) break
+    const how = lines.indexOf(HOW)
+    const principles = lines.indexOf(PRINCIPLES)
+    if (how === -1 || principles === -1) break
+    const howBullets = bulletsOf(how, principles)
+    const principleBullets = bulletsOf(principles, lines.length)
+    const last = (howBullets.length >= principleBullets.length ? howBullets : principleBullets).at(-1)
+    if (last === undefined) break
     lines = dropEmptyTopics(lines.toSpliced(last, 1))
   }
   return `${lines.join('\n').replace(/\n{3,}/g, '\n\n').trimEnd()}\n`

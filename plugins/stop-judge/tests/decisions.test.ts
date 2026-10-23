@@ -1,11 +1,11 @@
 import { expect, test } from 'claude-code/testing'
-import { fitContext, keepVerifiedBullets, quoteKey, rulesOnly, validateDecisions } from '../hooks/decisions.ts'
+import { fitContext, keepVerifiedBullets, parseDecisions, quoteKey, rulesOnly, validateDecisions } from '../hooks/decisions.ts'
 import { verifyReaderLines } from '../hooks/derive.ts'
 import type { ReaderLine } from '../hooks/derive.ts'
 
 const DEFAULT_LINE = 'Decide everything you can yourself. Bring only what is listed under "Bring to me" to the operator.'
 
-function decisions(bringBullets: readonly string[], howBullets: readonly string[]): string {
+function decisions(bringBullets: readonly string[], howBullets: readonly string[], principleBullets: readonly string[] = []): string {
   return [
     '# Decisions (derived 2026-10-20, 3 sessions, latest 2,000 turns)',
     '',
@@ -13,9 +13,12 @@ function decisions(bringBullets: readonly string[], howBullets: readonly string[
     '',
     '## Bring to me',
     ...bringBullets,
-    '## How to decide',
+    '## How to work with me',
     '### Delivery',
     ...howBullets,
+    '## Principles',
+    '### Fixes',
+    ...principleBullets,
   ].join('\n')
 }
 
@@ -44,7 +47,7 @@ test('a decisions bullet rejects overlong quotes and inner double quotes', () =>
   expect(validateDecisions(innerQuote).ok).toBe(false)
 })
 
-test('context fitting removes the newest How-to-decide bullets before losing a Bring-to-me rule', () => {
+test('context fitting removes the newest How-to-work-with-me bullets before losing a Bring-to-me rule', () => {
   const earlyHow = '- Prefer the direct fix. -- "fix the cause" (2026-10-19)'
   const lateHow = `- Verify the result before reporting it. -- "${'verify before reporting '.repeat(12)}" (2026-10-20)`
   const source = decisions([bring], [earlyHow, lateHow])
@@ -58,7 +61,7 @@ test('context fitting removes the newest How-to-decide bullets before losing a B
   expect(rulesOnly(fitted).trimEnd().length).toBeLessThanOrEqual(beforeLateBullet)
 })
 
-test('context fitting preserves Bring-to-me rules even when every How-to-decide bullet must go', () => {
+test('context fitting preserves Bring-to-me rules even when every other bullet must go', () => {
   const firstHow = `- Keep a focused plan. -- "${'focus the plan '.repeat(12)}" (2026-10-19)`
   const secondHow = `- Use evidence before claiming success. -- "${'show the evidence '.repeat(12)}" (2026-10-20)`
   const source = decisions([bring], [firstHow, secondHow])
@@ -71,6 +74,36 @@ test('context fitting preserves Bring-to-me rules even when every How-to-decide 
   expect(fitted).not.toContain(secondHow)
   expect(rulesOnly(fitted).trimEnd().length).toBeLessThanOrEqual(maxChars)
   expect(fitted.endsWith('\n\n')).toBe(false)
+})
+
+test('a decisions file needs all three sections, and a bullet under Principles needs a topic heading', () => {
+  const principle = '- The root cause wins over a workaround, when both fit. -- "root cause, not a patch" (2026-10-20)'
+  const withoutPrinciples = decisions([bring], [how]).split('\n').slice(0, -2).join('\n')
+  const untopical = decisions([bring], [how]).replace('### Fixes', '').concat(`\n${principle}`)
+
+  expect(validateDecisions(decisions([bring], [how], [principle]))).toEqual({ ok: true })
+  expect(validateDecisions(withoutPrinciples)).toEqual({ ok: false, line: 9, text: 'missing ## Principles' })
+  expect(validateDecisions(untopical).ok).toBe(false)
+  expect(parseDecisions(decisions([bring], [how], [principle]))).toEqual({
+    date: '2026-10-20',
+    sessions: 3,
+    bring: [bring],
+    how: [{ heading: 'Delivery', bullets: [how] }],
+    principles: [{ heading: 'Fixes', bullets: [principle] }],
+  })
+})
+
+test('context fitting takes from whichever of How to work with me and Principles holds more, so neither crowds out the other', () => {
+  const principles = [1, 2, 3].map(n => `- Principle ${n} wins over its rival. -- "${`principle ${n} `.repeat(10)}" (2026-10-20)`)
+  const source = decisions([bring], [how], principles)
+  const maxChars = rulesOnly(decisions([bring], [how], principles.slice(0, 1))).length
+
+  const fitted = fitContext(source, maxChars)
+
+  expect(fitted).toContain(how)
+  expect(fitted).toContain(principles[0]!)
+  expect(fitted).not.toContain(principles[1]!)
+  expect(fitted).not.toContain(principles[2]!)
 })
 
 test('one quote key: double quotes become single and whitespace runs one space, for reader and file quotes alike', () => {

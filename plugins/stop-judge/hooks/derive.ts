@@ -164,9 +164,9 @@ export function confirmText(run: { sessions: number; turns: number; total: numbe
   return `${run.sessions} sessions, ${run.turns} of ${run.total} typed turns, ~$${run.usd.toFixed(2)}. Run?`
 }
 
-export type ReaderLine = { side: 'decide' | 'bring' | 'how'; topic: string; claim: string; quote: string; session: string; turn: number; strength: 'strong' | 'medium' | 'weak'; date: string }
+export type ReaderLine = { side: 'decide' | 'bring' | 'how' | 'principle'; topic: string; claim: string; quote: string; session: string; turn: number; strength: 'strong' | 'medium' | 'weak'; date: string }
 
-const SIDES: ReadonlySet<string> = new Set(['decide', 'bring', 'how'])
+const SIDES: ReadonlySet<string> = new Set(['decide', 'bring', 'how', 'principle'])
 const STRENGTHS: ReadonlySet<string> = new Set(['strong', 'medium', 'weak'])
 
 // One finding per JSON line; a line of another shape, or naming a session not in the batch, is skipped.
@@ -262,8 +262,9 @@ export function tooManyFailed(total: number, failed: number): boolean {
 }
 // end of the morning-report copy
 
-// A model reply without the code fence it may come wrapped in.
+// A model reply without the code fence it may come wrapped in. The synthesis copies a quote's
+// inner `"` from the JSON findings as `\"`; it is written as `'`, as the file writes every inner quote.
 export function contentOfReply(text: string): string {
   const fenced = /^\s*```[a-z]*\n([\s\S]*?)\n```\s*$/.exec(text)
-  return (fenced ? fenced[1]! : text).trim()
+  return (fenced ? fenced[1]! : text).trim().replaceAll('\\"', "'")
 }

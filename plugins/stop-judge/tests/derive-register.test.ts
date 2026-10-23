@@ -28,7 +28,8 @@ const VALID = [
   '',
   '## Bring to me',
   '- Ask before renaming a public API. -- "ask me before you rename anything public" (2026-10-19)',
-  '## How to decide',
+  '## How to work with me',
+  '## Principles',
 ].join('\n')
 
 function world(on: On) {
