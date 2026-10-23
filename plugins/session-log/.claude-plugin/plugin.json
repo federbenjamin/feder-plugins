@@ -1,6 +1,6 @@
 {
   "name": "session-log",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Keeps one markdown session log per session, pruned at compaction; ships the handoff and finish-session skills",
   "author": { "name": "Benjamin Feder" }
 }
