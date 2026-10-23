@@ -130,16 +130,23 @@ export function bulletCount(text: string): number {
   return text.split('\n').filter(l => BULLET_RE.test(l)).length
 }
 
-// Drops How-to-decide bullets from the end until the file fits; Bring to me is never dropped, so
-// a file whose Bring to me alone is over the budget stays over it.
+// What the SessionStart hook prints: every bullet without its quotes and date. The quotes stay in
+// the file as the evidence a refresh checks; an agent reading the operator's words verbatim takes
+// on the mood they were typed in. The hook's sed is held to this by scripts/context.test.ts.
+export function rulesOnly(text: string): string {
+  return text.split('\n').map(line => line.replace(QUOTES_RE, '')).join('\n')
+}
+
+// Drops How-to-decide bullets from the end until what the hook prints fits; Bring to me is never
+// dropped, so a file whose Bring to me alone is over the budget stays over it.
 export function fitContext(text: string, maxChars: number): string {
   let lines = text.split('\n')
   const how = lines.indexOf(HOW)
   if (how === -1) return text
-  while (lines.join('\n').length > maxChars) {
+  while (rulesOnly(lines.join('\n')).length > maxChars) {
     const last = lines.findLastIndex((line, i) => i > how && line.startsWith('- '))
     if (last === -1) break
     lines = dropEmptyTopics(lines.toSpliced(last, 1))
   }
-  return lines.join('\n')
+  return `${lines.join('\n').replace(/\n{3,}/g, '\n\n').trimEnd()}\n`
 }

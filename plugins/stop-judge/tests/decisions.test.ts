@@ -1,5 +1,5 @@
 import { expect, test } from 'claude-code/testing'
-import { fitContext, keepVerifiedBullets, quoteKey, validateDecisions } from '../hooks/decisions.ts'
+import { fitContext, keepVerifiedBullets, quoteKey, rulesOnly, validateDecisions } from '../hooks/decisions.ts'
 import { verifyReaderLines } from '../hooks/derive.ts'
 import type { ReaderLine } from '../hooks/derive.ts'
 
@@ -48,28 +48,29 @@ test('context fitting removes the newest How-to-decide bullets before losing a B
   const earlyHow = '- Prefer the direct fix. -- "fix the cause" (2026-10-19)'
   const lateHow = `- Verify the result before reporting it. -- "${'verify before reporting '.repeat(12)}" (2026-10-20)`
   const source = decisions([bring], [earlyHow, lateHow])
-  const beforeLateBullet = decisions([bring], [earlyHow]).length
+  const beforeLateBullet = rulesOnly(decisions([bring], [earlyHow])).length
 
   const fitted = fitContext(source, beforeLateBullet)
 
   expect(fitted).toContain(bring)
   expect(fitted).toContain(earlyHow)
   expect(fitted).not.toContain(lateHow)
-  expect(fitted.length).toBeLessThanOrEqual(beforeLateBullet)
+  expect(rulesOnly(fitted).trimEnd().length).toBeLessThanOrEqual(beforeLateBullet)
 })
 
 test('context fitting preserves Bring-to-me rules even when every How-to-decide bullet must go', () => {
   const firstHow = `- Keep a focused plan. -- "${'focus the plan '.repeat(12)}" (2026-10-19)`
   const secondHow = `- Use evidence before claiming success. -- "${'show the evidence '.repeat(12)}" (2026-10-20)`
   const source = decisions([bring], [firstHow, secondHow])
-  const maxChars = decisions([bring], []).length + 24
+  const maxChars = rulesOnly(decisions([bring], [])).length + 10
 
   const fitted = fitContext(source, maxChars)
 
   expect(fitted).toContain(bring)
   expect(fitted).not.toContain(firstHow)
   expect(fitted).not.toContain(secondHow)
-  expect(fitted.length).toBeLessThanOrEqual(maxChars)
+  expect(rulesOnly(fitted).trimEnd().length).toBeLessThanOrEqual(maxChars)
+  expect(fitted.endsWith('\n\n')).toBe(false)
 })
 
 test('one quote key: double quotes become single and whitespace runs one space, for reader and file quotes alike', () => {
