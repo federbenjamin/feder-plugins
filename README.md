@@ -1,6 +1,6 @@
 # stopstopping
 
-Four [Claude Code](https://docs.anthropic.com/en/docs/claude-code) plugins that keep an agent working instead of stopping to ask: one ends a turn left on an open dialog, one keeps the prompt cache warm while you are away, one nudges the agent on when it stops early, and one keeps a session log. Install them through one bundle plugin or one by one.
+Five [Claude Code](https://docs.anthropic.com/en/docs/claude-code) plugins that keep an agent working instead of stopping to ask: one ends a turn left on an open dialog, one keeps the prompt cache warm while you are away, one nudges the agent on when it stops early, one keeps a session log, and one keeps a pane saying what the session is doing. Install the first four through one bundle plugin, or any of the five one by one.
 
 ## Install
 
@@ -8,7 +8,7 @@ Four [Claude Code](https://docs.anthropic.com/en/docs/claude-code) plugins that 
 claude plugin install stopstopping --marketplace federbenjamin/stopstopping
 ```
 
-Or one part: the same command with `dialog-timeout`, `cache-keepalive`, `stop-judge`, or `session-log` in place of `stopstopping`. The bundle is a dependency list, so installing it installs the four parts under their own names, and installing a part beside it changes nothing.
+Or one part: the same command with `dialog-timeout`, `cache-keepalive`, `stop-judge`, `session-log`, or `session-summary` in place of `stopstopping`. The bundle is a dependency list, so installing it installs the first four parts under their own names, and installing a part beside it changes nothing. `session-summary` is experimental and not in the bundle.
 
 ## The plugins
 
@@ -16,7 +16,8 @@ Or one part: the same command with `dialog-timeout`, `cache-keepalive`, `stop-ju
 - **[cache-keepalive](plugins/cache-keepalive/README.md)** keeps an idle session's prompt cache warm with a short ping, and ends on a handoff.
 - **[stop-judge](plugins/stop-judge/README.md)** judges each early stop and nudges the agent to carry on; `/stop-judge derive` writes a `DECISIONS.md` of your own rules from your sessions.
 - **[session-log](plugins/session-log/README.md)** keeps one markdown log per session, pruned at compaction, and ships the handoff and finish-session skills.
-- **[stopstopping](plugins/stopstopping/README.md)** is a dependency list that installs all four.
+- **[session-summary](plugins/session-summary/README.md)** keeps a pane beside the chat that says what the session is about, what it is doing now, and which files to open, written by a haiku call while a turn runs (`/session-summary`). Experimental; not in the bundle.
+- **[stopstopping](plugins/stopstopping/README.md)** is a dependency list that installs the first four.
 
 ## Files
 
@@ -29,6 +30,7 @@ Everything the plugins write for you to read lives under `~/.claude/stopstopping
 - `logs/`: one log per plugin
 - `session-logs/`: the session logs and their template
 - `handoffs/`: handoff documents
+- `session-summaries/`: one file per session of session-summary's calls, what each read and wrote
 
 ## Logs
 
@@ -40,6 +42,7 @@ Every mechanism appends one line per firing to its log. Read one back with `awk 
 | cache-keepalive | `~/.claude/stopstopping/logs/cache-keepalive.log` |
 | stop-judge | `~/.claude/stopstopping/logs/stop-judge.log` |
 | session-log | `~/.claude/stopstopping/logs/session-log.log` |
+| session-summary | `~/.claude/stopstopping/logs/session-summary.log` |
 
 ## Settings
 

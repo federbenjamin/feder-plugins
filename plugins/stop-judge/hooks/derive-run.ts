@@ -24,12 +24,12 @@ import {
   tooManyFailed,
   TURN_CAP,
   typedTurnsOf,
-  usageUsd,
   verifyReaderLines,
   windowText,
 } from './derive.ts'
 import type { Batch, Session } from './derive.ts'
 import { COMMAND } from './settings.ts'
+import { PRICES, usageUsd } from './shared/pricing.ts'
 import { record, stateDirs } from './shared/record.ts'
 import { setProgress, showStatus } from './status.ts'
 import type { DeriveRun, StatusState } from './status.ts'
@@ -100,14 +100,14 @@ async function lastRate($: EngineInterface, dir: string): Promise<number> {
 // One retry, after the back-off, on an API error a wait may clear; a permanent one ends the run.
 async function completeWithRetry($: EngineInterface, request: ModelCompleteRequest, signal: AbortSignal): Promise<{ reply: ModelCompleteResult; usd: number }> {
   let reply = await $.model.complete(request, { signal })
-  let usd = usageUsd(reply.usage)
+  let usd = usageUsd(reply.usage, PRICES.sonnet)
   if (!reply.isAnswered && reply.reason === 'api-error') {
     if (isPermanent(reply)) throw new Error(`api-error ${reply.error}`)
     const delayS = retryDelayS(reply, 0)
     if (delayS !== undefined) {
       await $.clock.sleep(delayS * 1000, { signal })
       reply = await $.model.complete(request, { signal })
-      usd += usageUsd(reply.usage)
+      usd += usageUsd(reply.usage, PRICES.sonnet)
     }
   }
   return { reply, usd }

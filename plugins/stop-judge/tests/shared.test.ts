@@ -1,9 +1,11 @@
 import { expect, test } from 'claude-code/testing'
 import type { EngineInterface } from 'claude-code'
 import { isConversationReplaced, PERSON_ORIGINS } from '../hooks/shared/events.ts'
-import { countOutcomes, firingLine, firingRecord, stateDir } from '../hooks/shared/firing.ts'
+import { countOutcomes, firingLine, firingRecord, sessionLogPath, sessionLogsDir, stateDir } from '../hooks/shared/firing.ts'
 import { pool } from '../hooks/shared/pool.ts'
-import { record, stateDirs } from '../hooks/shared/record.ts'
+import { PRICES, usageUsd } from '../hooks/shared/pricing.ts'
+import { appendLine, record, stateDirs } from '../hooks/shared/record.ts'
+import { toolInputHead } from '../hooks/shared/text.ts'
 import { contentText, isTypedText, NOT_TYPED, parseRow, SIBLING_TEXTS, typedText } from '../hooks/shared/typed.ts'
 
 const humanRow = (content: unknown) => ({
@@ -205,4 +207,47 @@ test('pool keeps item order, runs at most `limit` at once, and starts nothing af
   })).rejects.toThrow('boom')
   for (let i = 0; i < 30; i++) await Promise.resolve()
   expect(tried).toEqual([1, 2])
+})
+
+test('usageUsd prices each token category apart and reads a missing cache count as 0', () => {
+  const price = { input: 1, output: 2, cacheRead: 3, cacheWrite: 4 }
+  expect(usageUsd({ input_tokens: 1_000_000, output_tokens: 0 }, price)).toBe(1)
+  expect(usageUsd({ input_tokens: 0, output_tokens: 1_000_000 }, price)).toBe(2)
+  expect(usageUsd({ input_tokens: 0, output_tokens: 0, cache_read_input_tokens: 1_000_000 }, price)).toBe(3)
+  expect(usageUsd({ input_tokens: 0, output_tokens: 0, cache_creation_input_tokens: 1_000_000 }, price)).toBe(4)
+  expect(usageUsd({ input_tokens: 10, output_tokens: 10 }, price)).toBe(usageUsd({ input_tokens: 10, output_tokens: 10, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 }, price))
+})
+
+test('the Sonnet price reproduces the derive estimate: cache tokens at the input price', () => {
+  const usage = { input_tokens: 1000, output_tokens: 500, cache_read_input_tokens: 2000, cache_creation_input_tokens: 300 }
+  expect(usageUsd(usage, PRICES.sonnet)).toBe(((1000 + 2000 + 300) * 3 + 500 * 15) / 1_000_000)
+})
+
+test('the session-log folder and file paths come from one definition', () => {
+  expect(sessionLogsDir('/d')).toBe('/d/session-logs')
+  expect(sessionLogPath('/d', 'abc')).toBe('/d/session-logs/abc.md')
+})
+
+test('a tool input is headed by command, file_path, description, prompt, skill in that order', () => {
+  expect(toolInputHead({ command: 'ls', file_path: 'a', description: 'd' })).toBe('ls')
+  expect(toolInputHead({ file_path: 'a', description: 'd' })).toBe('a')
+  expect(toolInputHead({ description: 'd', prompt: 'p' })).toBe('d')
+  expect(toolInputHead({ prompt: 'p', skill: 's' })).toBe('p')
+  expect(toolInputHead({ skill: 's' })).toBe('s')
+  expect(toolInputHead({})).toBe('')
+  expect(toolInputHead('text')).toBe('')
+  expect(toolInputHead(null)).toBe('')
+})
+
+test('appendLine writes an absent file empty then appends with tee, an existing one only appends, and a failed write rejects', async () => {
+  const absent = appendWorld({}, { exists: false })
+  await appendLine(absent.$, '/x/a.jsonl', 'one\n')
+  expect(absent.calls).toEqual(['exists /x/a.jsonl', 'write /x/a.jsonl ""', `run tee -a /x/a.jsonl ${JSON.stringify('one\n')}`])
+
+  const present = appendWorld({})
+  await appendLine(present.$, '/x/a.jsonl', 'two\n')
+  expect(present.calls).toEqual(['exists /x/a.jsonl', `run tee -a /x/a.jsonl ${JSON.stringify('two\n')}`])
+
+  const failing = appendWorld({}, { exists: false, failWrite: true })
+  await expect(appendLine(failing.$, '/x/a.jsonl', 'three\n')).rejects.toThrow('read-only')
 })

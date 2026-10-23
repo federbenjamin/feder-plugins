@@ -83,6 +83,33 @@ test('only typed rows retain the preceding agent action and compaction boundary'
   ])
 })
 
+test('an over-limit agent text and tool input keep their head and tail around the elision marker', () => {
+  const { turns } = typedTurnsOf([
+    JSON.stringify({
+      type: 'assistant',
+      message: {
+        content: [
+          { type: 'text', text: `  \n${'H'.repeat(500)}${'T'.repeat(500)}\n  ` },
+          { type: 'tool_use', name: 'Bash', input: { command: ` ${'c'.repeat(200)}${'d'.repeat(200)} ` } },
+        ],
+      },
+    }),
+    JSON.stringify({ type: 'user', timestamp: '2026-10-20T09:01:00.000Z', message: { content: 'Go on.' }, origin: { kind: 'human' } }),
+  ])
+
+  expect(turns.map(t => t.before)).toEqual([`TEXT: ${'H'.repeat(300)}\n…\n${'T'.repeat(300)}\nTOOL Bash: ${'c'.repeat(150)}\n…\n${'d'.repeat(150)}`])
+})
+
+test('an over-limit typed turn reaches the batch text and operatorText as the same head-and-tail clip', () => {
+  const long: Session = { id: 'long', project: 'project-a', turns: [turn('2026-10-20T09:00:00.000Z', `${'a'.repeat(1500)}${'z'.repeat(1500)}`)] }
+  const clipped = `${'a'.repeat(1250)}\n…\n${'z'.repeat(1250)}`
+
+  const [batch] = batches([long], 10, 100_000)
+
+  expect(batch!.operatorText).toBe(clipped)
+  expect(batch!.text).toContain(`### operator typed\n${clipped}\n`)
+})
+
 test('a session-start prompt carries an explicit empty preceding-action marker', () => {
   const { turns } = typedTurnsOf([
     JSON.stringify({

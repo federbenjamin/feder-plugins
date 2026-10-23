@@ -35,6 +35,14 @@ export function logPath(dir: string, plugin: string): string {
   return `${dir}/logs/${plugin}.log`
 }
 
+export function sessionLogsDir(dir: string): string {
+  return `${dir}/session-logs`
+}
+
+export function sessionLogPath(dir: string, sessionId: string): string {
+  return `${sessionLogsDir(dir)}/${sessionId}.md`
+}
+
 // Where every plugin keeps what it writes for the person: STOPSTOPPING_DIR, else
 // `$HOME/.claude/stopstopping`; '' when neither is set, so nothing is written relative to cwd.
 export function stateDir(home: string | undefined, override: string | undefined): string {

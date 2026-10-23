@@ -5,7 +5,7 @@
 set -eu
 cd "$(dirname "$0")/.."
 
-for dir in plugins/dialog-timeout plugins/cache-keepalive plugins/stop-judge plugins/session-log tools/eval; do
+for dir in plugins/dialog-timeout plugins/cache-keepalive plugins/stop-judge plugins/session-log plugins/session-summary tools/eval; do
   [ -d "$dir" ] || continue
   echo "== $dir"
   claude plugin test "$dir"

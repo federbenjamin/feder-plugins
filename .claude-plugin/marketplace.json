@@ -1,6 +1,6 @@
 {
   "name": "stopstopping",
-  "description": "Four plugins that keep a Claude Code agent working instead of stopping to ask, one by one or through one bundle",
+  "description": "Five plugins that keep a Claude Code agent working instead of stopping to ask, four of them also through one bundle",
   "owner": { "name": "federbenjamin" },
   "plugins": [
     {
@@ -25,6 +25,12 @@
       "name": "session-log",
       "source": "./plugins/session-log",
       "description": "Keeps one markdown session log per session, pruned at compaction; ships the handoff and finish-session skills",
+      "category": "productivity"
+    },
+    {
+      "name": "session-summary",
+      "source": "./plugins/session-summary",
+      "description": "A pane beside the chat that says what this session is about, what it is doing now, and which files to open; /session-summary",
       "category": "productivity"
     },
     {

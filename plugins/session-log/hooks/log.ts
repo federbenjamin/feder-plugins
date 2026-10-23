@@ -1,3 +1,5 @@
+import { sessionLogPath, sessionLogsDir } from './shared/firing.ts'
+
 // The session log's pure side: section parsing, the compaction prune, the template and the
 // directive. No `$` here; register.ts does the file I/O.
 
@@ -175,8 +177,8 @@ export function compactSessionLog(log: string, archive: string | null, opts: { s
 }
 
 export function logPaths(dir: string, sessionId: string): { log: string; archive: string; template: string } {
-  const base = `${dir}/session-logs`
-  return { log: `${base}/${sessionId}.md`, archive: `${base}/${sessionId}.archive.md`, template: `${base}/TEMPLATE.md` }
+  const base = sessionLogsDir(dir)
+  return { log: sessionLogPath(dir, sessionId), archive: `${base}/${sessionId}.archive.md`, template: `${base}/TEMPLATE.md` }
 }
 
 export function templateText(): string {
