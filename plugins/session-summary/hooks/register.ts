@@ -1,8 +1,8 @@
 import type { EngineInterface, Register } from 'claude-code'
 import type { Source, SummaryStatus } from '../types'
 import { addCall, firingReason, replyResult } from './call.ts'
-import { CANDIDATE_MAX, MESSAGE_CHARS, PANE_TITLE, PLUGIN, SETTINGS_KEY, SUMMARY_REQUEST, TICK_MS, WINDOW_CHARS } from './config.ts'
-import { readSummary, registerPane, writeSummary } from './pane.tsx'
+import { CANDIDATE_MAX, MESSAGE_CHARS, PLUGIN, SETTINGS_KEY, SUMMARY_REQUEST, TICK_MS, WINDOW_CHARS } from './config.ts'
+import { readSummary, registerBand, writeSummary } from './band.tsx'
 import { DEFAULT_VARIANT } from './prompts.ts'
 import { settingsFrom, showText, summaryCommand, USAGE } from './settings.ts'
 import type { Calls, Settings } from './settings.ts'
@@ -12,10 +12,10 @@ import { appendLine, record, stateDirs } from './shared/record.ts'
 import { buildRequest, captureLine, capturePath, EMPTY_SUMMARY, fileCandidates, formatLog, formatMessages, isBumpTurn, isDue, seedFromCapture } from './summary.ts'
 import type { Previous } from './summary.ts'
 
-// Keeps three short texts about this session (so far, now, files to open) in a pane beside the
+// Keeps three short texts about this session (so far, now, files to open) in a band above the
 // chat. A haiku call writes them firstSeconds after a main turn starts, every everySeconds while
 // it runs, and once more when a summarized turn ends. Every call is logged and captured to the
-// session's own file, which a resumed session seeds the pane from. Pure logic is in summary.ts
+// session's own file, which a resumed session seeds the band from. Pure logic is in summary.ts
 // and call.ts.
 
 type State = {
@@ -23,7 +23,7 @@ type State = {
   turnStartedAt: number // when the running main turn started, ms; 0 when none runs
   lastCallAt: number // when a tick last started a running call in this turn, ms; 0 before the first
   isTurnSummarized: boolean
-  lastInput: string | undefined // the window of the last summary a call of this turn left in the pane
+  lastInput: string | undefined // the window of the last summary a call of this turn left in the band
   turn: number // bumped at each main turn.start, so a call of an earlier turn never sets this turn's lastInput
   inFlight: Promise<void> | undefined
   claimedTurn: number | undefined // the turn whose running call a tick claimed, until that call is made or dropped
@@ -142,7 +142,7 @@ async function call($: EngineInterface, state: State, status: SummaryStatus, epo
       try {
         await appendLine($, capturePath(dir, id), line)
       } catch {
-        // the capture is for reading back; the pane already has the texts
+        // the capture is for reading back; the band already has the texts
       }
     }
   } catch (error) {
@@ -201,7 +201,7 @@ async function onTick($: EngineInterface, state: State): Promise<void> {
 }
 
 export const register: Register = (on, options) => {
-  registerPane(on, options)
+  registerBand(on, options)
 
   const state: State = {
     isInteractive: false,
@@ -228,7 +228,7 @@ export const register: Register = (on, options) => {
     // `claude -p` run too.
     await $.command.register({
       name: PLUGIN,
-      description: 'Open the session summary pane, or switch it on/off and set its cadence, input source and prompt',
+      description: 'Show the session summary, or switch it on/off and set its cadence, input source and prompt',
       argumentHint: '[on|off|first <s>|every <s>|source messages|session-log|variant <name>|show]',
       immediate: true,
     })
@@ -237,7 +237,6 @@ export const register: Register = (on, options) => {
       tick = $.clock.every(TICK_MS, () => {
         void onTick($, state)
       })
-      void $.ui.open({ id: PLUGIN, title: PANE_TITLE })
     }
     return next(e)
   })
@@ -265,14 +264,14 @@ export const register: Register = (on, options) => {
   })
 
   // A /clear ends the conversation and goes on under a new id with no session.start: the tick
-  // keeps running (it reads the id fresh), and the pane starts empty.
+  // keeps running (it reads the id fresh), and the band empties.
   on('session.end', async ($, e, next) => {
     state.controller?.abort()
     reset(state)
     try {
       await writeSummary($, () => EMPTY_SUMMARY)
     } catch {
-      // the pane keeps the old texts until the next summary
+      // the band keeps the old texts until the next summary
     }
     return next(e)
   })
@@ -285,10 +284,6 @@ export const register: Register = (on, options) => {
       return { text }
     }
     switch (action.kind) {
-      case 'open': {
-        const opened = await $.ui.open({ id: PLUGIN, title: PANE_TITLE })
-        return { text: opened.isPlaced ? 'pane open' : `pane open, not placed (${opened.reason})` }
-      }
       case 'on':
       case 'off':
         return save({ ...settings, isOff: action.kind === 'off' }, action.kind === 'off' ? 'off: no summary calls, in every session' : 'on: summary calls resume, in every session')

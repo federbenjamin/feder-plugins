@@ -16,7 +16,7 @@ Or one part: the same command with `dialog-timeout`, `cache-keepalive`, `stop-ju
 - **[cache-keepalive](plugins/cache-keepalive/README.md)** keeps an idle session's prompt cache warm with a short ping, and ends on a handoff.
 - **[stop-judge](plugins/stop-judge/README.md)** judges each early stop and nudges the agent to carry on; `/stop-judge derive` writes a `DECISIONS.md` of your own rules from your sessions.
 - **[session-log](plugins/session-log/README.md)** keeps one markdown log per session, pruned at compaction, and ships the handoff and finish-session skills.
-- **[session-summary](plugins/session-summary/README.md)** keeps a pane beside the chat that says what the session is about, what it is doing now, and which files to open, written by a haiku call while a turn runs (`/session-summary`). Experimental; not in the bundle.
+- **[session-summary](plugins/session-summary/README.md)** keeps a band above the prompt that says what the session is about, what it is doing now, and which files to open, written by a haiku call while a turn runs (`/session-summary`). Experimental; not in the bundle.
 - **[stopstopping](plugins/stopstopping/README.md)** is a dependency list that installs the first four.
 
 ## Files

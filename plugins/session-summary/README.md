@@ -1,8 +1,8 @@
 # session-summary
 
-<p align="center"><strong>A pane beside the chat that says what this Claude Code session is about, what it is doing now, and which files to open</strong></p>
+<p align="center"><strong>A band above the prompt that says what this Claude Code session is about, what it is doing now, and which files to open</strong></p>
 
-A [Claude Code](https://docs.anthropic.com/en/docs/claude-code) plugin for people who keep many sessions open at once. Switching into one should not mean re-reading its transcript: the pane keeps three short texts for it.
+A [Claude Code](https://docs.anthropic.com/en/docs/claude-code) plugin for people who keep many sessions open at once. Switching into one should not mean re-reading its transcript: a band at the bottom of the screen keeps three short texts for it.
 
 - **So far**: one or two sentences on the session since it began, edited as it goes rather than rewritten.
 - **Now**: one sentence on the most recent task.
@@ -27,11 +27,11 @@ It starts in the next session. To run it in every session without installing it,
 - **Main turns only.** A turn starts the clock whatever started it: your prompt, a stop-judge nudge, a task notification. Subagent turns and cache-keepalive's ping turns are ignored.
 - **Files** come from the `Write` and `Edit` calls and `SendUserFile` files in all of the session's messages Claude Code hands the plugin (its newest 4096, not just the 16,000-character window), under either input source; newest by their last mention in any tool call, up to 8 are handed to the model, and a path the model names that is not among them is dropped.
 - **Interactive sessions only.** A `claude -p` run makes no call and writes nothing; the command still answers there.
-- **Resume.** A resumed session's pane starts from the texts its last call left (the capture file below). A `/clear` empties the pane.
+- **Resume.** A resumed session's band starts from the texts its last call left (the capture file below). A `/clear` empties the band.
 
-## The pane
+## The band
 
-It opens on its own at session start, but Claude Code places an unasked pane only in the fullscreen layout from 144 columns (110 once you have opened it yourself). `/session-summary` opens it at any width.
+The texts sit in the band directly above the prompt, at the bottom of the screen, in every layout and at any width: a dim label beside So far and Now, then one dim row of the files and when it was last updated. The band stays empty until the session's first summary. Claude Code's `[-]` mark at its right end collapses it.
 
 ## Experiment switches
 
@@ -45,7 +45,7 @@ Three switches, read at every call, so they change a running session:
 
 | Command | Effect |
 | --- | --- |
-| `/session-summary` | Open the pane |
+| `/session-summary` | Print the three texts, the same as `show` |
 | `/session-summary off` / `on` | Stop or resume summary calls, in every session |
 | `/session-summary first <seconds>` | The first call this long after a main turn starts (default 90) |
 | `/session-summary every <seconds>` | Later calls this long after the last one (default 600) |
@@ -68,9 +68,9 @@ Every call, and every tick that skips one, appends one line to `~/.claude/stopst
 
 | Outcome | Meaning |
 | --- | --- |
-| `summary` | The reply carried all three lines; the pane has them |
+| `summary` | The reply carried all three lines; the band has them |
 | `parse-partial` | One or two lines came back; the missing ones kept their previous text |
-| `parse-failed` | No line came back; the pane is unchanged |
+| `parse-failed` | No line came back; the band is unchanged |
 | `skip-same` | The window was the same as the last summary's in this turn; no call |
 | `skip-inflight` | A call was due while one of the same turn was still running or waiting for the turn before's, or the turn ended while its call waited; no call |
 | `log-missing` | Source `session-log` with no log file for the session; that call read `messages` |

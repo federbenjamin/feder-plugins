@@ -1,19 +1,25 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 import type { Summary } from '../types'
-import { PLUGIN, SHAPE } from './config.ts'
-import { EMPTY_SUMMARY, paneLines } from './summary.ts'
+import { SHAPE } from './config.ts'
+import { bandLines, EMPTY_SUMMARY } from './summary.ts'
 
 export const summaryAtom = atom({ plugin: 'session-summary', key: 'summary' } as const, EMPTY_SUMMARY, { shape: SHAPE })
 
-export const registerPane: Register = on => {
-  on('ui.render', { component: 'Pane', requestId: PLUGIN }, async ($, e) => {
+// The band above the prompt: drawn at the bottom of the screen in every layout, where a pane
+// would be docked beside a fullscreen transcript. Empty until the first summary.
+export const registerBand: Register = on => {
+  on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
+    const lines = bandLines(await read($, summaryAtom), await $.clock.now())
+    if (e.props.hasSurvey || lines.length === 0) return next(e)
     const { Box, Text } = $.ui.resolve(e)
-    const lines = paneLines(await read($, summaryAtom), await $.clock.now())
     return (
       <Box flexDirection="column">
         {lines.map(line => (
-          <Text dimColor={line.dim}>{line.text}</Text>
+          <Box flexDirection="row" columnGap={1}>
+            {line.label !== '' && <Text dimColor>{line.label}</Text>}
+            <Text dimColor={line.dim}>{line.text}</Text>
+          </Box>
         ))}
       </Box>
     )

@@ -7,7 +7,7 @@ import { clip, toolInputHead } from './shared/text.ts'
 import { isRecord, isTypedText, SIBLING_TEXTS } from './shared/typed.ts'
 
 // The summary's pure side: when a tick calls, what the call reads, what it asks, how the reply
-// is read, the capture line and the pane's lines.
+// is read, the capture line and the band's rows.
 
 const EMPTY: Summary = { soFar: '', now: '', files: [], at: 0, status: 'running', source: 'messages', variant: DEFAULT_VARIANT }
 export const EMPTY_SUMMARY: Summary = Object.freeze(EMPTY)
@@ -150,7 +150,7 @@ export function captureLine(c: Capture): string {
   return `${JSON.stringify(c)}\n`
 }
 
-// The texts the session's last call left, so a resumed session's pane continues them.
+// The texts the session's last call left, so a resumed session's band continues them.
 export function seedFromCapture(text: string): Summary | null {
   const last = text
     .split('\n')
@@ -176,14 +176,14 @@ export function seedFromCapture(text: string): Summary | null {
   }
 }
 
-export function paneLines(summary: Summary, now: number): { text: string; dim: boolean }[] {
-  const updated = summary.at === 0 ? 'no summary yet' : `updated ${Math.floor((now - summary.at) / 60_000)} min ago · ${summary.source} · ${summary.variant}`
+// The band's rows: a dim label beside each text, then one dim row of the files and freshness.
+// No rows before the first summary, so the band takes no space until there is something to say.
+export function bandLines(summary: Summary, now: number): { label: string; text: string; dim: boolean }[] {
+  if (summary.at === 0 && summary.soFar === '' && summary.now === '') return []
+  const updated = `updated ${Math.floor((now - summary.at) / 60_000)} min ago · ${summary.source} · ${summary.variant}`
   return [
-    { text: 'So far', dim: true },
-    { text: summary.soFar || '(none yet)', dim: false },
-    { text: 'Now', dim: true },
-    { text: summary.now || '(none yet)', dim: false },
-    ...summary.files.map(f => ({ text: f, dim: true })),
-    { text: updated, dim: true },
+    { label: 'So far', text: summary.soFar || '(none yet)', dim: false },
+    { label: 'Now', text: summary.now || '(none yet)', dim: false },
+    { label: '', text: [...summary.files, updated].join(' · '), dim: true },
   ]
 }

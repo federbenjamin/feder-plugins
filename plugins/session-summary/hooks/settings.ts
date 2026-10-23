@@ -23,7 +23,6 @@ export function settingsFrom(value: unknown): Settings {
 }
 
 export type Action =
-  | { kind: 'open' }
   | { kind: 'on' }
   | { kind: 'off' }
   | { kind: 'show' }
@@ -44,7 +43,7 @@ const seconds = (word: string): number | undefined => {
 export function summaryCommand(args: string): Action {
   const words = args.trim().split(/\s+/).filter(Boolean)
   const [verb, arg, extra] = [words[0]?.toLowerCase(), words[1], words[2]]
-  if (verb === undefined) return { kind: 'open' }
+  if (verb === undefined) return { kind: 'show' }
   if (extra !== undefined) return { kind: 'usage' }
   if (arg === undefined) {
     if (verb === 'on' || verb === 'off' || verb === 'show') return { kind: verb }

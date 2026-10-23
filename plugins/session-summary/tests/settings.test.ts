@@ -20,7 +20,7 @@ test('a malformed stored field falls back without discarding its valid neighbour
 })
 
 test('each documented command selects exactly one action', () => {
-  expect(summaryCommand('')).toEqual({ kind: 'open' })
+  expect(summaryCommand('')).toEqual({ kind: 'show' })
   expect(summaryCommand(' ON ')).toEqual({ kind: 'on' })
   expect(summaryCommand('off')).toEqual({ kind: 'off' })
   expect(summaryCommand('show')).toEqual({ kind: 'show' })
