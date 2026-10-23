@@ -47,6 +47,7 @@ function world(on: On, options: { capture?: string; settings?: Record<string, un
     commands: [] as string[],
     opened: [] as string[],
     reads: [] as string[],
+    below: '', // what another plugin draws in the band beneath this one
   }
   on('fs.exists', async (_$, e) => ({ value: w.files.has(e.path) }))
   on('fs.read', async (_$, e) => {
@@ -103,7 +104,7 @@ function world(on: On, options: { capture?: string; settings?: Record<string, un
     return { value: { isPlaced: true } }
   })
   // The engine's own band draws nothing here: an empty band hands the draw on to it.
-  on('ui.render', { component: 'AbovePrompt' }, async ($, e) => $.ui.resolve(e).Box({}))
+  on('ui.render', { component: 'AbovePrompt' }, async ($, e) => (w.below === '' ? $.ui.resolve(e).Box({}) : $.ui.resolve(e).Text({ children: [w.below] })))
   on('session.start', async (_$, e) => ({ cwd: e.cwd }))
   on('session.end', async (_$, e) => ({ sessionId: e.sessionId }))
   on('turn.start', async (_$, e) => ({ turnId: e.turnId }))
@@ -164,6 +165,16 @@ test('a non-interactive session registers /session-summary and makes no call', a
   await w.clock.advance(120_000)
   expect(w.requests).toEqual([])
   expect(w.files.has(CAPTURE)).toBe(false)
+})
+
+test('the band stacks above what another plugin drew there, and leaves it alone while empty', async ($, on) => {
+  const w = world(on)
+  w.below = 'Remember: ten minutes on the contact sheets'
+  await start($)
+  expect(await bandTexts($)).toEqual([w.below])
+  await turnStart($)
+  await w.clock.advance(90_000)
+  expect(await bandTexts($)).toEqual(['So far', 'Building the summary plugin.', 'Now', 'Writing its plan.', `${PLAN} · updated 0 min ago · messages · edit`, w.below])
 })
 
 test('an interactive session restores its synthetic capture into the band, opening no pane', async ($, on) => {
