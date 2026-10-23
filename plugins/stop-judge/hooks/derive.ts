@@ -1,4 +1,5 @@
 import { quoteKey } from './decisions.ts'
+import { actionSummary, clip } from './shared/text.ts'
 import { parseRow, typedText } from './shared/typed.ts'
 
 export { pool } from './shared/pool.ts'
@@ -17,8 +18,6 @@ export const COST_PER_TURN_USD = 0.0013
 export const SYNTH_ALLOWANCE_USD = 0.3
 // About 150k tokens.
 export const SYNTH_INPUT_MAX_CHARS = 600_000
-export const SONNET_USD_PER_MTOK_IN = 3
-export const SONNET_USD_PER_MTOK_OUT = 15
 // Scripted runs (`claude -p` in a scratch dir) are not the operator's sessions.
 export const EXCLUDED_PROJECT_PREFIXES: readonly string[] = ['-private-tmp-', '-private-var-', '-tmp-', '-var-folders-']
 // What a line must hold to be a row typedTurnsOf reads: a user row, a compaction, a queued
@@ -47,30 +46,6 @@ export function selectCandidates(
     }
   }
   return out.sort((a, b) => b.mtimeMs - a.mtimeMs)
-}
-
-const clipCut = (text: string, limit: number): string => {
-  const t = text.trim()
-  return t.length <= limit ? t : `${t.slice(0, limit)} …[cut]`
-}
-
-// The agent message before a typed turn, as a reader needs it: its text and its tool calls.
-function actionSummary(message: unknown): string {
-  if (!isRecord(message)) return '(session start)'
-  const content = message.content ?? []
-  if (typeof content === 'string') return `TEXT: ${clipCut(content, 600)}`
-  if (!Array.isArray(content)) return '(no content)'
-  const out: string[] = []
-  for (const block of content) {
-    if (!isRecord(block)) continue
-    if (block.type === 'text' && typeof block.text === 'string' && block.text.trim() !== '') out.push(`TEXT: ${clipCut(block.text, 600)}`)
-    else if (block.type === 'tool_use') {
-      const given = isRecord(block.input) ? block.input : {}
-      const key = given.command || given.file_path || given.description || given.prompt || given.skill || ''
-      out.push(`TOOL ${String(block.name)}: ${clipCut(String(key), 300)}`)
-    }
-  }
-  return out.length > 0 ? out.join('\n') : '(no content)'
 }
 
 export type Turn = { ts: string; text: string; before: string }
@@ -134,7 +109,7 @@ function digest(session: Session, from: number, chunk: readonly Turn[]): { text:
   const lines = [`# session ${session.id}`, `project: ${session.project} · ${span}`, '']
   const operator: string[] = []
   chunk.forEach((turn, i) => {
-    const typed = clipCut(turn.text, TYPED_LIMIT)
+    const typed = clip(turn.text.trim(), TYPED_LIMIT)
     operator.push(typed)
     lines.push(`## turn ${first + i} — ${turn.ts}`, "### agent's preceding action", turn.before, '### operator typed', typed, '')
   })
@@ -189,11 +164,6 @@ export function estimateUsd(turns: number, usdPerTurn: number): number {
 
 export function confirmText(run: { sessions: number; turns: number; total: number; usd: number }): string {
   return `${run.sessions} sessions, ${run.turns} of ${run.total} typed turns, ~$${run.usd.toFixed(2)}. Run?`
-}
-
-export function usageUsd(usage: { input_tokens: number; output_tokens: number; cache_read_input_tokens?: number; cache_creation_input_tokens?: number }): number {
-  const input = usage.input_tokens + (usage.cache_read_input_tokens ?? 0) + (usage.cache_creation_input_tokens ?? 0)
-  return (input * SONNET_USD_PER_MTOK_IN + usage.output_tokens * SONNET_USD_PER_MTOK_OUT) / 1_000_000
 }
 
 export type ReaderLine = { side: 'decide' | 'bring' | 'how'; topic: string; claim: string; quote: string; session: string; turn: number; strength: 'strong' | 'medium' | 'weak'; date: string }

@@ -1,5 +1,6 @@
 import { expect, test } from 'claude-code/testing'
-import { buildUser, clip, FRAMING, framingAndPrior, guardOutcome, minutesFact, minutesSinceOperator, parseRows, splitTurn } from '../hooks/judge.ts'
+import { buildUser, FRAMING, framingAndPrior, guardOutcome, minutesFact, minutesSinceOperator, parseRows, splitTurn } from '../hooks/judge.ts'
+import { clip } from '../hooks/shared/text.ts'
 import type { TranscriptRow } from '../hooks/shared/typed.ts'
 
 const at = (minute: number) => `2026-10-20T12:${String(minute).padStart(2, '0')}:00.000Z`

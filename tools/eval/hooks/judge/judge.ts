@@ -1,4 +1,5 @@
 import { PROMPT } from './prompt.ts'
+import { clip } from './shared/text.ts'
 import { contentText, parseRow, SIBLING_TEXTS, typedText } from './shared/typed.ts'
 import type { TranscriptRow } from './shared/typed.ts'
 
@@ -124,11 +125,6 @@ export function framingAndPrior(users: readonly string[], priorN: number = PRIOR
   const out: string[] = []
   for (const u of [...picked, ...recent]) if (!out.includes(u)) out.push(u)
   return out
-}
-
-// Both ends of a long message: the instruction is often at the top, the question at the bottom.
-export function clip(text: string, n: number): string {
-  return text.length <= n ? text : `${text.slice(0, Math.floor(n / 2))}\n…\n${text.slice(-Math.floor(n / 2))}`
 }
 
 // Whole minutes from the newest typed row to `now`; null with no typed row or no readable time.
