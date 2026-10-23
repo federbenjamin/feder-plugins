@@ -1,6 +1,6 @@
 # stopstopping
 
-A Claude Code marketplace of mods that keep an agent working instead of stopping to ask: dialog-timeout, cache-keepalive, stop-judge, session-log, and the bundle `stopstopping` (a dependency-only plugin: no code, no copies).
+A Claude Code marketplace of mods that keep an agent working instead of stopping to ask: dialog-timeout, cache-keepalive, stop-judge, session-log, session-summary (experimental, not in the bundle), and the bundle `stopstopping` (a dependency-only plugin: no code, no copies).
 
 <!-- >>> git-workflow (generated block; do not edit by hand) -->
 ## Git workflow
@@ -11,7 +11,7 @@ A Claude Code marketplace of mods that keep an agent working instead of stopping
 ## Project state
 
 - 2026-10-20: public and installable; the maintainer is the only known user. Retires at the first report from another user.
-- 2026-10-20: reads the user's own Claude Code transcripts on their machine only, on an explicit /stop-judge derive; writes under ~/.claude/stopstopping/. The only data that leaves is the model calls the judge (the transcript tail, to haiku) and derive (typed turns) make through Claude Code's own model connection. Does not retire: a fact of the product.
+- 2026-10-20: reads the user's own Claude Code transcripts on their machine only, on an explicit /stop-judge derive; writes under ~/.claude/stopstopping/. The only data that leaves is the model calls the judge (the transcript tail, to haiku), derive (typed turns) and session-summary (a tail window of the session's messages or its session-log file, to haiku, on a timer, in interactive sessions) make through Claude Code's own model connection. Does not retire: a fact of the product.
 
 ## Rules
 
