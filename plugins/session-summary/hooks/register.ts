@@ -1,26 +1,29 @@
 import type { EngineInterface, Register } from 'claude-code'
 import type { Source, SummaryStatus } from '../types'
+import { addCall, firingReason, replyResult } from './call.ts'
 import { CANDIDATE_MAX, MESSAGE_CHARS, PANE_TITLE, PLUGIN, SETTINGS_KEY, SUMMARY_REQUEST, TICK_MS, WINDOW_CHARS } from './config.ts'
 import { readSummary, registerPane, writeSummary } from './pane.tsx'
+import { DEFAULT_VARIANT } from './prompts.ts'
 import { settingsFrom, showText, summaryCommand, USAGE } from './settings.ts'
 import type { Calls, Settings } from './settings.ts'
 import { sessionLogPath } from './shared/firing.ts'
 import { PRICES, usageUsd } from './shared/pricing.ts'
 import { appendLine, record, stateDirs } from './shared/record.ts'
-import { buildRequest, captureLine, capturePath, EMPTY_SUMMARY, fileCandidates, formatLog, formatMessages, isBumpTurn, isDue, parseReply, seedFromCapture } from './summary.ts'
+import { buildRequest, captureLine, capturePath, EMPTY_SUMMARY, fileCandidates, formatLog, formatMessages, isBumpTurn, isDue, seedFromCapture } from './summary.ts'
 import type { Previous } from './summary.ts'
 
 // Keeps three short texts about this session (so far, now, files to open) in a pane beside the
 // chat. A haiku call writes them firstSeconds after a main turn starts, every everySeconds while
 // it runs, and once more when a summarized turn ends. Every call is logged and captured to the
-// session's own file, which a resumed session seeds the pane from. Pure logic is in summary.ts.
+// session's own file, which a resumed session seeds the pane from. Pure logic is in summary.ts
+// and call.ts.
 
 type State = {
   isInteractive: boolean
   turnStartedAt: number // when the running main turn started, ms; 0 when none runs
-  lastCallAt: number
+  lastCallAt: number // when a tick last started a running call in this turn, ms; 0 before the first
   isTurnSummarized: boolean
-  lastInput: string | undefined
+  lastInput: string | undefined // the window of the last summary the pane took
   inFlight: Promise<void> | undefined
   controller: AbortController | undefined
   calls: Calls
@@ -59,15 +62,16 @@ function reset(state: State): void {
 
 async function call($: EngineInterface, state: State, status: SummaryStatus, epoch: number): Promise<void> {
   const isCurrent = () => epoch === state.epoch
+  let source: Source = 'messages'
+  let variant = DEFAULT_VARIANT
   try {
     const id = await $.session.id()
     const { dir } = await stateDirs($)
     const settings = await settingsOf($)
     if (settings.isOff) return
-    const variant = settings.variant
+    variant = settings.variant
     const messages = await $.session.messages()
     const candidates = fileCandidates(messages, CANDIDATE_MAX)
-    let source: Source = 'messages'
     let input: string | undefined
     if (settings.source === 'session-log') {
       const logFile = dir === '' ? '' : sessionLogPath(dir, id)
@@ -75,14 +79,14 @@ async function call($: EngineInterface, state: State, status: SummaryStatus, epo
         input = formatLog(await $.fs.read(logFile), WINDOW_CHARS)
         source = 'session-log'
       } else {
-        await record($, PLUGIN, 'log-missing', 'source=session-log')
+        await record($, PLUGIN, 'log-missing', firingReason({ source: 'session-log', variant }))
       }
     }
     input ??= formatMessages(messages, { windowChars: WINDOW_CHARS, messageChars: MESSAGE_CHARS })
     if (!isCurrent()) return
     // An ended call is never skipped: its status changes the request.
     if (status === 'running' && input === state.lastInput) {
-      await record($, PLUGIN, 'skip-same', `source=${source} variant=${variant}`)
+      await record($, PLUGIN, 'skip-same', firingReason({ source, variant }))
       return
     }
 
@@ -90,8 +94,6 @@ async function call($: EngineInterface, state: State, status: SummaryStatus, epo
     const previous: Previous = { soFar: stored.soFar, now: stored.now, files: [...stored.files] }
     if (!isCurrent()) return
     const startedAt = await $.clock.now()
-    state.lastCallAt = startedAt
-    if (status === 'running') state.isTurnSummarized = true
     const controller = new AbortController()
     state.controller = controller
     let reply
@@ -104,34 +106,16 @@ async function call($: EngineInterface, state: State, status: SummaryStatus, epo
     const ms = endedAt - startedAt
     const usage = reply.usage
     const usd = usageUsd(usage, PRICES.haiku)
-
-    let outcome: string
-    let failure = ''
-    let after: Previous = previous
-    if (!reply.isAnswered) {
-      outcome = reply.reason === 'aborted' ? 'aborted' : 'api-error'
-      if (outcome === 'api-error') failure = ` ${reply.reason} ${'error' in reply ? reply.error : ''}`.trimEnd()
-    } else {
-      const parsed = parseReply(reply.text, previous, candidates, status)
-      outcome = parsed.outcome
-      after = parsed
-      if (parsed.outcome !== 'parse-failed' && isCurrent()) {
-        await writeSummary($, () => ({ soFar: parsed.soFar, now: parsed.now, files: parsed.files, at: endedAt, status, source, variant }))
-      }
-    }
+    const result = replyResult(reply, previous, candidates, status)
     if (isCurrent()) {
-      state.lastInput = input
-      const c = state.calls
-      state.calls = {
-        count: c.count + 1,
-        input: c.input + usage.input_tokens,
-        output: c.output + usage.output_tokens,
-        cached: c.cached + usage.cache_read_input_tokens,
-        usd: c.usd + usd,
+      if (result.isTaken) {
+        const { soFar, now, files } = result.texts
+        await writeSummary($, () => ({ soFar, now, files, at: endedAt, status, source, variant }))
+        state.lastInput = input
       }
+      state.calls = addCall(state.calls, usage, usd)
     }
-    const reason = `source=${source} variant=${variant} in=${usage.input_tokens} out=${usage.output_tokens} cached=${usage.cache_read_input_tokens} usd=${usd.toFixed(4)}${failure}`
-    await record($, PLUGIN, outcome, reason, ms)
+    await record($, PLUGIN, result.outcome, firingReason({ source, variant, usage, usd, failure: result.failure }), ms)
     if (dir !== '') {
       const line = captureLine({
         at: new Date(endedAt).toISOString(),
@@ -142,10 +126,8 @@ async function call($: EngineInterface, state: State, status: SummaryStatus, epo
         input,
         inputChars: input.length,
         candidates,
-        soFar: after.soFar,
-        now: after.now,
-        files: after.files,
-        outcome,
+        ...result.texts,
+        outcome: result.outcome,
         ms,
         usage,
         usd,
@@ -157,7 +139,7 @@ async function call($: EngineInterface, state: State, status: SummaryStatus, epo
       }
     }
   } catch (error) {
-    await record($, PLUGIN, 'api-error', error instanceof Error ? error.message : 'summary failed')
+    await record($, PLUGIN, 'api-error', firingReason({ source, variant, failure: error instanceof Error ? error.message : 'summary failed' }))
   }
 }
 
@@ -178,14 +160,20 @@ async function summarize($: EngineInterface, state: State, status: SummaryStatus
   }
 }
 
+// The tick that acts claims the running turn's call at once, before any await: the turn's next
+// call is then due `everySeconds` later whatever this one does (skipped, failed, slow), the turn
+// earns its ended call even while this one is still in flight, and a turn that starts meanwhile is
+// not charged with it.
 async function onTick($: EngineInterface, state: State): Promise<void> {
   const settings = await settingsOf($)
   const now = await $.clock.now()
   if (!isDue({ now, turnStartedAt: state.turnStartedAt, lastCallAt: state.lastCallAt, ...settings })) return
   if (state.inFlight !== undefined) {
-    await record($, PLUGIN, 'skip-inflight', `source=${settings.source} variant=${settings.variant}`)
+    await record($, PLUGIN, 'skip-inflight', firingReason({ source: settings.source, variant: settings.variant }))
     return
   }
+  state.lastCallAt = now
+  state.isTurnSummarized = true
   await summarize($, state, 'running')
 }
 
@@ -211,8 +199,8 @@ export const register: Register = (on, options) => {
     state.controller?.abort()
     reset(state)
     state.isInteractive = e.isInteractive
-    // A refused registration (another install of this plugin holds the name) stops the rest, so
-    // two installs never both summarize.
+    // Registered before the interactive gate, as stop-judge does, so the command answers in a
+    // `claude -p` run too.
     await $.command.register({
       name: PLUGIN,
       description: 'Open the session summary pane, or switch it on/off and set its cadence, input source and prompt',
@@ -232,6 +220,7 @@ export const register: Register = (on, options) => {
   on('turn.start', async ($, e, next) => {
     if (!e.agentId && !isBumpTurn(e.text)) {
       state.turnStartedAt = await $.clock.now()
+      state.lastCallAt = 0
       state.isTurnSummarized = false
     }
     return next(e)

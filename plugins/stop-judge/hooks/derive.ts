@@ -1,6 +1,6 @@
 import { quoteKey } from './decisions.ts'
 import { actionSummary, clip } from './shared/text.ts'
-import { parseRow, typedText } from './shared/typed.ts'
+import { isRecord, parseRow, typedText } from './shared/typed.ts'
 
 export { pool } from './shared/pool.ts'
 
@@ -28,8 +28,6 @@ export const ROW_GREP_PATTERN = ROW_MARKERS.join('|')
 const TOOL_RESULT_MARKER = '"type":"tool_result"'
 const TYPED_LIMIT = 2500
 const QUOTE_MAX = 200
-
-const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
 
 export type Candidate = { project: string; path: string; id: string; mtimeMs: number }
 

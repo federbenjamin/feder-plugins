@@ -62,3 +62,18 @@ test('a long session log loses its partial first line while an exact window stay
   expect(formatLog('alpha\nbeta', 10)).toBe('alpha\nbeta')
   expect(formatLog('first line\nlatest work', 13)).toBe('latest work')
 })
+
+test('a multi-line tool input is one tool line', () => {
+  const messages = [
+    { role: 'assistant', text: 'Running it.', toolUses: [{ tool: 'Bash', input: { command: 'cd app &&\n  pnpm test\r\n\techo done\n' } }] },
+  ] as never
+
+  expect(formatMessages(messages, { windowChars: 2_000, messageChars: 200 })).toBe('ASSISTANT: Running it.\n  → Bash: cd app && pnpm test echo done')
+})
+
+test('a tool input over the line cap is still one line, its elision folded in', () => {
+  const command = `${'a'.repeat(200)}\n${'b'.repeat(200)}`
+  const messages = [{ role: 'assistant', text: '', toolUses: [{ tool: 'Bash', input: { command } }, { tool: 'Read', input: { file_path: 'x.md' } }] }] as never
+
+  expect(formatMessages(messages, { windowChars: 2_000, messageChars: 200 }).split('\n')).toEqual([`  → Bash: ${'a'.repeat(150)} … ${'b'.repeat(150)}`, '  → Read: x.md'])
+})

@@ -114,3 +114,42 @@ test('a capture without a complete text summary cannot seed stale state', () => 
   expect(seedFromCapture('{"soFar":"only one field"}\nnot json')).toBeNull()
   expect(seedFromCapture(' \n\n')).toBeNull()
 })
+
+test('a capture from the session-log source seeds that source and its variant', () => {
+  const line = JSON.stringify({ soFar: 'read the log', now: 'waiting', files: [], at: '2026-10-20T10:00:00Z', status: 'ended', source: 'session-log', variant: 'append' })
+
+  expect(seedFromCapture(line)).toEqual({ soFar: 'read the log', now: 'waiting', files: [], at: Date.parse('2026-10-20T10:00:00Z'), status: 'ended', source: 'session-log', variant: 'append' })
+})
+
+test('an empty label keeps its previous text instead of reading the next label line', () => {
+  const candidates = ['src/first.ts']
+
+  expect(parseReply('SO FAR: a\nNOW:\nFILES: none', previous, candidates, 'running')).toEqual({ soFar: 'a', now: previous.now, files: [], outcome: 'parse-partial' })
+  expect(parseReply('SO FAR:\nNOW: checking the tests\nFILES: none', previous, candidates, 'running')).toEqual({
+    soFar: previous.soFar,
+    now: 'checking the tests',
+    files: [],
+    outcome: 'parse-partial',
+  })
+})
+
+test('a label holding only spaces counts as absent, and three blank labels fail the parse', () => {
+  expect(parseReply('SO FAR: \t \nNOW: b\nFILES: none', previous, ['src/first.ts'], 'running')).toEqual({ soFar: previous.soFar, now: 'b', files: [], outcome: 'parse-partial' })
+  expect(parseReply('SO FAR:\nNOW:  \nFILES:', previous, ['src/first.ts'], 'running')).toEqual({ ...previous, outcome: 'parse-failed' })
+})
+
+test('a reply with Windows line ends reads each value from its own line', () => {
+  expect(parseReply('SO FAR: a\r\nNOW:\r\nFILES: src/first.ts\r\n', previous, ['src/first.ts'], 'running')).toEqual({
+    soFar: 'a',
+    now: previous.now,
+    files: ['src/first.ts'],
+    outcome: 'parse-partial',
+  })
+})
+
+test('a reply naming more than two candidates keeps the first two it named', () => {
+  const candidates = ['a.md', 'b.md', 'c.md']
+
+  expect(parseReply('SO FAR: x\nNOW: y\nFILES: c.md, a.md, b.md', previous, candidates, 'running').files).toEqual(['c.md', 'a.md'])
+  expect(parseReply('SO FAR: x\nNOW: y\nFILES: outside.md, a.md, a.md, b.md, c.md', previous, candidates, 'running').files).toEqual(['a.md', 'b.md'])
+})

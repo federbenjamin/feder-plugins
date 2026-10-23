@@ -9,7 +9,7 @@ export type Settings = { isOff: boolean; firstSeconds: number; everySeconds: num
 export const DEFAULT_SETTINGS: Settings = Object.freeze({ isOff: false, firstSeconds: FIRST_SECONDS, everySeconds: EVERY_SECONDS, source: 'messages', variant: DEFAULT_VARIANT })
 
 const isPositiveInteger = (v: unknown): v is number => Number.isSafeInteger(v) && (v as number) > 0
-const isSource = (v: unknown): v is Source => v === 'messages' || v === 'session-log'
+export const isSource = (v: unknown): v is Source => v === 'messages' || v === 'session-log'
 
 export function settingsFrom(value: unknown): Settings {
   const v = (typeof value === 'object' && value !== null ? value : {}) as Record<string, unknown>

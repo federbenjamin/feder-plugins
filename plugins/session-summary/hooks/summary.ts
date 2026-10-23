@@ -1,9 +1,10 @@
 import type { ModelUsage, SessionMessage } from 'claude-code'
 import type { Source, Summary, SummaryStatus } from '../types'
-import { TOOL_LINE_CHARS } from './config.ts'
+import { FILES_MAX, TOOL_LINE_CHARS } from './config.ts'
 import { DEFAULT_VARIANT, isVariant, VARIANTS } from './prompts.ts'
+import { isSource } from './settings.ts'
 import { clip, toolInputHead } from './shared/text.ts'
-import { isTypedText, SIBLING_TEXTS } from './shared/typed.ts'
+import { isRecord, isTypedText, SIBLING_TEXTS } from './shared/typed.ts'
 
 // The summary's pure side: when a tick calls, what the call reads, what it asks, how the reply
 // is read, the capture line and the pane's lines.
@@ -24,6 +25,10 @@ export function isBumpTurn(text: string): boolean {
   return text.startsWith(SIBLING_TEXTS.keepalivePing) || text.startsWith(SIBLING_TEXTS.keepaliveLast)
 }
 
+// A tool use is one line of the input: a multi-line command, and clip's own elision marker,
+// fold into it.
+const oneLine = (text: string): string => text.replace(/\s+/g, ' ').trim()
+
 function messageBlock(m: SessionMessage, messageChars: number): string | null {
   const text = m.text.trim()
   if (m.role === 'user') {
@@ -31,7 +36,7 @@ function messageBlock(m: SessionMessage, messageChars: number): string | null {
     return `${isTypedText(text) ? 'USER' : 'NOTE'}: ${clip(text, messageChars)}`
   }
   const lines = text === '' ? [] : [`ASSISTANT: ${clip(text, messageChars)}`]
-  for (const use of m.toolUses) lines.push(`  → ${use.tool}: ${clip(toolInputHead(use.input), TOOL_LINE_CHARS)}${use.isError ? ' (error)' : ''}`)
+  for (const use of m.toolUses) lines.push(`  → ${use.tool}: ${oneLine(clip(toolInputHead(use.input), TOOL_LINE_CHARS))}${use.isError ? ' (error)' : ''}`)
   return lines.length > 0 ? lines.join('\n') : null
 }
 
@@ -56,9 +61,6 @@ export function formatLog(text: string, windowChars: number): string {
   return cut === -1 ? tail : tail.slice(cut + 1)
 }
 
-const isString = (v: unknown): v is string => typeof v === 'string'
-const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
-
 function moveToEnd(list: string[], path: string): void {
   const i = list.indexOf(path)
   if (i !== -1) list.splice(i, 1)
@@ -72,9 +74,9 @@ export function fileCandidates(messages: readonly SessionMessage[], limit: numbe
   const list: string[] = []
   for (const { tool, input } of uses) {
     if (tool === 'Write' || tool === 'Edit') {
-      if (isString(input.file_path) && input.file_path !== '') moveToEnd(list, input.file_path)
+      if (typeof input.file_path === 'string' && input.file_path !== '') moveToEnd(list, input.file_path)
     } else if (tool === 'SendUserFile' && Array.isArray(input.files)) {
-      for (const f of input.files) if (isString(f) && f !== '') moveToEnd(list, f)
+      for (const f of input.files) if (typeof f === 'string' && f !== '') moveToEnd(list, f)
     }
   }
   for (const { input } of uses) {
@@ -105,19 +107,20 @@ export function buildRequest(r: { variant: string; source: Source; previous: Pre
 
 export type Parsed = { soFar: string; now: string; files: string[]; outcome: 'summary' | 'parse-partial' | 'parse-failed' }
 
+// A label's value is the rest of its own line; a label with nothing after it counts as absent.
 const lineValue = (text: string, re: RegExp): string | undefined => re.exec(text)?.[1]?.trim()
 
 export function parseReply(text: string, previous: Previous, candidates: readonly string[], status: SummaryStatus): Parsed {
-  const soFar = lineValue(text, /^SO FAR:\s*(.*)$/m)
-  const now = lineValue(text, /^NOW:\s*(.*)$/m)
-  const filesText = lineValue(text, /^FILES:\s*(.*)$/m)
+  const soFar = lineValue(text, /^SO FAR:[^\S\r\n]*(\S.*)$/m)
+  const now = lineValue(text, /^NOW:[^\S\r\n]*(\S.*)$/m)
+  const filesText = lineValue(text, /^FILES:[^\S\r\n]*(\S.*)$/m)
   const found = [soFar, now, filesText].filter(v => v !== undefined).length
   if (found === 0) return { soFar: previous.soFar, now: previous.now, files: [...previous.files], outcome: 'parse-failed' }
   let files: string[]
   if (candidates.length === 0) files = status === 'running' ? [...previous.files] : []
   else if (filesText === undefined) files = [...previous.files]
   else if (filesText.toLowerCase() === 'none') files = []
-  else files = [...new Set(filesText.split(',').map(p => p.trim()))].filter(p => candidates.includes(p))
+  else files = [...new Set(filesText.split(',').map(p => p.trim()))].filter(p => candidates.includes(p)).slice(0, FILES_MAX)
   return { soFar: soFar ?? previous.soFar, now: now ?? previous.now, files, outcome: found === 3 ? 'summary' : 'parse-partial' }
 }
 
@@ -160,16 +163,16 @@ export function seedFromCapture(text: string): Summary | null {
   } catch {
     return null
   }
-  if (!isRecord(c) || !isString(c.soFar) || !isString(c.now)) return null
-  const at = isString(c.at) ? Date.parse(c.at) : NaN
+  if (!isRecord(c) || typeof c.soFar !== 'string' || typeof c.now !== 'string') return null
+  const at = typeof c.at === 'string' ? Date.parse(c.at) : NaN
   return {
     soFar: c.soFar,
     now: c.now,
-    files: Array.isArray(c.files) ? c.files.filter(isString) : [],
+    files: Array.isArray(c.files) ? c.files.filter((f): f is string => typeof f === 'string') : [],
     at: Number.isNaN(at) ? 0 : at,
     status: c.status === 'running' || c.status === 'ended' ? c.status : EMPTY_SUMMARY.status,
-    source: c.source === 'messages' || c.source === 'session-log' ? c.source : EMPTY_SUMMARY.source,
-    variant: isString(c.variant) && isVariant(c.variant) ? c.variant : EMPTY_SUMMARY.variant,
+    source: isSource(c.source) ? c.source : EMPTY_SUMMARY.source,
+    variant: typeof c.variant === 'string' && isVariant(c.variant) ? c.variant : EMPTY_SUMMARY.variant,
   }
 }
 

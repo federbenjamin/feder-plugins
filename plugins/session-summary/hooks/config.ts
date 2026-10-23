@@ -11,5 +11,7 @@ export const WINDOW_CHARS = 16_000
 export const MESSAGE_CHARS = 1_500
 export const TOOL_LINE_CHARS = 300
 export const CANDIDATE_MAX = 8
+// The most paths the pane shows: the prompt asks for one or two.
+export const FILES_MAX = 2
 // The judge's request has the same values; kept apart so tuning one never moves the other.
 export const SUMMARY_REQUEST = { model: 'haiku', maxTokens: 300, effort: 'low', timeoutMs: 20_000 } as const

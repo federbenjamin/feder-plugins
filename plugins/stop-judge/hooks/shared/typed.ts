@@ -36,7 +36,7 @@ export const NOT_TYPED: readonly string[] = [
 // "Relayed by the orchestrating session". A pasted "From the docs: …" is the person's.
 export const RELAY = /^(?:<pasted_content[^>]*>\s*)?(?:From|Relayed by) the (?:\S+ )?session\b/
 
-const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
+export const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
 
 // One transcript line as a row; null for a blank or unparsable line (a tail's first line may be
 // cut) and for a sidechain row, which is a subagent's, not the session's.
