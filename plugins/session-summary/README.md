@@ -23,7 +23,7 @@ It starts in the next session. To run it in every session without installing it,
 ## How it works
 
 - **A haiku call writes the texts.** It reads a tail window of the session's recent activity (16,000 characters, oldest first) and the previous texts, and answers three labelled lines. Tool results are left out; each tool call is one line (`→ Bash: <command>`, `→ Edit: <file>`).
-- **Cadence.** 90 seconds after a main turn starts, every 10 minutes while it runs, and once more when it ends and hands back to you (status `ended`). A turn that ends before the first 90 seconds makes no call. A call reading the same window as the last summary is skipped, and the window is checked again 10 minutes later; a failed call is retried at the same 10 minutes.
+- **Cadence.** 90 seconds after a main turn starts, every 10 minutes while it runs, and once more when it ends and hands back to you (status `ended`). A turn that ends before the first 90 seconds makes no call. A call reading the same window as the last summary in the same turn is skipped, and the window is checked again 10 minutes later (a turn's first call is never skipped); a failed call is retried at the same 10 minutes.
 - **Main turns only.** A turn starts the clock whatever started it: your prompt, a stop-judge nudge, a task notification. Subagent turns and cache-keepalive's ping turns are ignored.
 - **Files** come from the `Write` and `Edit` calls and `SendUserFile` files in all of the session's messages Claude Code hands the plugin (its newest 4096, not just the 16,000-character window), under either input source; newest by their last mention in any tool call, up to 8 are handed to the model, and a path the model names that is not among them is dropped.
 - **Interactive sessions only.** A `claude -p` run makes no call and writes nothing; the command still answers there.
@@ -71,7 +71,7 @@ Every call, and every tick that skips one, appends one line to `~/.claude/stopst
 | `summary` | The reply carried all three lines; the pane has them |
 | `parse-partial` | One or two lines came back; the missing ones kept their previous text |
 | `parse-failed` | No line came back; the pane is unchanged |
-| `skip-same` | The window was the same as the last summary's; no call |
+| `skip-same` | The window was the same as the last summary's in this turn; no call |
 | `skip-inflight` | A call was due while one was still running; no call |
 | `log-missing` | Source `session-log` with no log file for the session; that call read `messages` |
 | `api-error` | The call failed; the reason names why |

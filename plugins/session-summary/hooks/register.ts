@@ -23,7 +23,8 @@ type State = {
   turnStartedAt: number // when the running main turn started, ms; 0 when none runs
   lastCallAt: number // when a tick last started a running call in this turn, ms; 0 before the first
   isTurnSummarized: boolean
-  lastInput: string | undefined // the window of the last summary the pane took
+  lastInput: string | undefined // the window of the last summary a call of this turn left in the pane
+  turn: number // bumped at each main turn.start, so a call of an earlier turn never sets this turn's lastInput
   inFlight: Promise<void> | undefined
   controller: AbortController | undefined
   calls: Calls
@@ -60,7 +61,7 @@ function reset(state: State): void {
   state.epoch++
 }
 
-async function call($: EngineInterface, state: State, status: SummaryStatus, epoch: number): Promise<void> {
+async function call($: EngineInterface, state: State, status: SummaryStatus, epoch: number, turn: number): Promise<void> {
   const isCurrent = () => epoch === state.epoch
   let source: Source = 'messages'
   let variant = DEFAULT_VARIANT
@@ -107,12 +108,16 @@ async function call($: EngineInterface, state: State, status: SummaryStatus, epo
     const usage = reply.usage
     const usd = usageUsd(usage, PRICES.haiku)
     const result = replyResult(reply, previous, candidates, status)
+    // Every await can let session.end reset the state, so each write checks the epoch again
+    // after it; the atom update re-runs its change on a version miss, so it checks there too.
+    if (isCurrent() && result.isTaken) {
+      const { soFar, now, files } = result.texts
+      await writeSummary($, s => (isCurrent() ? { soFar, now, files, at: endedAt, status, source, variant } : s))
+    }
     if (isCurrent()) {
-      if (result.isTaken) {
-        const { soFar, now, files } = result.texts
-        await writeSummary($, () => ({ soFar, now, files, at: endedAt, status, source, variant }))
-        state.lastInput = input
-      }
+      // Only a call of the running turn feeds skip-same: the turn before's running or ended call,
+      // landing after this turn started and read its first message, leaves that window to be called.
+      if (result.isTaken && turn === state.turn) state.lastInput = input
       state.calls = addCall(state.calls, usage, usd)
     }
     await record($, PLUGIN, result.outcome, firingReason({ source, variant, usage, usd, failure: result.failure }), ms)
@@ -147,11 +152,12 @@ async function call($: EngineInterface, state: State, status: SummaryStatus, epo
 // ended call waits for the one in flight.
 async function summarize($: EngineInterface, state: State, status: SummaryStatus): Promise<void> {
   const epoch = state.epoch
+  const turn = state.turn
   if (status === 'ended') {
     while (state.inFlight !== undefined) await state.inFlight.catch(() => undefined)
   }
   if (epoch !== state.epoch || !state.isInteractive) return
-  const run = call($, state, status, epoch)
+  const run = call($, state, status, epoch, turn)
   state.inFlight = run
   try {
     await run
@@ -186,6 +192,7 @@ export const register: Register = (on, options) => {
     lastCallAt: 0,
     isTurnSummarized: false,
     lastInput: undefined,
+    turn: 0,
     inFlight: undefined,
     controller: undefined,
     calls: noCalls(),
@@ -222,6 +229,8 @@ export const register: Register = (on, options) => {
       state.turnStartedAt = await $.clock.now()
       state.lastCallAt = 0
       state.isTurnSummarized = false
+      state.lastInput = undefined
+      state.turn++
     }
     return next(e)
   })
@@ -260,19 +269,19 @@ export const register: Register = (on, options) => {
     switch (action.kind) {
       case 'open': {
         const opened = await $.ui.open({ id: PLUGIN, title: PANE_TITLE })
-        return { text: opened.isPlaced ? 'session-summary: pane open' : `session-summary: pane open, not placed (${opened.reason})` }
+        return { text: opened.isPlaced ? 'pane open' : `pane open, not placed (${opened.reason})` }
       }
       case 'on':
       case 'off':
-        return save({ ...settings, isOff: action.kind === 'off' }, action.kind === 'off' ? 'session-summary off: no summary calls, in every session' : 'session-summary on')
+        return save({ ...settings, isOff: action.kind === 'off' }, action.kind === 'off' ? 'off: no summary calls, in every session' : 'on: summary calls resume, in every session')
       case 'first':
-        return save({ ...settings, firstSeconds: action.seconds }, `session-summary: first ${action.seconds}s after a turn starts`)
+        return save({ ...settings, firstSeconds: action.seconds }, `first ${action.seconds}s after a turn starts`)
       case 'every':
-        return save({ ...settings, everySeconds: action.seconds }, `session-summary: every ${action.seconds}s after that`)
+        return save({ ...settings, everySeconds: action.seconds }, `every ${action.seconds}s after that`)
       case 'source':
-        return save({ ...settings, source: action.source }, `session-summary: source ${action.source}`)
+        return save({ ...settings, source: action.source }, `source ${action.source}`)
       case 'variant':
-        return save({ ...settings, variant: action.variant }, `session-summary: variant ${action.variant}`)
+        return save({ ...settings, variant: action.variant }, `variant ${action.variant}`)
       case 'show': {
         const { dir } = await stateDirs($)
         const shown = dir === '' ? null : capturePath(dir, await $.session.id())

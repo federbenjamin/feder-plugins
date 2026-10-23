@@ -4,6 +4,7 @@ import type { ModelCompleteRequest, ModelCompleteResult, On, SessionMessage } fr
 import type { Summary } from '../types'
 import { PLUGIN } from '../hooks/config'
 import { VARIANTS } from '../hooks/prompts'
+import { sessionLogPath } from '../hooks/shared/firing'
 import { capturePath, paneLines } from '../hooks/summary'
 
 const T0 = Date.parse('2026-10-23T12:00:00Z')
@@ -41,6 +42,7 @@ function world(on: On, options: { capture?: string; settings?: Record<string, un
     isAbortIgnored: false, // a reply already on its way when the call is aborted
     messagesHoldMs: 0,
     messagesError: '',
+    writeHoldMs: 0, // holds the next $.state write that long before it lands
     requests: [] as ModelCompleteRequest[],
     commands: [] as string[],
     opened: [] as string[],
@@ -85,6 +87,12 @@ function world(on: On, options: { capture?: string; settings?: Record<string, un
       }
     }
     return { value: w.replies.shift() ?? ANSWER }
+  })
+  on('state.set', async (_$, e, next) => {
+    const hold = w.writeHoldMs
+    w.writeHoldMs = 0
+    if (hold > 0) await clock.sleep(hold)
+    return next(e)
   })
   on('command.register', async (_$, e) => {
     w.commands.push(e.name)
@@ -355,6 +363,95 @@ test('a turn that starts in the same millisecond its predecessor was summarized 
   expect(statuses(w)).toEqual(['running', 'ended', 'running'])
 })
 
+const NUDGE = 'STOP JUDGE — open the PR yourself.'
+
+test('an ended call that reads the next turn\'s nudge leaves that turn\'s unchanged window to its own first summary at firstSeconds', async ($, on) => {
+  const w = world(on)
+  await start($)
+  await turnStart($)
+  await w.clock.advance(90_000)
+  w.messagesHoldMs = 5_000
+  await complete($)
+  w.messages.push(user(NUDGE))
+  await turnStart($, NUDGE)
+  await w.clock.advance(5_000)
+  expect(statuses(w)).toEqual(['running', 'ended'])
+  await w.clock.advance(60_000)
+  expect(statuses(w)).toEqual(['running', 'ended'])
+  await w.clock.advance(30_000)
+  expect(outcomes(w)).toEqual(['summary', 'summary', 'summary'])
+  expect(statuses(w)).toEqual(['running', 'ended', 'running'])
+  expect(String(w.requests[2]!.prompt)).toContain(`NOTE: ${NUDGE}`)
+})
+
+test('a running call that reads the next turn\'s nudge after its own turn ended leaves that turn\'s unchanged window to its own first summary at firstSeconds', async ($, on) => {
+  const w = world(on)
+  await start($)
+  await turnStart($)
+  w.messagesHoldMs = 40_000
+  await w.clock.advance(90_000)
+  await w.clock.advance(30_000)
+  await complete($)
+  w.messages.push(user(NUDGE))
+  await turnStart($, NUDGE)
+  await w.clock.advance(10_000)
+  expect(statuses(w)).toEqual(['running', 'ended'])
+  expect(String(w.requests[0]!.prompt)).toContain(`NOTE: ${NUDGE}`)
+  await w.clock.advance(70_000)
+  expect(statuses(w)).toEqual(['running', 'ended'])
+  await w.clock.advance(10_000)
+  expect(outcomes(w)).toEqual(['summary', 'summary', 'summary'])
+  expect(statuses(w)).toEqual(['running', 'ended', 'running'])
+})
+
+test('a turn whose session log matches the last summary of the turn before is still summarized at firstSeconds', async ($, on) => {
+  const w = world(on, { settings: { source: 'session-log' } })
+  w.files.set(sessionLogPath(DIR, ID), '## 12:00 building the summary plugin\n')
+  w.replies.push(ANSWER, FAILURES[0]!.reply)
+  await start($)
+  await turnStart($)
+  await w.clock.advance(90_000)
+  await complete($)
+  await turnStart($, NUDGE)
+  await w.clock.settle()
+  expect(outcomes(w)).toEqual(['summary', 'api-error'])
+  await w.clock.advance(90_000)
+  expect(outcomes(w)).toEqual(['summary', 'api-error', 'summary'])
+  expect(statuses(w)).toEqual(['running', 'ended', 'running'])
+})
+
+test('a summary write still landing when session.end resets leaves the next conversation\'s pane and call count empty', async ($, on) => {
+  const w = world(on)
+  await start($)
+  await turnStart($)
+  w.replies.push(answer('Too late.', 'Too late.'))
+  w.writeHoldMs = 10_000
+  await w.clock.advance(90_000)
+  expect(w.requests).toHaveLength(1)
+  await $.session.end({ reason: 'clear', sessionId: ID, resume: { id: ID } })
+  await w.clock.advance(10_000)
+  await w.clock.settle()
+  expect(outcomes(w)).toEqual(['summary'])
+  expect(await paneTexts($)).toEqual(['So far', '(none yet)', 'Now', '(none yet)', 'no summary yet'])
+  expect((await run($, 'show')).text).toContain('this session: 0 calls · in 0 · out 0 · cached 0')
+})
+
+test('/session-summary replies carry no name of their own: the engine prints it', async ($, on) => {
+  world(on)
+  await start($)
+  const replies: [string, string][] = [
+    ['', 'pane open'],
+    ['first 120', 'first 120s after a turn starts'],
+    ['every 300', 'every 300s after that'],
+    ['source session-log', 'source session-log'],
+    ['variant edit', 'variant edit'],
+    ['off', 'off: no summary calls, in every session'],
+    ['on', 'on: summary calls resume, in every session'],
+  ]
+  for (const [args, text] of replies) expect((await run($, args)).text).toBe(text)
+  expect((await run($, 'show')).text).toMatch(/^So far: /)
+})
+
 test('a call that throws logs api-error with the same leading fields as a call', async ($, on) => {
   const w = world(on)
   w.messagesError = 'messages unavailable'
@@ -405,7 +502,7 @@ test('switched off mid-turn, a summarized turn makes no ended call', async ($, o
   await start($)
   await turnStart($)
   await w.clock.advance(90_000)
-  expect((await run($, 'off')).text).toBe('session-summary off: no summary calls, in every session')
+  expect((await run($, 'off')).text).toBe('off: no summary calls, in every session')
   await complete($)
   await w.clock.settle()
   expect(statuses(w)).toEqual(['running'])
