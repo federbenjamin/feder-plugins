@@ -11,7 +11,9 @@ export const summaryAtom = atom({ plugin: 'session-summary', key: 'summary' } as
 export const registerBand: Register = on => {
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     const lines = bandLines(await read($, summaryAtom), await $.clock.now())
-    if (e.props.hasSurvey || lines.length === 0) return next(e)
+    // Other plugins draw in the band too: the summary stacks above what they drew, never in place of it.
+    const below = await next(e)
+    if (e.props.hasSurvey || lines.length === 0) return below
     const { Box, Text } = $.ui.resolve(e)
     return (
       <Box flexDirection="column">
@@ -21,6 +23,7 @@ export const registerBand: Register = on => {
             <Text dimColor={line.dim}>{line.text}</Text>
           </Box>
         ))}
+        {below}
       </Box>
     )
   })
