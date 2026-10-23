@@ -25,7 +25,8 @@ type State = {
   isTurnSummarized: boolean
   lastInput: string | undefined // the window of the last summary a call of this turn left in the pane
   turn: number // bumped at each main turn.start, so a call of an earlier turn never sets this turn's lastInput
-  inFlight: { run: Promise<void>; turn: number } | undefined // the call in flight and the turn it was claimed in
+  inFlight: Promise<void> | undefined
+  claimedTurn: number | undefined // the turn whose running call a tick claimed, until that call is made or dropped
   controller: AbortController | undefined
   calls: Calls
   epoch: number // bumped at session.start and session.end, so a call that outlived its conversation writes nothing
@@ -56,6 +57,7 @@ function reset(state: State): void {
   state.isTurnSummarized = false
   state.lastInput = undefined
   state.inFlight = undefined
+  state.claimedTurn = undefined
   state.controller = undefined
   state.calls = noCalls()
   state.epoch++
@@ -158,7 +160,7 @@ async function skipInflight($: EngineInterface, settings: Settings): Promise<voi
 async function summarize($: EngineInterface, state: State, status: SummaryStatus): Promise<void> {
   const epoch = state.epoch
   const turn = state.turn
-  while (state.inFlight !== undefined) await state.inFlight.run.catch(() => undefined)
+  while (state.inFlight !== undefined) await state.inFlight.catch(() => undefined)
   if (epoch !== state.epoch || !state.isInteractive) return
   // A running call whose turn ended while it waited leaves that turn to its ended call.
   if (status === 'running' && (turn !== state.turn || state.turnStartedAt === 0)) {
@@ -166,29 +168,36 @@ async function summarize($: EngineInterface, state: State, status: SummaryStatus
     return
   }
   const run = call($, state, status, epoch, turn)
-  state.inFlight = { run, turn }
+  state.inFlight = run
   try {
     await run
   } finally {
-    if (state.inFlight?.run === run) state.inFlight = undefined
+    if (state.inFlight === run) state.inFlight = undefined
   }
 }
 
 // The tick that acts claims the running turn's call at once, before any await: the turn's next
 // call is then due `everySeconds` later whatever this one does (skipped, failed, slow), the turn
 // earns its ended call even while this one is still in flight, and a turn that starts meanwhile is
-// not charged with it.
+// not charged with it. The claim holds while the call waits behind an earlier turn's, so a stall
+// there never queues a second call for the turn.
 async function onTick($: EngineInterface, state: State): Promise<void> {
   const settings = await settingsOf($)
   const now = await $.clock.now()
   if (!isDue({ now, turnStartedAt: state.turnStartedAt, lastCallAt: state.lastCallAt, ...settings })) return
-  if (state.inFlight !== undefined && state.inFlight.turn === state.turn) {
+  const turn = state.turn
+  if (state.claimedTurn === turn) {
     await skipInflight($, settings)
     return
   }
+  state.claimedTurn = turn
   state.lastCallAt = now
   state.isTurnSummarized = true
-  await summarize($, state, 'running')
+  try {
+    await summarize($, state, 'running')
+  } finally {
+    if (state.claimedTurn === turn) state.claimedTurn = undefined
+  }
 }
 
 export const register: Register = (on, options) => {
@@ -202,6 +211,7 @@ export const register: Register = (on, options) => {
     lastInput: undefined,
     turn: 0,
     inFlight: undefined,
+    claimedTurn: undefined,
     controller: undefined,
     calls: noCalls(),
     epoch: 0,

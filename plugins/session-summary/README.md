@@ -72,7 +72,7 @@ Every call, and every tick that skips one, appends one line to `~/.claude/stopst
 | `parse-partial` | One or two lines came back; the missing ones kept their previous text |
 | `parse-failed` | No line came back; the pane is unchanged |
 | `skip-same` | The window was the same as the last summary's in this turn; no call |
-| `skip-inflight` | A call was due while one of the same turn was still running, or the turn ended while its call waited for the turn before's; no call |
+| `skip-inflight` | A call was due while one of the same turn was still running or waiting for the turn before's, or the turn ended while its call waited; no call |
 | `log-missing` | Source `session-log` with no log file for the session; that call read `messages` |
 | `api-error` | The call failed; the reason names why |
 | `aborted` | The call was cut: its 20-second limit, or the session ended |

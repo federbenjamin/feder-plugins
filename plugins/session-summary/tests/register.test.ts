@@ -311,6 +311,7 @@ for (const failure of FAILURES) {
 
 test('the ended call of a turn, starting after the next turn started, leaves that turn its first summary at firstSeconds', async ($, on) => {
   const w = world(on)
+  w.replies.push(answer('Turn A so far.', 'Turn A now.'), answer('Turn A done.', 'Waiting on the person.'))
   await start($)
   await turnStart($)
   await w.clock.advance(100_000)
@@ -320,6 +321,7 @@ test('the ended call of a turn, starting after the next turn started, leaves tha
   await turnStart($, 'STOP JUDGE — open the PR yourself.')
   await w.clock.advance(5_000)
   expect(statuses(w)).toEqual(['running', 'ended'])
+  expect((await paneTexts($)).slice(0, 4)).toEqual(['So far', 'Turn A done.', 'Now', 'Waiting on the person.'])
   w.messages.push(wrote('notes/report.md'))
   await w.clock.advance(75_000)
   expect(statuses(w)).toEqual(['running', 'ended'])
@@ -483,6 +485,56 @@ test('a running call waiting behind an earlier turn\'s call is dropped when its 
   expect([...outcomes(w)].sort()).toEqual(['skip-inflight', 'summary', 'summary', 'summary'])
   await w.clock.advance(20_000)
   expect(statuses(w)).toEqual(['running', 'ended', 'ended', 'running'])
+})
+
+// A first/every below the 30 s tick lets every tick of a stall come due.
+test('a turn whose first call waits behind the turn before\'s stalled call queues it once: later due ticks log skip-inflight until it is made', async ($, on) => {
+  const w = world(on, { settings: { firstSeconds: 10, everySeconds: 10 } })
+  await start($)
+  await turnStart($)
+  w.messagesHoldMs = 70_000
+  await w.clock.advance(30_000)
+  await complete($)
+  w.messages.push(user(NUDGE))
+  await turnStart($, NUDGE)
+  await w.clock.advance(30_000)
+  expect(outcomes(w)).toEqual([])
+  await w.clock.advance(30_000)
+  expect(outcomes(w)).toEqual(['skip-inflight'])
+  await w.clock.advance(10_000)
+  await w.clock.settle()
+  expect(statuses(w)).toEqual(['running', 'ended', 'running'])
+  expect(outcomes(w)).toEqual(['skip-inflight', 'summary', 'summary', 'summary'])
+  w.messages.push(wrote('notes/report.md'))
+  await w.clock.advance(20_000)
+  expect(statuses(w)).toEqual(['running', 'ended', 'running', 'running'])
+  expect(outcomes(w)).toEqual(['skip-inflight', 'summary', 'summary', 'summary', 'summary'])
+})
+
+test('a turn\'s queued first call stays its only one after a turn before it, waiting too, is dropped', async ($, on) => {
+  const w = world(on, { settings: { firstSeconds: 10, everySeconds: 10 } })
+  await start($)
+  await turnStart($)
+  w.messagesHoldMs = 100_000
+  await w.clock.advance(30_000)
+  await complete($)
+  await turnStart($, NUDGE)
+  await w.clock.advance(30_000)
+  await complete($)
+  w.messages.push(user('STOP JUDGE — merge it yourself.'))
+  await turnStart($, 'STOP JUDGE — merge it yourself.')
+  w.messagesHoldMs = 40_000
+  await w.clock.advance(60_000)
+  expect(outcomes(w)).toEqual(['skip-inflight'])
+  await w.clock.advance(30_000)
+  w.messagesHoldMs = 25_000
+  expect(outcomes(w)).toEqual(['skip-inflight', 'summary', 'skip-inflight'])
+  await w.clock.advance(30_000)
+  expect(outcomes(w)).toEqual(['skip-inflight', 'summary', 'skip-inflight', 'summary', 'skip-inflight', 'skip-inflight'])
+  await w.clock.advance(20_000)
+  await w.clock.settle()
+  expect(statuses(w)).toEqual(['running', 'ended', 'ended', 'running'])
+  expect(outcomes(w)).toEqual(['skip-inflight', 'summary', 'skip-inflight', 'summary', 'skip-inflight', 'skip-inflight', 'summary', 'summary'])
 })
 
 test('a turn whose session log matches the last summary of the turn before is still summarized at firstSeconds', async ($, on) => {
