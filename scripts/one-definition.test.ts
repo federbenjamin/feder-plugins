@@ -7,14 +7,14 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
 const REPO = join(import.meta.dirname, '..')
-const PLUGINS = ['dialog-timeout', 'cache-keepalive', 'stop-judge', 'session-log']
+const PLUGINS = ['dialog-timeout', 'cache-keepalive', 'stop-judge', 'session-log', 'session-summary']
 
-// Each plugin's own hooks files: hooks/*.ts, not the generated hooks/shared/ copies.
+// Each plugin's own hooks files: hooks/*.ts and *.tsx, not the generated hooks/shared/ copies.
 function ownHooksFiles(): { path: string; text: string }[] {
   const dirs = [...PLUGINS.map(p => join('plugins', p, 'hooks')), join('tools', 'eval', 'hooks')]
   return dirs.flatMap(dir =>
     readdirSync(join(REPO, dir), { withFileTypes: true })
-      .filter(e => e.isFile() && e.name.endsWith('.ts'))
+      .filter(e => e.isFile() && (e.name.endsWith('.ts') || e.name.endsWith('.tsx')))
       .map(e => ({ path: join(dir, e.name), text: readFileSync(join(REPO, dir, e.name), 'utf8') })),
   )
 }
@@ -25,6 +25,10 @@ const SHARED_ONLY: { what: string; re: RegExp }[] = [
   { what: 'the default state dir', re: /\.claude\/stopstopping/ },
   { what: 'isConversationReplaced', re: /function\s+isConversationReplaced/ },
   { what: 'the person origins', re: /PERSON_ORIGINS\s*[:=]/ },
+  { what: 'a usage-to-dollars function', re: /function\s+usageUsd|USD_PER_MTOK/ },
+  { what: 'a clip helper', re: /function\s+clip\b/ },
+  { what: 'actionSummary', re: /function\s+actionSummary/ },
+  { what: 'the session-log path', re: /function\s+sessionLogPath/ },
 ]
 
 test('the firing-log append, the state dir and the event predicates are defined only in shared/', () => {
