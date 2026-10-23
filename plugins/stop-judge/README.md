@@ -100,9 +100,9 @@ Decide everything you can yourself. Bring only what is listed under "Bring to me
 - Fix the cause, with the smallest change that does it. -- "smallest fix, root cause" (2026-10-15)
 ```
 
-Every bullet ends in one or two of your quotes (at most 200 characters, `"` written as `'`) and the date of the session they came from. A bullet whose quote matches no finding and no quote of the current file is dropped. The file is kept under 9,000 characters, dropping "How to decide" bullets from the end: a hook's output over 10,000 characters reaches the model only as a short preview.
+In the file, every bullet ends in one or two of your quotes (at most 200 characters, `"` written as `'`) and the date of the session they came from. A bullet whose quote matches no finding and no quote of the current file is dropped. The quotes are evidence for you and for the next derive; the agent never sees them. What the session-start hook prints is kept under 9,000 characters by dropping "How to decide" bullets from the end, because a hook's output over 10,000 characters reaches the model only as a short preview.
 
-**Session start.** A `SessionStart` command hook in `hooks/hooks.json` prints the file when it exists. `/stop-judge context off` writes `~/.claude/stopstopping/context-off`, which the hook checks, and `context on` removes it.
+**Session start.** A `SessionStart` command hook in `hooks/hooks.json` prints the file without the quotes and dates, so the agent gets the rules and not the words or mood they were typed in. `/stop-judge context off` writes `~/.claude/stopstopping/context-off`, which the hook checks, and `context on` removes it.
 
 **Editing it by hand** is fine; the next derive reads your edits as the current file. An agent editing a file under `~/.claude/stopstopping/` may need an allow rule for that folder in your permission settings.
 

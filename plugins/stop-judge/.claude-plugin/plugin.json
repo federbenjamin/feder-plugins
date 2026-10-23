@@ -1,6 +1,6 @@
 {
   "name": "stop-judge",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Nudges the agent on when it stops early, and derives DECISIONS.md from your own sessions; /stop-judge",
   "author": { "name": "Benjamin Feder" }
 }

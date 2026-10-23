@@ -3,6 +3,7 @@ import type { Engine } from 'claude-code/testing'
 import type { ModelCompleteRequest, On } from 'claude-code'
 import { READER_PROMPT, SYNTH_PROMPT } from '../hooks/derive-prompts'
 import { ROW_GREP_PATTERN } from '../hooks/derive'
+import { rulesOnly } from '../hooks/decisions'
 
 const T0 = Date.parse('2026-10-20T12:00:00Z')
 const PROJECTS = '/home/u/.claude/projects'
@@ -263,7 +264,7 @@ test('session start logs the size of the file the hook prints, and nothing while
   w.files.set(`${DIR}/DECISIONS.md`, VALID)
   await start($)
   expect(w.logged).toHaveLength(1)
-  expect(w.logged[0]).toContain(` context session=sess-1 ms=0 reason=chars=${VALID.length}\n`)
+  expect(w.logged[0]).toContain(` context session=sess-1 ms=0 reason=chars=${rulesOnly(VALID).length}\n`)
   w.files.set(`${DIR}/context-off`, '')
   await start($)
   expect(w.logged).toHaveLength(1)

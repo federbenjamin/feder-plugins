@@ -1,5 +1,5 @@
 import type { EngineInterface, Register } from 'claude-code'
-import { decisionsPath, parseDecisions } from './decisions.ts'
+import { decisionsPath, parseDecisions, rulesOnly } from './decisions.ts'
 import { startDerive } from './derive-run.ts'
 import { framingAndPrior, guardOutcome, judgeOutcome, judgeRequest, minutesFact, nudgeText, parseRows, splitTurn, TAIL_BYTES, transcriptFindArgv } from './judge.ts'
 import { COMMAND, SETTINGS_KEY, settingsFrom, statusText, stopJudgeCommand, USAGE } from './settings.ts'
@@ -116,7 +116,7 @@ async function logContext($: EngineInterface): Promise<void> {
     const { dir } = await stateDirs($)
     if (dir === '' || (await isContextOff($, dir)) || !(await $.fs.exists(decisionsPath(dir)))) return
     const text = await $.fs.read(decisionsPath(dir))
-    await record($, COMMAND, 'context', `chars=${text.length}`)
+    await record($, COMMAND, 'context', `chars=${rulesOnly(text).length}`)
   } catch {
     // the log is a convenience
   }
