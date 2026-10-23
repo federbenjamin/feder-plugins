@@ -21,9 +21,12 @@ const FILE = [
   '',
   '## Bring to me',
   "- Ask before deleting anything not named. -- \"remove the 21 merged, leave the rest\" (2026-10-21)",
-  '## How to decide',
+  '## How to work with me',
   '### Verification',
   "- Verify a fix before claiming it. -- \"VERIFY fixes before claiming them fixed.\" \"don't say 'done' early\" (2026-10-22)",
+  '## Principles',
+  '### Fixes',
+  "- The root cause wins over a workaround, when both fit the scope. -- \"smallest fix, root cause\" (2026-10-22)",
   '',
 ].join('\n')
 
@@ -40,7 +43,7 @@ function hook(file: string | null, contextOff = false): string {
 
 test('the hook prints the rules of a valid file without a quote or date, exactly as rulesOnly does', () => {
   assert.equal(validateDecisions(FILE).ok, true)
-  assert.equal(FILE.split('\n').filter(l => BULLET_RE.test(l)).length, 2)
+  assert.equal(FILE.split('\n').filter(l => BULLET_RE.test(l)).length, 3)
   const printed = hook(FILE)
   assert.equal(printed, rulesOnly(FILE))
   assert.doesNotMatch(printed, /VERIFY fixes|remove the 21|2026-10-2[12]\)/)
