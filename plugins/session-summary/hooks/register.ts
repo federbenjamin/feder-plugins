@@ -25,7 +25,7 @@ type State = {
   isTurnSummarized: boolean
   lastInput: string | undefined // the window of the last summary a call of this turn left in the pane
   turn: number // bumped at each main turn.start, so a call of an earlier turn never sets this turn's lastInput
-  inFlight: Promise<void> | undefined
+  inFlight: { run: Promise<void>; turn: number } | undefined // the call in flight and the turn it was claimed in
   controller: AbortController | undefined
   calls: Calls
   epoch: number // bumped at session.start and session.end, so a call that outlived its conversation writes nothing
@@ -148,21 +148,29 @@ async function call($: EngineInterface, state: State, status: SummaryStatus, epo
   }
 }
 
-// One call at a time: a running call starts only when none is in flight (the tick checks); an
-// ended call waits for the one in flight.
+async function skipInflight($: EngineInterface, settings: Settings): Promise<void> {
+  await record($, PLUGIN, 'skip-inflight', firingReason({ source: settings.source, variant: settings.variant }))
+}
+
+// One call at a time, and a call waits for the one in flight: the tick never starts a running call
+// behind a call of its own turn, so a running call waits only for a call of an earlier turn (its
+// running or ended call), and the new turn's first call still comes firstSeconds after it started.
 async function summarize($: EngineInterface, state: State, status: SummaryStatus): Promise<void> {
   const epoch = state.epoch
   const turn = state.turn
-  if (status === 'ended') {
-    while (state.inFlight !== undefined) await state.inFlight.catch(() => undefined)
-  }
+  while (state.inFlight !== undefined) await state.inFlight.run.catch(() => undefined)
   if (epoch !== state.epoch || !state.isInteractive) return
+  // A running call whose turn ended while it waited leaves that turn to its ended call.
+  if (status === 'running' && (turn !== state.turn || state.turnStartedAt === 0)) {
+    await skipInflight($, await settingsOf($))
+    return
+  }
   const run = call($, state, status, epoch, turn)
-  state.inFlight = run
+  state.inFlight = { run, turn }
   try {
     await run
   } finally {
-    if (state.inFlight === run) state.inFlight = undefined
+    if (state.inFlight?.run === run) state.inFlight = undefined
   }
 }
 
@@ -174,8 +182,8 @@ async function onTick($: EngineInterface, state: State): Promise<void> {
   const settings = await settingsOf($)
   const now = await $.clock.now()
   if (!isDue({ now, turnStartedAt: state.turnStartedAt, lastCallAt: state.lastCallAt, ...settings })) return
-  if (state.inFlight !== undefined) {
-    await record($, PLUGIN, 'skip-inflight', firingReason({ source: settings.source, variant: settings.variant }))
+  if (state.inFlight !== undefined && state.inFlight.turn === state.turn) {
+    await skipInflight($, settings)
     return
   }
   state.lastCallAt = now

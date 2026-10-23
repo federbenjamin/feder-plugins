@@ -404,6 +404,87 @@ test('a running call that reads the next turn\'s nudge after its own turn ended 
   expect(statuses(w)).toEqual(['running', 'ended', 'running'])
 })
 
+// The turn before's call is still in flight at this turn's first deadline when firstSeconds is
+// short or a read before the model call is slow (held here on session.messages).
+test('a turn whose predecessor\'s ended call is still in flight at its firstSeconds deadline is summarized as soon as that call lands', async ($, on) => {
+  const w = world(on, { settings: { firstSeconds: 10 } })
+  await start($)
+  await turnStart($)
+  await w.clock.advance(30_000)
+  await w.clock.advance(20_000)
+  w.messagesHoldMs = 15_000
+  await complete($)
+  w.messages.push(user(NUDGE))
+  await turnStart($, NUDGE)
+  await w.clock.advance(10_000)
+  expect(statuses(w)).toEqual(['running'])
+  expect(outcomes(w)).toEqual(['summary'])
+  await w.clock.advance(5_000)
+  expect(statuses(w)).toEqual(['running', 'ended', 'running'])
+  expect(outcomes(w)).toEqual(['summary', 'summary', 'summary'])
+})
+
+test('a turn whose predecessor\'s running call is still in flight at its firstSeconds deadline is summarized after that call and its ended call, and keeps its own summary in the pane', async ($, on) => {
+  const w = world(on, { settings: { firstSeconds: 10 } })
+  w.replies.push(answer('Turn A so far.', 'Turn A now.'), answer('Turn A done.', 'Waiting on the person.'), answer('Opening the PR.', 'Pushing the branch.'))
+  await start($)
+  await turnStart($)
+  w.messagesHoldMs = 40_000
+  await w.clock.advance(30_000)
+  await w.clock.advance(15_000)
+  w.messagesHoldMs = 10_000
+  await complete($)
+  w.messages.push(user(NUDGE))
+  await turnStart($, NUDGE)
+  await w.clock.advance(15_000)
+  expect(statuses(w)).toEqual([])
+  expect(outcomes(w)).toEqual([])
+  await w.clock.advance(10_000)
+  expect(statuses(w)).toEqual(['running'])
+  await w.clock.advance(10_000)
+  expect(statuses(w)).toEqual(['running', 'ended', 'running'])
+  expect(outcomes(w)).toEqual(['summary', 'summary', 'summary'])
+  expect((await paneTexts($)).slice(0, 4)).toEqual(['So far', 'Opening the PR.', 'Now', 'Pushing the branch.'])
+})
+
+test('a running call waiting behind the turn before\'s call is dropped when its own turn ends meanwhile, and that turn gets its ended call', async ($, on) => {
+  const w = world(on, { settings: { firstSeconds: 10 } })
+  await start($)
+  await turnStart($)
+  w.messagesHoldMs = 40_000
+  await w.clock.advance(30_000)
+  await w.clock.advance(15_000)
+  await complete($)
+  await turnStart($, NUDGE)
+  await w.clock.advance(17_000)
+  await complete($)
+  await w.clock.advance(8_000)
+  await w.clock.settle()
+  expect(statuses(w)).toEqual(['running', 'ended', 'ended'])
+  expect([...outcomes(w)].sort()).toEqual(['skip-inflight', 'summary', 'summary', 'summary'])
+})
+
+test('a running call waiting behind an earlier turn\'s call is dropped when its turn ends and another starts meanwhile, which is first summarized at its own firstSeconds', async ($, on) => {
+  const w = world(on, { settings: { firstSeconds: 10 } })
+  await start($)
+  await turnStart($)
+  w.messagesHoldMs = 40_000
+  await w.clock.advance(30_000)
+  await w.clock.advance(15_000)
+  await complete($)
+  await turnStart($, NUDGE)
+  await w.clock.advance(17_000)
+  await complete($)
+  w.messages.push(user('STOP JUDGE — merge it yourself.'))
+  await turnStart($, 'STOP JUDGE — merge it yourself.')
+  await w.clock.advance(8_000)
+  await w.clock.settle()
+  expect(statuses(w)).toEqual(['running', 'ended', 'ended'])
+  expect([...outcomes(w)].sort()).toEqual(['skip-inflight', 'summary', 'summary', 'summary'])
+  await w.clock.advance(20_000)
+  expect(statuses(w)).toEqual(['running', 'ended', 'ended', 'running'])
+})
+
 test('a turn whose session log matches the last summary of the turn before is still summarized at firstSeconds', async ($, on) => {
   const w = world(on, { settings: { source: 'session-log' } })
   w.files.set(sessionLogPath(DIR, ID), '## 12:00 building the summary plugin\n')
