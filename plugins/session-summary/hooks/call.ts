@@ -40,10 +40,12 @@ export function addCall(calls: Calls, usage: ModelUsage, usd: number): Calls {
 }
 
 // Every firing line's reason leads with these six fields in this order, zeros where no call was
-// made: the README's read-back splits the line by position. A `/session-summary now` call adds
-// `manual` after them.
-export function firingReason(r: { source: Source; variant: string; usage?: ModelUsage; usd?: number; failure?: string; isManual?: boolean }): string {
+// made: the README's read-back splits the line by position. A call the timer did not start adds
+// its trigger after them: `manual` (/session-summary now) or `first` (the session's first prompt).
+export type Trigger = 'timer' | 'manual' | 'first'
+
+export function firingReason(r: { source: Source; variant: string; usage?: ModelUsage; usd?: number; failure?: string; trigger?: Trigger }): string {
   const u = r.usage
   const fields = `source=${r.source} variant=${r.variant} in=${u?.input_tokens ?? 0} out=${u?.output_tokens ?? 0} cached=${u?.cache_read_input_tokens ?? 0} usd=${(r.usd ?? 0).toFixed(4)}`
-  return [fields, ...(r.isManual ? ['manual'] : []), ...(r.failure ? [r.failure] : [])].join(' ')
+  return [fields, ...(r.trigger && r.trigger !== 'timer' ? [r.trigger] : []), ...(r.failure ? [r.failure] : [])].join(' ')
 }

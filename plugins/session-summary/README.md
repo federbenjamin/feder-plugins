@@ -23,6 +23,7 @@ It starts in the next session. To run it in every session without installing it,
 ## How it works
 
 - **A haiku call writes the texts.** It reads a tail window of the session's recent activity (16,000 characters, oldest first) and the previous texts, and answers three labelled lines. Tool results are left out; each tool call is one line (`→ Bash: <command>`, `→ Edit: <file>`).
+- **First prompt.** When a main turn starts while the band is empty (a new session, or after `/clear`), one call runs at the turn's first model step, so the band fills within seconds. Its title is marked provisional in the next call's request, which may replace it once the activity shows the work; after that the title holds as usual. A resumed session whose band is restored from its capture makes no such call.
 - **Cadence.** 90 seconds after a main turn starts, every 10 minutes while it runs, and once more when it ends and hands back to you (status `ended`). A turn that ends before the first 90 seconds makes no call. A call reading the same window as the last summary in the same turn is skipped, and the window is checked again 10 minutes later (a turn's first call is never skipped); a failed call is retried at the same 10 minutes. A turn whose first call comes due while the turn before's call is still running gets it as soon as that call lands, one call at a time.
 - **Main turns only.** A turn starts the clock whatever started it: your prompt, a stop-judge nudge, a task notification. Subagent turns and cache-keepalive's ping turns are ignored.
 - **Title**: the thing the session is building, fixing, or deciding, in ten words or fewer, at the top of the band, with no stage words such as planning or testing. The model keeps it word for word until the person moves the session to different work; a new step or side task is not a change.
@@ -66,14 +67,14 @@ Every call, and every tick that skips one, appends one line to `~/.claude/stopst
 <utc> <outcome> session=<id> ms=<n> reason=source=<arm> variant=<name> in=<n> out=<n> cached=<n> usd=<x>
 ```
 
-A call made by `/session-summary now` ends its line with `manual`.
+A call the timer did not start ends its line with its trigger: `manual` for `/session-summary now`, `first` for the first-prompt call.
 
 `in` and `cached` are the uncached and cache-read input tokens; `usd` is priced at haiku's rates per token category.
 
 | Outcome | Meaning |
 | --- | --- |
 | `summary` | The reply carried all three lines; the band has them |
-| `parse-partial` | One or two lines came back; the missing ones kept their previous text |
+| `parse-partial` | Some of the four lines came back; the missing ones kept their previous text |
 | `parse-failed` | No line came back; the band is unchanged |
 | `skip-same` | The window was the same as the last summary's in this turn; no call |
 | `skip-inflight` | A call was due while one of the same turn was still running or waiting for the turn before's, or the turn ended while its call waited; no call |

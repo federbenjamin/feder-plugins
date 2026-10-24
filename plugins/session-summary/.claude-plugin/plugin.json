@@ -1,6 +1,6 @@
 {
   "name": "session-summary",
-  "version": "0.3.2",
+  "version": "0.4.0",
   "description": "A band above the prompt that says what this session is about, what it is doing now, and which files to open; /session-summary",
   "author": { "name": "Benjamin Feder" },
   "types": "./types/index.d.ts"
