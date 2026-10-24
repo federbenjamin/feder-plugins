@@ -61,7 +61,6 @@ test('a complete reply keeps only candidate files in the model order', () => {
     'TITLE: Boundary tests\nSO FAR: implementation complete\nNOW: waiting for review\nFILES: notes/plan.md, outside.txt, src/first.ts',
     previous,
     ['src/first.ts', 'notes/plan.md'],
-    'running',
   )
 
   expect(parsed).toEqual({

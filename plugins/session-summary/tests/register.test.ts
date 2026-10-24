@@ -595,6 +595,38 @@ test('/session-summary replies carry no name of their own: the engine prints it'
   expect((await run($, '')).text).toMatch(/^Title: /)
 })
 
+test('/session-summary now makes one call at once, even switched off and outside a turn, and leaves the timer\'s schedule alone', async ($, on) => {
+  const w = world(on, { settings: { isOff: true } })
+  await start($)
+  const reply = await run($, 'now')
+  expect(w.requests).toHaveLength(1)
+  expect(statuses(w)).toEqual(['ended'])
+  expect(reply.text).toMatch(/^now: summary\nTitle: Summary plugin\nSo far: Building the summary plugin\./)
+  expect(logLines(w)).toEqual([expect.stringMatching(/^\S+ summary session=synthetic-session ms=\d+ reason=source=messages variant=edit in=1200 out=80 cached=300 usd=\d+\.\d{4} manual$/)])
+  expect(await bandTexts($)).toContain('Building the summary plugin.')
+
+  expect((await run($, 'now')).text).toMatch(/^now: summary\n/)
+  expect(w.requests).toHaveLength(2)
+
+  expect((await run($, 'on')).text).toBe('on: summary calls resume, in every session')
+  await turnStart($)
+  w.replies.push(answer('Still building.', 'Testing now.'))
+  expect((await run($, 'now')).text).toMatch(/^now: summary\n/)
+  expect(statuses(w)).toEqual(['ended', 'ended', 'running'])
+  w.messages.push(user('and test it'))
+  await w.clock.advance(90_000)
+  expect(statuses(w)).toEqual(['ended', 'ended', 'running', 'running'])
+  expect(outcomes(w)).toEqual(['summary', 'summary', 'summary', 'summary'])
+})
+
+test('/session-summary now in a non-interactive session makes no call and says why', async ($, on) => {
+  const w = world(on)
+  await start($, false)
+  expect((await run($, 'now')).text).toBe('now: no call; summaries run in interactive sessions only')
+  expect(w.requests).toEqual([])
+  expect(logLines(w)).toEqual([])
+})
+
 test('a call that throws logs api-error with the same leading fields as a call', async ($, on) => {
   const w = world(on)
   w.messagesError = 'messages unavailable'

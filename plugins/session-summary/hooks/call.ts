@@ -40,9 +40,10 @@ export function addCall(calls: Calls, usage: ModelUsage, usd: number): Calls {
 }
 
 // Every firing line's reason leads with these six fields in this order, zeros where no call was
-// made: the README's read-back splits the line by position.
-export function firingReason(r: { source: Source; variant: string; usage?: ModelUsage; usd?: number; failure?: string }): string {
+// made: the README's read-back splits the line by position. A `/session-summary now` call adds
+// `manual` after them.
+export function firingReason(r: { source: Source; variant: string; usage?: ModelUsage; usd?: number; failure?: string; isManual?: boolean }): string {
   const u = r.usage
   const fields = `source=${r.source} variant=${r.variant} in=${u?.input_tokens ?? 0} out=${u?.output_tokens ?? 0} cached=${u?.cache_read_input_tokens ?? 0} usd=${(r.usd ?? 0).toFixed(4)}`
-  return r.failure ? `${fields} ${r.failure}` : fields
+  return [fields, ...(r.isManual ? ['manual'] : []), ...(r.failure ? [r.failure] : [])].join(' ')
 }

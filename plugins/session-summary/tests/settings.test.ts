@@ -24,6 +24,7 @@ test('each documented command selects exactly one action', () => {
   expect(summaryCommand(' ON ')).toEqual({ kind: 'on' })
   expect(summaryCommand('off')).toEqual({ kind: 'off' })
   expect(summaryCommand('show')).toEqual({ kind: 'show' })
+  expect(summaryCommand('NOW')).toEqual({ kind: 'now' })
   expect(summaryCommand('usage')).toEqual({ kind: 'usage' })
   expect(summaryCommand('FIRST 30')).toEqual({ kind: 'first', seconds: 30 })
   expect(summaryCommand('every 600')).toEqual({ kind: 'every', seconds: 600 })
@@ -33,10 +34,10 @@ test('each documented command selects exactly one action', () => {
 })
 
 test('partial, extended, and invalid commands reach usage instead of a nearby action', () => {
-  for (const args of ['on now', 'first', 'first 0', 'first -1', 'first 1.5', 'every 3 later', 'source', 'source log', 'variant', 'variant missing', 'nonsense']) {
+  for (const args of ['on now', 'now please', 'first', 'first 0', 'first -1', 'first 1.5', 'every 3 later', 'source', 'source log', 'variant', 'variant missing', 'nonsense']) {
     expect(summaryCommand(args)).toEqual({ kind: 'usage' })
   }
-  expect(USAGE).toBe('/session-summary [on|off|first <seconds>|every <seconds>|source messages|session-log|variant <name>|show]')
+  expect(USAGE).toBe('/session-summary [on|off|first <seconds>|every <seconds>|source messages|session-log|variant <name>|show|now]')
 })
 
 test('a populated report preserves summary details, settings, usage, and capture location', () => {

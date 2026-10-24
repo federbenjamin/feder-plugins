@@ -30,7 +30,7 @@
     {
       "name": "session-summary",
       "source": "./plugins/session-summary",
-      "description": "A pane beside the chat that says what this session is about, what it is doing now, and which files to open; /session-summary",
+      "description": "A band above the prompt that says what this session is about, what it is doing now, and which files to open; /session-summary",
       "category": "productivity"
     },
     {
