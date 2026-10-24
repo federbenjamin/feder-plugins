@@ -1,5 +1,5 @@
 import type { ModelCompleteResult, ModelUsage } from 'claude-code'
-import type { Source, SummaryStatus } from '../types'
+import type { Source } from '../types'
 import type { Calls } from './settings.ts'
 import { parseReply } from './summary.ts'
 import type { Previous } from './summary.ts'
@@ -14,17 +14,17 @@ export type CallOutcome = 'summary' | 'parse-partial' | 'parse-failed' | 'api-er
 // signal or timeout is `aborted`, any other unanswered one an `api-error` naming why.
 export type ReplyResult = { outcome: CallOutcome; failure: string; texts: Previous; isTaken: boolean }
 
-export function replyResult(reply: ModelCompleteResult, previous: Previous, candidates: readonly string[], status: SummaryStatus): ReplyResult {
+export function replyResult(reply: ModelCompleteResult, previous: Previous, candidates: readonly string[]): ReplyResult {
   if (!reply.isAnswered) {
     if (reply.reason === 'aborted') return { outcome: 'aborted', failure: '', texts: previous, isTaken: false }
     const failure = `${reply.reason} ${reply.reason === 'api-error' ? reply.error : ''}`.trimEnd()
     return { outcome: 'api-error', failure, texts: previous, isTaken: false }
   }
-  const parsed = parseReply(reply.text, previous, candidates, status)
+  const parsed = parseReply(reply.text, previous, candidates)
   return {
     outcome: parsed.outcome,
     failure: '',
-    texts: { soFar: parsed.soFar, now: parsed.now, files: parsed.files },
+    texts: { title: parsed.title, soFar: parsed.soFar, now: parsed.now, files: parsed.files },
     isTaken: parsed.outcome !== 'parse-failed',
   }
 }

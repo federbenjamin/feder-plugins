@@ -9,7 +9,7 @@ import { isRecord, isTypedText, SIBLING_TEXTS } from './shared/typed.ts'
 // The summary's pure side: when a tick calls, what the call reads, what it asks, how the reply
 // is read, the capture line and the band's rows.
 
-const EMPTY: Summary = { soFar: '', now: '', files: [], at: 0, status: 'running', source: 'messages', variant: DEFAULT_VARIANT }
+const EMPTY: Summary = { title: '', soFar: '', now: '', files: [], at: 0, status: 'running', source: 'messages', variant: DEFAULT_VARIANT }
 export const EMPTY_SUMMARY: Summary = Object.freeze(EMPTY)
 
 // A call is due while a main turn runs: the first `firstSeconds` after the turn started, then
@@ -86,15 +86,33 @@ export function fileCandidates(messages: readonly SessionMessage[], limit: numbe
   return limit > 0 ? list.slice(-limit) : []
 }
 
-export type Previous = Pick<Summary, 'soFar' | 'now' | 'files'>
+// The files the session sent to the person: the likeliest ones for them to open.
+export function sentFiles(messages: readonly SessionMessage[]): string[] {
+  const sent = new Set<string>()
+  for (const u of messages.flatMap(m => m.toolUses)) {
+    if (u.tool !== 'SendUserFile' || !isRecord(u.input) || !Array.isArray(u.input.files)) continue
+    for (const f of u.input.files) if (typeof f === 'string' && f !== '') sent.add(f)
+  }
+  return [...sent]
+}
 
-export function buildRequest(r: { variant: string; source: Source; previous: Previous; input: string; candidates: readonly string[]; status: SummaryStatus }): { system: string; prompt: string } {
+// What FILES may name: this window's candidates, and the files already shown, so a file stays
+// while it is still relevant and leaves only when the model drops it.
+export function allowedFiles(candidates: readonly string[], previous: readonly string[]): string[] {
+  return [...new Set([...previous, ...candidates])]
+}
+
+export type Previous = Pick<Summary, 'title' | 'soFar' | 'now' | 'files'>
+
+export function buildRequest(r: { variant: string; source: Source; previous: Previous; input: string; candidates: readonly string[]; sent: readonly string[]; status: SummaryStatus }): { system: string; prompt: string } {
   const system = VARIANTS[r.variant] ?? VARIANTS[DEFAULT_VARIANT]!
-  const candidates = r.candidates.length > 0 ? r.candidates.map(p => `- ${p}`).join('\n') : '(none)'
+  const allowed = allowedFiles(r.candidates, r.previous.files)
+  const candidates = allowed.length > 0 ? allowed.map(p => `- ${p}${r.sent.includes(p) ? ' (sent to the person)' : ''}`).join('\n') : '(none)'
   const header = r.source === 'session-log' ? "The session's own log (tail):" : 'Recent activity (oldest first, may start mid-way):'
   const prompt = [
     `Status: ${r.status}`,
     [
+      `Previous TITLE: ${r.previous.title || '(none yet)'}`,
       `Previous SO FAR: ${r.previous.soFar || '(none yet)'}`,
       `Previous NOW: ${r.previous.now || '(none yet)'}`,
       `Previous FILES: ${r.previous.files.join(', ') || 'none'}`,
@@ -105,23 +123,24 @@ export function buildRequest(r: { variant: string; source: Source; previous: Pre
   return { system, prompt }
 }
 
-export type Parsed = { soFar: string; now: string; files: string[]; outcome: 'summary' | 'parse-partial' | 'parse-failed' }
+export type Parsed = { title: string; soFar: string; now: string; files: string[]; outcome: 'summary' | 'parse-partial' | 'parse-failed' }
 
 // A label's value is the rest of its own line; a label with nothing after it counts as absent.
 const lineValue = (text: string, re: RegExp): string | undefined => re.exec(text)?.[1]?.trim()
 
-export function parseReply(text: string, previous: Previous, candidates: readonly string[], status: SummaryStatus): Parsed {
+export function parseReply(text: string, previous: Previous, candidates: readonly string[]): Parsed {
+  const title = lineValue(text, /^TITLE:[^\S\r\n]*(\S.*)$/m)
   const soFar = lineValue(text, /^SO FAR:[^\S\r\n]*(\S.*)$/m)
   const now = lineValue(text, /^NOW:[^\S\r\n]*(\S.*)$/m)
   const filesText = lineValue(text, /^FILES:[^\S\r\n]*(\S.*)$/m)
-  const found = [soFar, now, filesText].filter(v => v !== undefined).length
-  if (found === 0) return { soFar: previous.soFar, now: previous.now, files: [...previous.files], outcome: 'parse-failed' }
+  const found = [title, soFar, now, filesText].filter(v => v !== undefined).length
+  if (found === 0) return { title: previous.title, soFar: previous.soFar, now: previous.now, files: [...previous.files], outcome: 'parse-failed' }
+  const allowed = allowedFiles(candidates, previous.files)
   let files: string[]
-  if (candidates.length === 0) files = status === 'running' ? [...previous.files] : []
-  else if (filesText === undefined) files = [...previous.files]
+  if (filesText === undefined) files = [...previous.files]
   else if (filesText.toLowerCase() === 'none') files = []
-  else files = [...new Set(filesText.split(',').map(p => p.trim()))].filter(p => candidates.includes(p)).slice(0, FILES_MAX)
-  return { soFar: soFar ?? previous.soFar, now: now ?? previous.now, files, outcome: found === 3 ? 'summary' : 'parse-partial' }
+  else files = [...new Set(filesText.split(',').map(p => p.trim()))].filter(p => allowed.includes(p)).slice(0, FILES_MAX)
+  return { title: title ?? previous.title, soFar: soFar ?? previous.soFar, now: now ?? previous.now, files, outcome: found === 4 ? 'summary' : 'parse-partial' }
 }
 
 export function capturePath(dir: string, sessionId: string): string {
@@ -137,6 +156,7 @@ export type Capture = {
   input: string
   inputChars: number
   candidates: string[]
+  title: string
   soFar: string
   now: string
   files: string[]
@@ -166,6 +186,7 @@ export function seedFromCapture(text: string): Summary | null {
   if (!isRecord(c) || typeof c.soFar !== 'string' || typeof c.now !== 'string') return null
   const at = typeof c.at === 'string' ? Date.parse(c.at) : NaN
   return {
+    title: typeof c.title === 'string' ? c.title : '',
     soFar: c.soFar,
     now: c.now,
     files: Array.isArray(c.files) ? c.files.filter((f): f is string => typeof f === 'string') : [],
@@ -176,14 +197,15 @@ export function seedFromCapture(text: string): Summary | null {
   }
 }
 
-// The band's rows: SO FAR and NOW with their texts starting in one column, then the recent files,
+// The band's rows: the title, SO FAR and NOW with their texts starting in one column, then the recent files,
 // then how fresh the texts are. No rows before the first summary, so the band takes no space
 // until there is something to say. The source and variant stay in `/session-summary show`.
 export const BAND_LABEL_WIDTH = 'SO FAR:'.length
 
-export function bandLines(summary: Summary, now: number): { label: string; text: string; dim: boolean }[] {
+export function bandLines(summary: Summary, now: number): { label: string; text: string; dim: boolean; bold?: true }[] {
   if (summary.at === 0 && summary.soFar === '' && summary.now === '') return []
   return [
+    ...(summary.title !== '' ? [{ label: '', text: summary.title, dim: false, bold: true as const }] : []),
     { label: 'SO FAR:', text: summary.soFar || '(none yet)', dim: false },
     { label: 'NOW:', text: summary.now || '(none yet)', dim: false },
     ...(summary.files.length > 0 ? [{ label: 'RECENT FILES:', text: summary.files.join(', '), dim: true }] : []),
