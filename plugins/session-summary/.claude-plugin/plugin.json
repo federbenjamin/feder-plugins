@@ -1,6 +1,6 @@
 {
   "name": "session-summary",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "A pane beside the chat that says what this session is about, what it is doing now, and which files to open; /session-summary",
   "author": { "name": "Benjamin Feder" },
   "types": "./types/index.d.ts"

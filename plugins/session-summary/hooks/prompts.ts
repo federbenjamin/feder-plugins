@@ -6,7 +6,7 @@ export const DEFAULT_VARIANT = 'edit'
 const INTRO =
   'You keep four short texts for a person who runs many Claude Code sessions at once and glances at this one to recall what it is doing. In the activity below, USER is that person, ASSISTANT is this session\'s agent, and NOTE is text another tool put in front of the agent.'
 
-const TITLE = 'TITLE: what this session is, in ten words or fewer. Keep the previous TITLE word for word unless the session\'s purpose has changed.'
+const TITLE = 'TITLE: the thing this session is building, fixing, or deciding, as a noun phrase of ten words or fewer, like "Session summary band for Claude Code". No status or stage words like planning, designing, building, or testing. Keep the previous TITLE word for word. Change it only when the person has moved this session to a different piece of work; new steps, tests, reviews, and side tasks are not a change. The recent activity may show only the latest step; the previous TITLE names the whole session.'
 
 const SO_FAR = 'SO FAR: one or two sentences on what this session is about and what it has done since it began.'
 const SO_FAR_END = 'Do not list steps.'
