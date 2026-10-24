@@ -176,14 +176,17 @@ export function seedFromCapture(text: string): Summary | null {
   }
 }
 
-// The band's rows: a dim label beside each text, then one dim row of the files and freshness.
-// No rows before the first summary, so the band takes no space until there is something to say.
+// The band's rows: SO FAR and NOW with their texts starting in one column, then the recent files,
+// then how fresh the texts are. No rows before the first summary, so the band takes no space
+// until there is something to say. The source and variant stay in `/session-summary show`.
+export const BAND_LABEL_WIDTH = 'SO FAR:'.length
+
 export function bandLines(summary: Summary, now: number): { label: string; text: string; dim: boolean }[] {
   if (summary.at === 0 && summary.soFar === '' && summary.now === '') return []
-  const updated = `updated ${Math.floor((now - summary.at) / 60_000)} min ago · ${summary.source} · ${summary.variant}`
   return [
-    { label: 'So far', text: summary.soFar || '(none yet)', dim: false },
-    { label: 'Now', text: summary.now || '(none yet)', dim: false },
-    { label: '', text: [...summary.files, updated].join(' · '), dim: true },
+    { label: 'SO FAR:', text: summary.soFar || '(none yet)', dim: false },
+    { label: 'NOW:', text: summary.now || '(none yet)', dim: false },
+    ...(summary.files.length > 0 ? [{ label: 'RECENT FILES:', text: summary.files.join(', '), dim: true }] : []),
+    { label: '', text: `updated ${Math.floor((now - summary.at) / 60_000)} min ago`, dim: true },
   ]
 }

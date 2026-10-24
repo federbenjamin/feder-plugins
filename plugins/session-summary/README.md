@@ -31,7 +31,7 @@ It starts in the next session. To run it in every session without installing it,
 
 ## The band
 
-The texts sit in the band directly above the prompt, at the bottom of the screen, in every layout and at any width: a dim label beside So far and Now, then one dim row of the files and when it was last updated. The band stays empty until the session's first summary. Claude Code's `[-]` mark at its right end collapses it.
+The texts sit in the band directly above the prompt, at the bottom of the screen, in every layout and at any width, under a thin line and on a darker background than the transcript: `SO FAR:` and `NOW:` with their texts starting in one column, then `RECENT FILES:` when there are any, then when the texts were last updated. The input source and prompt variant are not drawn; `/session-summary show` prints them. The band stays empty until the session's first summary. Claude Code's `[-]` mark at its right end collapses it.
 
 ## Experiment switches
 
