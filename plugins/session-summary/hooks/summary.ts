@@ -123,6 +123,15 @@ export function buildRequest(r: { variant: string; source: Source; previous: Pre
   return { system, prompt }
 }
 
+// The TASK verdict that opens a reply: whether the person moved the session to a new task. Null
+// when the reply has none; the texts are read the same either way.
+export type TaskVerdict = 'same' | 'new' | null
+
+export function parseTask(text: string): TaskVerdict {
+  const verdict = /^TASK:[^\S\r\n]*(same|new)\b/im.exec(text)?.[1]?.toLowerCase()
+  return verdict === 'same' || verdict === 'new' ? verdict : null
+}
+
 export type Parsed = { title: string; soFar: string; now: string; files: string[]; outcome: 'summary' | 'parse-partial' | 'parse-failed' }
 
 // A label's value is the rest of its own line; a label with nothing after it counts as absent.
@@ -158,6 +167,7 @@ export type Capture = {
   source: Source
   variant: string
   previous: Previous
+  task: TaskVerdict
   input: string
   inputChars: number
   candidates: string[]

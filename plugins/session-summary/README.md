@@ -22,7 +22,8 @@ It starts in the next session. To run it in every session without installing it,
 
 ## How it works
 
-- **A haiku call writes the texts.** It reads a tail window of the session's recent activity (16,000 characters, oldest first) and the previous texts, and answers three labelled lines. Tool results are left out; each tool call is one line (`→ Bash: <command>`, `→ Edit: <file>`).
+- **A haiku call writes the texts.** It reads a tail window of the session's recent activity (16,000 characters, oldest first) and the previous texts, and answers a TASK verdict and four labelled texts. Tool results are left out; each tool call is one line (`→ Bash: <command>`, `→ Edit: <file>`).
+- **Task switches.** Each reply opens with `TASK: same` or `TASK: new`: whether you moved the session to a different outcome than the previous title names. Steps, fixes, reviews, approvals and follow-ups are `same`; a question asked in passing is not a new task. On `same` the title holds word for word and SO FAR is edited; on `new` the title names the new task and SO FAR is written fresh for it, with at most one clause about earlier work. The capture records each verdict.
 - **First prompt.** When a main turn starts while the band is empty (a new session, or after `/clear`), one call runs at the turn's first model step, so the band fills within seconds. Its title is marked provisional in the next call's request, which may replace it once the activity shows the work; after that the title holds as usual. A resumed session whose band is restored from its capture makes no such call.
 - **Cadence.** 90 seconds after a main turn starts, every 10 minutes while it runs, and once more when it ends and hands back to you (status `ended`). A turn that ends before the first 90 seconds makes no call. A call reading the same window as the last summary in the same turn is skipped, and the window is checked again 10 minutes later (a turn's first call is never skipped); a failed call is retried at the same 10 minutes. A turn whose first call comes due while the turn before's call is still running gets it as soon as that call lands, one call at a time.
 - **Main turns only.** A turn starts the clock whatever started it: your prompt, a stop-judge nudge, a task notification. Subagent turns and cache-keepalive's ping turns are ignored.
@@ -96,7 +97,7 @@ awk '$2 !~ /^(skip|log-missing)/ { split($5,s,"="); split($6,v,"="); split($7,i,
 
 ## Capture
 
-Every call appends one JSON line to `~/.claude/stopstopping/session-summaries/<session id>.jsonl`: `at`, `status`, `source`, `variant`, the `previous` texts, the `input` it read and `inputChars`, the file `candidates`, the new `soFar`, `now` and `files`, the `outcome`, `ms`, the token `usage` and `usd`. Compare two sources or variants by reading their captures side by side.
+Every call appends one JSON line to `~/.claude/stopstopping/session-summaries/<session id>.jsonl`: `at`, `status`, `source`, `variant`, the `previous` texts, the `task` verdict (`same`, `new`, or null when the reply had none), the `input` it read and `inputChars`, the file `candidates`, the new `title`, `soFar`, `now` and `files`, the `outcome`, `ms`, the token `usage` and `usd`. Compare two sources or variants by reading their captures side by side.
 
 ## Settings
 

@@ -143,6 +143,7 @@ async function call($: EngineInterface, state: State, status: SummaryStatus, epo
         source,
         variant,
         previous,
+        task: result.task,
         input,
         inputChars: input.length,
         candidates,
