@@ -41,12 +41,13 @@ test('partial, extended, and invalid commands reach usage instead of a nearby ac
 
 test('a populated report preserves summary details, settings, usage, and capture location', () => {
   expect(showText({
-    summary: { soFar: 'audit complete', now: 'add tests', files: ['src/a.ts', 'src/b.ts'], at: 2_520_000, status: 'ended', source: 'session-log', variant: 'brief' },
+    summary: { title: 'Audit', soFar: 'audit complete', now: 'add tests', files: ['src/a.ts', 'src/b.ts'], at: 2_520_000, status: 'ended', source: 'session-log', variant: 'brief' },
     settings: { isOff: true, firstSeconds: 45, everySeconds: 300, source: 'session-log', variant: 'brief' },
     calls: { count: 4, input: 12, output: 3, cached: 8, usd: 0.123456 },
     capturePath: '/state/session-summaries/s1.jsonl',
     now: 3_780_000,
   })).toBe([
+    'Title: Audit',
     'So far: audit complete',
     'Now: add tests',
     'Files: src/a.ts, src/b.ts',
@@ -59,12 +60,13 @@ test('a populated report preserves summary details, settings, usage, and capture
 
 test('a report without a summary or state directory makes each unavailable value explicit', () => {
   expect(showText({
-    summary: { soFar: '', now: '', files: [], at: 0, status: 'running', source: 'messages', variant: 'edit' },
+    summary: { title: '', soFar: '', now: '', files: [], at: 0, status: 'running', source: 'messages', variant: 'edit' },
     settings: defaults,
     calls: { count: 0, input: 0, output: 0, cached: 0, usd: 0 },
     capturePath: null,
     now: 1_000_000,
   })).toBe([
+    'Title: (none yet)',
     'So far: (none yet)',
     'Now: (none yet)',
     'Files: none',

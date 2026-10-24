@@ -2,7 +2,7 @@
 export const PLUGIN = 'session-summary'
 export const SETTINGS_KEY = 'settings'
 // The atom's shape tag; bump it when Summary's fields change.
-export const SHAPE = 'summary-1'
+export const SHAPE = 'summary-2'
 // The band's fill, set apart from the transcript above it.
 export const BAND_BACKGROUND = '#262b36'
 export const TICK_MS = 30_000

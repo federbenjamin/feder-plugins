@@ -9,10 +9,10 @@ import type { Calls, Settings } from './settings.ts'
 import { sessionLogPath } from './shared/firing.ts'
 import { PRICES, usageUsd } from './shared/pricing.ts'
 import { appendLine, record, stateDirs } from './shared/record.ts'
-import { buildRequest, captureLine, capturePath, EMPTY_SUMMARY, fileCandidates, formatLog, formatMessages, isBumpTurn, isDue, seedFromCapture } from './summary.ts'
+import { buildRequest, captureLine, capturePath, EMPTY_SUMMARY, fileCandidates, sentFiles, formatLog, formatMessages, isBumpTurn, isDue, seedFromCapture } from './summary.ts'
 import type { Previous } from './summary.ts'
 
-// Keeps three short texts about this session (so far, now, files to open) in a band above the
+// Keeps short texts about this session (title, so far, now, files to open) in a band above the
 // chat. A haiku call writes them firstSeconds after a main turn starts, every everySeconds while
 // it runs, and once more when a summarized turn ends. Every call is logged and captured to the
 // session's own file, which a resumed session seeds the band from. Pure logic is in summary.ts
@@ -75,6 +75,7 @@ async function call($: EngineInterface, state: State, status: SummaryStatus, epo
     variant = settings.variant
     const messages = await $.session.messages()
     const candidates = fileCandidates(messages, CANDIDATE_MAX)
+    const sent = sentFiles(messages)
     let input: string | undefined
     if (settings.source === 'session-log') {
       const logFile = dir === '' ? '' : sessionLogPath(dir, id)
@@ -94,14 +95,14 @@ async function call($: EngineInterface, state: State, status: SummaryStatus, epo
     }
 
     const stored = await readSummary($)
-    const previous: Previous = { soFar: stored.soFar, now: stored.now, files: [...stored.files] }
+    const previous: Previous = { title: stored.title, soFar: stored.soFar, now: stored.now, files: [...stored.files] }
     if (!isCurrent()) return
     const startedAt = await $.clock.now()
     const controller = new AbortController()
     state.controller = controller
     let reply
     try {
-      reply = await $.model.complete({ ...SUMMARY_REQUEST, ...buildRequest({ variant, source, previous, input, candidates, status }) }, { signal: controller.signal })
+      reply = await $.model.complete({ ...SUMMARY_REQUEST, ...buildRequest({ variant, source, previous, input, candidates, sent, status }) }, { signal: controller.signal })
     } finally {
       if (state.controller === controller) state.controller = undefined
     }
@@ -109,12 +110,12 @@ async function call($: EngineInterface, state: State, status: SummaryStatus, epo
     const ms = endedAt - startedAt
     const usage = reply.usage
     const usd = usageUsd(usage, PRICES.haiku)
-    const result = replyResult(reply, previous, candidates, status)
+    const result = replyResult(reply, previous, candidates)
     // Every await can let session.end reset the state, so each write checks the epoch again
     // after it; the atom update re-runs its change on a version miss, so it checks there too.
     if (isCurrent() && result.isTaken) {
-      const { soFar, now, files } = result.texts
-      await writeSummary($, s => (isCurrent() ? { soFar, now, files, at: endedAt, status, source, variant } : s))
+      const { title, soFar, now, files } = result.texts
+      await writeSummary($, s => (isCurrent() ? { title, soFar, now, files, at: endedAt, status, source, variant } : s))
     }
     if (isCurrent()) {
       // Only a call of the running turn feeds skip-same: the turn before's running or ended call,

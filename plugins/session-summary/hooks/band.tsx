@@ -27,7 +27,7 @@ export const registerBand: Register = on => {
                   <Text bold dimColor={line.dim}>{line.label}</Text>
                 </Box>
               )}
-              <Text dimColor={line.dim}>{line.text}</Text>
+              <Text bold={line.bold} dimColor={line.dim}>{line.text}</Text>
             </Box>
           ))}
         </Box>

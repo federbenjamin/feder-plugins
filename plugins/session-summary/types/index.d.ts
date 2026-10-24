@@ -2,6 +2,7 @@
 export type Source = 'messages' | 'session-log'
 export type SummaryStatus = 'running' | 'ended'
 export type Summary = {
+  title: string // what this session is, in ten words or fewer
   soFar: string
   now: string
   files: string[]
