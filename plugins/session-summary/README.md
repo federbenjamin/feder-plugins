@@ -53,6 +53,7 @@ Three switches, read at every call, so they change a running session:
 | `/session-summary source messages` / `session-log` | The input source |
 | `/session-summary variant <name>` | The prompt variant: `edit`, `rewrite` or `append` |
 | `/session-summary show` | The three texts, the settings, this session's calls, tokens and dollars, and the capture path |
+| `/session-summary now` | One summary call at once, with the session's status (`running` mid-turn, else `ended`), even when switched off or the window is unchanged; prints its outcome, then what `show` prints. The timer's schedule is unchanged. Interactive sessions only |
 | anything else | Print the usage line |
 
 The command is registered in every session, `claude -p` included, so `claude -p "/session-summary off"` works from a script.
@@ -64,6 +65,8 @@ Every call, and every tick that skips one, appends one line to `~/.claude/stopst
 ```
 <utc> <outcome> session=<id> ms=<n> reason=source=<arm> variant=<name> in=<n> out=<n> cached=<n> usd=<x>
 ```
+
+A call made by `/session-summary now` ends its line with `manual`.
 
 `in` and `cached` are the uncached and cache-read input tokens; `usd` is priced at haiku's rates per token category.
 

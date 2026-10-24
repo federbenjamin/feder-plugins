@@ -26,13 +26,14 @@ export type Action =
   | { kind: 'on' }
   | { kind: 'off' }
   | { kind: 'show' }
+  | { kind: 'now' }
   | { kind: 'usage' }
   | { kind: 'first'; seconds: number }
   | { kind: 'every'; seconds: number }
   | { kind: 'source'; source: Source }
   | { kind: 'variant'; variant: string }
 
-export const USAGE = '/session-summary [on|off|first <seconds>|every <seconds>|source messages|session-log|variant <name>|show]'
+export const USAGE = '/session-summary [on|off|first <seconds>|every <seconds>|source messages|session-log|variant <name>|show|now]'
 
 const seconds = (word: string): number | undefined => {
   if (!/^\d+$/.test(word)) return undefined
@@ -46,7 +47,7 @@ export function summaryCommand(args: string): Action {
   if (verb === undefined) return { kind: 'show' }
   if (extra !== undefined) return { kind: 'usage' }
   if (arg === undefined) {
-    if (verb === 'on' || verb === 'off' || verb === 'show') return { kind: verb }
+    if (verb === 'on' || verb === 'off' || verb === 'show' || verb === 'now') return { kind: verb }
     return { kind: 'usage' }
   }
   if (verb === 'first' || verb === 'every') {

@@ -1,6 +1,7 @@
 import type { EngineInterface, Register } from 'claude-code'
 import type { Source, SummaryStatus } from '../types'
 import { addCall, firingReason, replyResult } from './call.ts'
+import type { CallOutcome } from './call.ts'
 import { CANDIDATE_MAX, MESSAGE_CHARS, PLUGIN, SETTINGS_KEY, SUMMARY_REQUEST, TICK_MS, WINDOW_CHARS } from './config.ts'
 import { readSummary, registerBand, writeSummary } from './band.tsx'
 import { DEFAULT_VARIANT } from './prompts.ts'
@@ -25,7 +26,7 @@ type State = {
   isTurnSummarized: boolean
   lastInput: string | undefined // the window of the last summary a call of this turn left in the band
   turn: number // bumped at each main turn.start, so a call of an earlier turn never sets this turn's lastInput
-  inFlight: Promise<void> | undefined
+  inFlight: Promise<unknown> | undefined
   claimedTurn: number | undefined // the turn whose running call a tick claimed, until that call is made or dropped
   controller: AbortController | undefined
   calls: Calls
@@ -63,7 +64,12 @@ function reset(state: State): void {
   state.epoch++
 }
 
-async function call($: EngineInterface, state: State, status: SummaryStatus, epoch: number, turn: number): Promise<void> {
+// What a summarize run came to: a call's outcome, a skip, or undefined when no call was made and
+// nothing was logged (switched off, or the conversation reset under it).
+type RunOutcome = CallOutcome | 'skip-same' | 'skip-inflight' | undefined
+
+// A manual call (`/session-summary now`) runs while switched off and on an unchanged window.
+async function call($: EngineInterface, state: State, status: SummaryStatus, epoch: number, turn: number, isManual: boolean): Promise<RunOutcome> {
   const isCurrent = () => epoch === state.epoch
   let source: Source = 'messages'
   let variant = DEFAULT_VARIANT
@@ -71,7 +77,7 @@ async function call($: EngineInterface, state: State, status: SummaryStatus, epo
     const id = await $.session.id()
     const { dir } = await stateDirs($)
     const settings = await settingsOf($)
-    if (settings.isOff) return
+    if (settings.isOff && !isManual) return undefined
     variant = settings.variant
     const messages = await $.session.messages()
     const candidates = fileCandidates(messages, CANDIDATE_MAX)
@@ -87,16 +93,16 @@ async function call($: EngineInterface, state: State, status: SummaryStatus, epo
       }
     }
     input ??= formatMessages(messages, { windowChars: WINDOW_CHARS, messageChars: MESSAGE_CHARS })
-    if (!isCurrent()) return
+    if (!isCurrent()) return undefined
     // An ended call is never skipped: its status changes the request.
-    if (status === 'running' && input === state.lastInput) {
+    if (status === 'running' && !isManual && input === state.lastInput) {
       await record($, PLUGIN, 'skip-same', firingReason({ source, variant }))
-      return
+      return 'skip-same'
     }
 
     const stored = await readSummary($)
     const previous: Previous = { title: stored.title, soFar: stored.soFar, now: stored.now, files: [...stored.files] }
-    if (!isCurrent()) return
+    if (!isCurrent()) return undefined
     const startedAt = await $.clock.now()
     const controller = new AbortController()
     state.controller = controller
@@ -123,7 +129,7 @@ async function call($: EngineInterface, state: State, status: SummaryStatus, epo
       if (result.isTaken && turn === state.turn) state.lastInput = input
       state.calls = addCall(state.calls, usage, usd)
     }
-    await record($, PLUGIN, result.outcome, firingReason({ source, variant, usage, usd, failure: result.failure }), ms)
+    await record($, PLUGIN, result.outcome, firingReason({ source, variant, usage, usd, failure: result.failure, isManual }), ms)
     if (dir !== '') {
       const line = captureLine({
         at: new Date(endedAt).toISOString(),
@@ -146,8 +152,10 @@ async function call($: EngineInterface, state: State, status: SummaryStatus, epo
         // the capture is for reading back; the band already has the texts
       }
     }
+    return result.outcome
   } catch (error) {
-    await record($, PLUGIN, 'api-error', firingReason({ source, variant, failure: error instanceof Error ? error.message : 'summary failed' }))
+    await record($, PLUGIN, 'api-error', firingReason({ source, variant, failure: error instanceof Error ? error.message : 'summary failed', isManual }))
+    return 'api-error'
   }
 }
 
@@ -158,20 +166,21 @@ async function skipInflight($: EngineInterface, settings: Settings): Promise<voi
 // One call at a time, and a call waits for the one in flight: the tick never starts a running call
 // behind a call of its own turn, so a running call waits only for a call of an earlier turn (its
 // running or ended call), and the new turn's first call still comes firstSeconds after it started.
-async function summarize($: EngineInterface, state: State, status: SummaryStatus): Promise<void> {
+// A manual call waits its turn too, and is made whatever happened to the turn meanwhile.
+async function summarize($: EngineInterface, state: State, status: SummaryStatus, isManual = false): Promise<RunOutcome> {
   const epoch = state.epoch
   const turn = state.turn
   while (state.inFlight !== undefined) await state.inFlight.catch(() => undefined)
-  if (epoch !== state.epoch || !state.isInteractive) return
+  if (epoch !== state.epoch || !state.isInteractive) return undefined
   // A running call whose turn ended while it waited leaves that turn to its ended call.
-  if (status === 'running' && (turn !== state.turn || state.turnStartedAt === 0)) {
+  if (status === 'running' && !isManual && (turn !== state.turn || state.turnStartedAt === 0)) {
     await skipInflight($, await settingsOf($))
-    return
+    return 'skip-inflight'
   }
-  const run = call($, state, status, epoch, turn)
+  const run = call($, state, status, epoch, turn, isManual)
   state.inFlight = run
   try {
-    await run
+    return await run
   } finally {
     if (state.inFlight === run) state.inFlight = undefined
   }
@@ -199,6 +208,12 @@ async function onTick($: EngineInterface, state: State): Promise<void> {
   } finally {
     if (state.claimedTurn === turn) state.claimedTurn = undefined
   }
+}
+
+async function show($: EngineInterface, settings: Settings, calls: Calls): Promise<string> {
+  const { dir } = await stateDirs($)
+  const shown = dir === '' ? null : capturePath(dir, await $.session.id())
+  return showText({ summary: await readSummary($), settings, calls, capturePath: shown, now: await $.clock.now() })
 }
 
 export const register: Register = (on, options) => {
@@ -230,7 +245,7 @@ export const register: Register = (on, options) => {
     await $.command.register({
       name: PLUGIN,
       description: 'Show the session summary, or switch it on/off and set its cadence, input source and prompt',
-      argumentHint: '[on|off|first <s>|every <s>|source messages|session-log|variant <name>|show]',
+      argumentHint: '[on|off|first <s>|every <s>|source messages|session-log|variant <name>|show|now]',
       immediate: true,
     })
     if (e.isInteractive) {
@@ -296,10 +311,14 @@ export const register: Register = (on, options) => {
         return save({ ...settings, source: action.source }, `source ${action.source}`)
       case 'variant':
         return save({ ...settings, variant: action.variant }, `variant ${action.variant}`)
-      case 'show': {
-        const { dir } = await stateDirs($)
-        const shown = dir === '' ? null : capturePath(dir, await $.session.id())
-        return { text: showText({ summary: await readSummary($), settings, calls: state.calls, capturePath: shown, now: await $.clock.now() }) }
+      case 'show':
+        return { text: await show($, settings, state.calls) }
+      // One call now, with the session's real status, outside the timer: the turn's own calls
+      // keep their schedule.
+      case 'now': {
+        if (!state.isInteractive) return { text: 'now: no call; summaries run in interactive sessions only' }
+        const outcome = await summarize($, state, state.turnStartedAt > 0 ? 'running' : 'ended', true)
+        return { text: `now: ${outcome ?? 'no call; the conversation reset'}\n${await show($, await settingsOf($), state.calls)}` }
       }
       case 'usage':
         return { text: USAGE }
