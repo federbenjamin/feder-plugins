@@ -129,6 +129,8 @@ const statuses = (w: World) => w.requests.map(r => /^Status: (\w+)/.exec(String(
 const bandTexts = async ($: Engine) => {
   const ui = await $.ui.mount({ plugin: PLUGIN, surface: 'terminal', component: 'AbovePrompt', requestId: 'band', props: BAND })
   const texts = (await ui.findAll({ type: 'Text' })).map(t => t.text)
+  const separator = texts.findIndex(t => /^─+$/.test(t))
+  if (separator !== -1) texts.splice(separator, 1)
   await ui.unmount()
   return texts
 }
@@ -144,12 +146,14 @@ const summary = (changes: Partial<Summary> = {}): Summary => ({
   ...changes,
 })
 
-test('the band labels each text dim and puts files and freshness on one dim row', async () => {
+test('the band labels SO FAR and NOW, lists recent files under their own label, and ends with freshness', async () => {
   expect(bandLines(summary(), T0)).toEqual([
-    { label: 'So far', text: 'Build the summary plugin', dim: false },
-    { label: 'Now', text: 'Pin its lifecycle contract', dim: false },
-    { label: '', text: 'plugins/session-summary/hooks/register.ts · updated 2 min ago · messages · edit', dim: true },
+    { label: 'SO FAR:', text: 'Build the summary plugin', dim: false },
+    { label: 'NOW:', text: 'Pin its lifecycle contract', dim: false },
+    { label: 'RECENT FILES:', text: 'plugins/session-summary/hooks/register.ts', dim: true },
+    { label: '', text: 'updated 2 min ago', dim: true },
   ])
+  expect(bandLines(summary({ files: [] }), T0).map(l => l.label)).toEqual(['SO FAR:', 'NOW:', ''])
 })
 
 test('an empty summary draws no band rows', async () => {
@@ -174,7 +178,7 @@ test('the band stacks above what another plugin drew there, and leaves it alone 
   expect(await bandTexts($)).toEqual([w.below])
   await turnStart($)
   await w.clock.advance(90_000)
-  expect(await bandTexts($)).toEqual(['So far', 'Building the summary plugin.', 'Now', 'Writing its plan.', `${PLAN} · updated 0 min ago · messages · edit`, w.below])
+  expect(await bandTexts($)).toEqual(['SO FAR:', 'Building the summary plugin.', 'NOW:', 'Writing its plan.', 'RECENT FILES:', PLAN, 'updated 0 min ago', w.below])
 })
 
 test('an interactive session restores its synthetic capture into the band, opening no pane', async ($, on) => {
@@ -184,7 +188,7 @@ test('an interactive session restores its synthetic capture into the band, openi
   expect(w.reads).toEqual([CAPTURE])
   expect(w.commands).toEqual([PLUGIN])
   expect(w.opened).toEqual([])
-  expect(await bandTexts($)).toEqual(['So far', 'Earlier work', 'Now', 'Resume it', `${PLAN} · updated 2 min ago · messages · edit`])
+  expect(await bandTexts($)).toEqual(['SO FAR:', 'Earlier work', 'NOW:', 'Resume it', 'RECENT FILES:', PLAN, 'updated 2 min ago'])
 })
 
 test('a main turn gets its first summary 90 s in: one request, one firing line, one capture line, the pane filled', async ($, on) => {
@@ -204,7 +208,7 @@ test('a main turn gets its first summary 90 s in: one request, one firing line, 
   expect(captures(w)).toEqual([
     expect.objectContaining({ status: 'running', source: 'messages', variant: 'edit', outcome: 'summary', soFar: 'Building the summary plugin.', now: 'Writing its plan.', files: [PLAN], candidates: [PLAN] }),
   ])
-  expect(await bandTexts($)).toEqual(['So far', 'Building the summary plugin.', 'Now', 'Writing its plan.', `${PLAN} · updated 0 min ago · messages · edit`])
+  expect(await bandTexts($)).toEqual(['SO FAR:', 'Building the summary plugin.', 'NOW:', 'Writing its plan.', 'RECENT FILES:', PLAN, 'updated 0 min ago'])
 })
 
 test('a running turn is summarized again 600 s later, and once more with status ended when it completes', async ($, on) => {
@@ -325,7 +329,7 @@ test('the ended call of a turn, starting after the next turn started, leaves tha
   await turnStart($, 'STOP JUDGE — open the PR yourself.')
   await w.clock.advance(5_000)
   expect(statuses(w)).toEqual(['running', 'ended'])
-  expect((await bandTexts($)).slice(0, 4)).toEqual(['So far', 'Turn A done.', 'Now', 'Waiting on the person.'])
+  expect((await bandTexts($)).slice(0, 4)).toEqual(['SO FAR:', 'Turn A done.', 'NOW:', 'Waiting on the person.'])
   w.messages.push(wrote('notes/report.md'))
   await w.clock.advance(75_000)
   expect(statuses(w)).toEqual(['running', 'ended'])
@@ -450,7 +454,7 @@ test('a turn whose predecessor\'s running call is still in flight at its firstSe
   await w.clock.advance(10_000)
   expect(statuses(w)).toEqual(['running', 'ended', 'running'])
   expect(outcomes(w)).toEqual(['summary', 'summary', 'summary'])
-  expect((await bandTexts($)).slice(0, 4)).toEqual(['So far', 'Opening the PR.', 'Now', 'Pushing the branch.'])
+  expect((await bandTexts($)).slice(0, 4)).toEqual(['SO FAR:', 'Opening the PR.', 'NOW:', 'Pushing the branch.'])
 })
 
 test('a running call waiting behind the turn before\'s call is dropped when its own turn ends meanwhile, and that turn gets its ended call', async ($, on) => {

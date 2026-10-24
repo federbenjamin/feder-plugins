@@ -2,7 +2,8 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 import type { Summary } from '../types'
 import { SHAPE } from './config.ts'
-import { bandLines, EMPTY_SUMMARY } from './summary.ts'
+import { BAND_BACKGROUND } from './config.ts'
+import { BAND_LABEL_WIDTH, bandLines, EMPTY_SUMMARY } from './summary.ts'
 
 export const summaryAtom = atom({ plugin: 'session-summary', key: 'summary' } as const, EMPTY_SUMMARY, { shape: SHAPE })
 
@@ -17,12 +18,19 @@ export const registerBand: Register = on => {
     const { Box, Text } = $.ui.resolve(e)
     return (
       <Box flexDirection="column">
-        {lines.map(line => (
-          <Box flexDirection="row" columnGap={1}>
-            {line.label !== '' && <Text dimColor>{line.label}</Text>}
-            <Text dimColor={line.dim}>{line.text}</Text>
-          </Box>
-        ))}
+        <Text dimColor>{'─'.repeat(Math.max(1, e.props.bodyColumns))}</Text>
+        <Box flexDirection="column" backgroundColor={BAND_BACKGROUND} paddingX={1}>
+          {lines.map(line => (
+            <Box flexDirection="row" columnGap={1}>
+              {line.label !== '' && (
+                <Box flexShrink={0} minWidth={BAND_LABEL_WIDTH}>
+                  <Text bold dimColor={line.dim}>{line.label}</Text>
+                </Box>
+              )}
+              <Text dimColor={line.dim}>{line.text}</Text>
+            </Box>
+          ))}
+        </Box>
         {below}
       </Box>
     )
