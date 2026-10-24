@@ -1,7 +1,7 @@
 import type { EngineInterface, Register } from 'claude-code'
 import type { Source, SummaryStatus } from '../types'
 import { addCall, firingReason, replyResult } from './call.ts'
-import type { CallOutcome } from './call.ts'
+import type { CallOutcome, Trigger } from './call.ts'
 import { CANDIDATE_MAX, MESSAGE_CHARS, PLUGIN, SETTINGS_KEY, SUMMARY_REQUEST, TICK_MS, WINDOW_CHARS } from './config.ts'
 import { readSummary, registerBand, writeSummary } from './band.tsx'
 import { DEFAULT_VARIANT } from './prompts.ts'
@@ -31,6 +31,8 @@ type State = {
   controller: AbortController | undefined
   calls: Calls
   epoch: number // bumped at session.start and session.end, so a call that outlived its conversation writes nothing
+  isFirstPending: boolean // a main turn started on an empty band: its first model step makes the first-prompt call
+  isTitleProvisional: boolean // the band's title came from the first-prompt call, written before any work
 }
 
 const noCalls = (): Calls => ({ count: 0, input: 0, output: 0, cached: 0, usd: 0 })
@@ -61,6 +63,8 @@ function reset(state: State): void {
   state.claimedTurn = undefined
   state.controller = undefined
   state.calls = noCalls()
+  state.isFirstPending = false
+  state.isTitleProvisional = false
   state.epoch++
 }
 
@@ -69,8 +73,9 @@ function reset(state: State): void {
 type RunOutcome = CallOutcome | 'skip-same' | 'skip-inflight' | undefined
 
 // A manual call (`/session-summary now`) runs while switched off and on an unchanged window.
-async function call($: EngineInterface, state: State, status: SummaryStatus, epoch: number, turn: number, isManual: boolean): Promise<RunOutcome> {
+async function call($: EngineInterface, state: State, status: SummaryStatus, epoch: number, turn: number, trigger: Trigger): Promise<RunOutcome> {
   const isCurrent = () => epoch === state.epoch
+  const isManual = trigger === 'manual'
   let source: Source = 'messages'
   let variant = DEFAULT_VARIANT
   try {
@@ -108,7 +113,7 @@ async function call($: EngineInterface, state: State, status: SummaryStatus, epo
     state.controller = controller
     let reply
     try {
-      reply = await $.model.complete({ ...SUMMARY_REQUEST, ...buildRequest({ variant, source, previous, input, candidates, sent, status }) }, { signal: controller.signal })
+      reply = await $.model.complete({ ...SUMMARY_REQUEST, ...buildRequest({ variant, source, previous, input, candidates, sent, status, isTitleProvisional: state.isTitleProvisional }) }, { signal: controller.signal })
     } finally {
       if (state.controller === controller) state.controller = undefined
     }
@@ -122,6 +127,7 @@ async function call($: EngineInterface, state: State, status: SummaryStatus, epo
     if (isCurrent() && result.isTaken) {
       const { title, soFar, now, files } = result.texts
       await writeSummary($, s => (isCurrent() ? { title, soFar, now, files, at: endedAt, status, source, variant } : s))
+      if (isCurrent()) state.isTitleProvisional = trigger === 'first'
     }
     if (isCurrent()) {
       // Only a call of the running turn feeds skip-same: the turn before's running or ended call,
@@ -129,7 +135,7 @@ async function call($: EngineInterface, state: State, status: SummaryStatus, epo
       if (result.isTaken && turn === state.turn) state.lastInput = input
       state.calls = addCall(state.calls, usage, usd)
     }
-    await record($, PLUGIN, result.outcome, firingReason({ source, variant, usage, usd, failure: result.failure, isManual }), ms)
+    await record($, PLUGIN, result.outcome, firingReason({ source, variant, usage, usd, failure: result.failure, trigger }), ms)
     if (dir !== '') {
       const line = captureLine({
         at: new Date(endedAt).toISOString(),
@@ -154,7 +160,7 @@ async function call($: EngineInterface, state: State, status: SummaryStatus, epo
     }
     return result.outcome
   } catch (error) {
-    await record($, PLUGIN, 'api-error', firingReason({ source, variant, failure: error instanceof Error ? error.message : 'summary failed', isManual }))
+    await record($, PLUGIN, 'api-error', firingReason({ source, variant, failure: error instanceof Error ? error.message : 'summary failed', trigger }))
     return 'api-error'
   }
 }
@@ -167,17 +173,17 @@ async function skipInflight($: EngineInterface, settings: Settings): Promise<voi
 // behind a call of its own turn, so a running call waits only for a call of an earlier turn (its
 // running or ended call), and the new turn's first call still comes firstSeconds after it started.
 // A manual call waits its turn too, and is made whatever happened to the turn meanwhile.
-async function summarize($: EngineInterface, state: State, status: SummaryStatus, isManual = false): Promise<RunOutcome> {
+async function summarize($: EngineInterface, state: State, status: SummaryStatus, trigger: Trigger = 'timer'): Promise<RunOutcome> {
   const epoch = state.epoch
   const turn = state.turn
   while (state.inFlight !== undefined) await state.inFlight.catch(() => undefined)
   if (epoch !== state.epoch || !state.isInteractive) return undefined
   // A running call whose turn ended while it waited leaves that turn to its ended call.
-  if (status === 'running' && !isManual && (turn !== state.turn || state.turnStartedAt === 0)) {
+  if (status === 'running' && trigger !== 'manual' && (turn !== state.turn || state.turnStartedAt === 0)) {
     await skipInflight($, await settingsOf($))
     return 'skip-inflight'
   }
-  const run = call($, state, status, epoch, turn, isManual)
+  const run = call($, state, status, epoch, turn, trigger)
   state.inFlight = run
   try {
     return await run
@@ -231,6 +237,8 @@ export const register: Register = (on, options) => {
     controller: undefined,
     calls: noCalls(),
     epoch: 0,
+    isFirstPending: false,
+    isTitleProvisional: false,
   }
   let tick: { cancel: () => void } | undefined
 
@@ -264,8 +272,20 @@ export const register: Register = (on, options) => {
       state.isTurnSummarized = false
       state.lastInput = undefined
       state.turn++
+      state.isFirstPending = state.isInteractive && (await readSummary($)).at === 0
     }
     return next(e)
+  })
+
+  // The first-prompt call: at the first model step the transcript holds the prompt. Its title is
+  // provisional, so the turn's call at firstSeconds may replace it; the turn earns its ended call.
+  on('turn.step', async function* ($, e, next) {
+    if (!e.agentId && state.isFirstPending) {
+      state.isFirstPending = false
+      state.isTurnSummarized = true
+      void summarize($, state, 'running', 'first')
+    }
+    return yield* next(e)
   })
 
   on('turn.complete', async ($, e, next) => {
@@ -317,7 +337,7 @@ export const register: Register = (on, options) => {
       // keep their schedule.
       case 'now': {
         if (!state.isInteractive) return { text: 'now: no call; summaries run in interactive sessions only' }
-        const outcome = await summarize($, state, state.turnStartedAt > 0 ? 'running' : 'ended', true)
+        const outcome = await summarize($, state, state.turnStartedAt > 0 ? 'running' : 'ended', 'manual')
         return { text: `now: ${outcome ?? 'no call; the conversation reset'}\n${await show($, await settingsOf($), state.calls)}` }
       }
       case 'usage':

@@ -45,10 +45,12 @@ test('an unknown variant falls back to the default system text while preserving 
     candidates: ['src/first.ts', 'notes/plan.md'],
     sent: ['notes/plan.md'],
     status: 'ended',
+    isTitleProvisional: true,
   })
 
   expect(request.system).toBe(VARIANTS[DEFAULT_VARIANT])
   expect(request.prompt).toContain('Status: ended')
+  expect(request.prompt).toContain('Previous TITLE: Boundary tests (provisional: written from the first prompt alone)\n')
   expect(request.prompt).toContain('Previous SO FAR: Finished the setup.')
   expect(request.prompt).toContain('Previous NOW: Writing boundary tests.')
   expect(request.prompt).toContain('Previous FILES: src/old.ts')
@@ -135,6 +137,8 @@ test('an empty label keeps its previous text instead of reading the next label l
     files: [],
     outcome: 'parse-partial',
   })
+  // The request's "(none yet)" copied back is an empty text, not a title.
+  expect(parseReply('TITLE: none yet\nSO FAR: (none yet)\nNOW: starting\nFILES: none', previous, candidates)).toEqual({ title: '', soFar: '', now: 'starting', files: [], outcome: 'summary' })
 })
 
 test('a label holding only spaces counts as absent, and three blank labels fail the parse', () => {

@@ -109,6 +109,9 @@ function world(on: On, options: { capture?: string; settings?: Record<string, un
   on('session.end', async (_$, e) => ({ sessionId: e.sessionId }))
   on('turn.start', async (_$, e) => ({ turnId: e.turnId }))
   on('turn.complete', async (_$, e) => ({ text: e.answer }))
+  on('turn.step', async function* (_$, e) {
+    return { turnId: e.turnId, index: e.index, answer: 'ok', toolUses: [], stopReason: 'end_turn' as const, usage: null }
+  })
   return w
 }
 
@@ -117,6 +120,11 @@ type World = ReturnType<typeof world>
 const start = ($: Engine, isInteractive = true) => $.session.start({ cwd: '/tmp/project', surface: isInteractive ? 'terminal' : null, isInteractive })
 const turnStart = ($: Engine, text = 'build the summary plugin', agentId?: string) => $.turn.start({ text, turnId: 't1', ...(agentId ? { agentId } : {}) })
 const run = ($: Engine, args: string) => $.command.run({ command: PLUGIN, args, origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 120 } })
+const step = async ($: Engine, agentId?: string) => {
+  for await (const _ of $.turn.step({ turnId: 't1', index: 0, model: 'claude-opus-5-5', messageCount: 1, ...(agentId ? { agentId } : {}) })) {
+    // drain
+  }
+}
 const complete = ($: Engine) => $.turn.complete({ turnId: 't1', reason: 'answer', answer: 'ok', durationMs: 1, isAborted: false })
 const logLines = (w: World) => (w.files.get(LOG) ?? '').split('\n').filter(Boolean)
 const outcomes = (w: World) => logLines(w).map(l => l.split(' ')[1])
@@ -593,6 +601,50 @@ test('/session-summary replies carry no name of their own: the engine prints it'
   for (const [args, text] of replies) expect((await run($, args)).text).toBe(text)
   expect((await run($, 'show')).text).toMatch(/^Title: /)
   expect((await run($, '')).text).toMatch(/^Title: /)
+})
+
+test('the first prompt is summarized at its first model step with a provisional title, which the 90 s call may replace', async ($, on) => {
+  const w = world(on)
+  await start($)
+  await turnStart($)
+  await step($, 'sub-1')
+  expect(w.requests).toEqual([])
+
+  await step($)
+  await w.clock.settle()
+  expect(w.requests).toHaveLength(1)
+  expect(String(w.requests[0]!.prompt)).toContain('Previous TITLE: (none yet)\n')
+  expect(logLines(w)[0]).toMatch(/ usd=\d+\.\d{4} first$/)
+  expect(await bandTexts($)).toContain('Summary plugin')
+
+  await step($)
+  await w.clock.settle()
+  expect(w.requests).toHaveLength(1)
+
+  w.messages.push(user('and wire it into the band'))
+  await w.clock.advance(90_000)
+  expect(w.requests).toHaveLength(2)
+  expect(String(w.requests[1]!.prompt)).toContain('Previous TITLE: Summary plugin (provisional: written from the first prompt alone)\n')
+
+  await complete($)
+  await w.clock.settle()
+  expect(statuses(w)).toEqual(['running', 'running', 'ended'])
+  expect(String(w.requests[2]!.prompt)).toContain('Previous TITLE: Summary plugin\n')
+
+  await turnStart($, 'next request')
+  await step($)
+  await w.clock.settle()
+  expect(w.requests).toHaveLength(3)
+})
+
+test('a resumed session whose band is seeded from its capture makes no first-prompt call', async ($, on) => {
+  const capture = `${JSON.stringify({ at: '2026-10-23T11:58:00.000Z', title: 'Summary plugin', soFar: 'Earlier work', now: 'Resume it', files: [PLAN], status: 'running', source: 'messages', variant: 'edit' })}\n`
+  const w = world(on, { capture })
+  await start($)
+  await turnStart($)
+  await step($)
+  await w.clock.settle()
+  expect(w.requests).toEqual([])
 })
 
 test('/session-summary now makes one call at once, even switched off and outside a turn, and leaves the timer\'s schedule alone', async ($, on) => {

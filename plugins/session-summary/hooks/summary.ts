@@ -104,7 +104,7 @@ export function allowedFiles(candidates: readonly string[], previous: readonly s
 
 export type Previous = Pick<Summary, 'title' | 'soFar' | 'now' | 'files'>
 
-export function buildRequest(r: { variant: string; source: Source; previous: Previous; input: string; candidates: readonly string[]; sent: readonly string[]; status: SummaryStatus }): { system: string; prompt: string } {
+export function buildRequest(r: { variant: string; source: Source; previous: Previous; input: string; candidates: readonly string[]; sent: readonly string[]; status: SummaryStatus; isTitleProvisional: boolean }): { system: string; prompt: string } {
   const system = VARIANTS[r.variant] ?? VARIANTS[DEFAULT_VARIANT]!
   const allowed = allowedFiles(r.candidates, r.previous.files)
   const candidates = allowed.length > 0 ? allowed.map(p => `- ${p}${r.sent.includes(p) ? ' (sent to the person)' : ''}`).join('\n') : '(none)'
@@ -112,7 +112,7 @@ export function buildRequest(r: { variant: string; source: Source; previous: Pre
   const prompt = [
     `Status: ${r.status}`,
     [
-      `Previous TITLE: ${r.previous.title || '(none yet)'}`,
+      `Previous TITLE: ${r.previous.title || '(none yet)'}${r.isTitleProvisional && r.previous.title ? ' (provisional: written from the first prompt alone)' : ''}`,
       `Previous SO FAR: ${r.previous.soFar || '(none yet)'}`,
       `Previous NOW: ${r.previous.now || '(none yet)'}`,
       `Previous FILES: ${r.previous.files.join(', ') || 'none'}`,
@@ -127,11 +127,16 @@ export type Parsed = { title: string; soFar: string; now: string; files: string[
 
 // A label's value is the rest of its own line; a label with nothing after it counts as absent.
 const lineValue = (text: string, re: RegExp): string | undefined => re.exec(text)?.[1]?.trim()
+// The request shows an empty text as "(none yet)"; a reply that copies it back means empty.
+const textValue = (text: string, re: RegExp): string | undefined => {
+  const value = lineValue(text, re)
+  return value !== undefined && /^\(?none yet\)?\.?$/i.test(value) ? '' : value
+}
 
 export function parseReply(text: string, previous: Previous, candidates: readonly string[]): Parsed {
-  const title = lineValue(text, /^TITLE:[^\S\r\n]*(\S.*)$/m)
-  const soFar = lineValue(text, /^SO FAR:[^\S\r\n]*(\S.*)$/m)
-  const now = lineValue(text, /^NOW:[^\S\r\n]*(\S.*)$/m)
+  const title = textValue(text, /^TITLE:[^\S\r\n]*(\S.*)$/m)
+  const soFar = textValue(text, /^SO FAR:[^\S\r\n]*(\S.*)$/m)
+  const now = textValue(text, /^NOW:[^\S\r\n]*(\S.*)$/m)
   const filesText = lineValue(text, /^FILES:[^\S\r\n]*(\S.*)$/m)
   const found = [title, soFar, now, filesText].filter(v => v !== undefined).length
   if (found === 0) return { title: previous.title, soFar: previous.soFar, now: previous.now, files: [...previous.files], outcome: 'parse-failed' }
