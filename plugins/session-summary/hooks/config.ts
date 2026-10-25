@@ -12,6 +12,8 @@ export const WINDOW_CHARS = 16_000
 export const MESSAGE_CHARS = 1_500
 export const TOOL_LINE_CHARS = 300
 export const CANDIDATE_MAX = 8
+// Prompts the person sent mid-turn, kept to put back into the window (the engine's messages omit them).
+export const QUEUED_MAX = 20
 // The most paths the band shows: the prompt asks for one or two.
 export const FILES_MAX = 2
 // The judge's request has the same values; kept apart so tuning one never moves the other.

@@ -40,6 +40,20 @@ function messageBlock(m: SessionMessage, messageChars: number): string | null {
   return lines.length > 0 ? lines.join('\n') : null
 }
 
+// A prompt the person sent while a turn ran: the model reads it, but $.session.messages() leaves it
+// out. `after` is how many messages the session held when it arrived.
+export type Queued = { text: string; after: number }
+
+// The messages with each mid-turn prompt put back as a user message where it arrived. Positions
+// count from the start of the list, so they drift once the engine's 4096-message cap trims it.
+export function withQueued(messages: readonly SessionMessage[], queued: readonly Queued[]): SessionMessage[] {
+  const out = [...messages]
+  for (const q of [...queued].sort((x, y) => y.after - x.after)) {
+    out.splice(Math.min(Math.max(q.after, 0), out.length), 0, { role: 'user', text: q.text, toolUses: [] })
+  }
+  return out
+}
+
 export function formatMessages(messages: readonly SessionMessage[], caps: { windowChars: number; messageChars: number }): string {
   const blocks = messages.map(m => messageBlock(m, caps.messageChars)).filter((b): b is string => b !== null)
   const kept: string[] = []

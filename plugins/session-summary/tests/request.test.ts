@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 import { DEFAULT_VARIANT, VARIANTS } from '../hooks/prompts.ts'
-import { buildRequest, fileCandidates, parseReply, seedFromCapture, sentFiles } from '../hooks/summary.ts'
+import { buildRequest, fileCandidates, parseReply, seedFromCapture, sentFiles, withQueued } from '../hooks/summary.ts'
 
 const previous = { title: 'Boundary tests', soFar: 'Finished the setup.', now: 'Writing boundary tests.', files: ['src/old.ts'] }
 
@@ -173,4 +173,11 @@ test('a file already shown stays allowed after it leaves the window, and leaves 
 test('sentFiles lists each file sent to the person once', () => {
   const sent = (files: string[]) => ({ role: 'assistant' as const, text: '', toolUses: [{ tool_use_id: files.join(), tool: 'SendUserFile', input: { files } }] })
   expect(sentFiles([sent(['a.md', 'b.md']), sent(['a.md'])])).toEqual(['a.md', 'b.md'])
+})
+
+test('withQueued puts each mid-turn prompt back after the messages that preceded it, clamped to the list', () => {
+  const m = (text: string) => ({ role: 'assistant' as const, text, toolUses: [] })
+  const out = withQueued([m('a'), m('b'), m('c')], [{ text: 'late', after: 9 }, { text: 'first', after: 1 }, { text: 'second', after: 2 }])
+  expect(out.map(x => `${x.role}:${x.text}`)).toEqual(['assistant:a', 'user:first', 'assistant:b', 'user:second', 'assistant:c', 'user:late'])
+  expect(withQueued([m('a')], [])).toEqual([m('a')])
 })

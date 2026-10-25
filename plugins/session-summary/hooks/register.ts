@@ -2,7 +2,7 @@ import type { EngineInterface, Register } from 'claude-code'
 import type { Source, SummaryStatus } from '../types'
 import { addCall, firingReason, replyResult } from './call.ts'
 import type { CallOutcome, Trigger } from './call.ts'
-import { CANDIDATE_MAX, MESSAGE_CHARS, PLUGIN, SETTINGS_KEY, SUMMARY_REQUEST, TICK_MS, WINDOW_CHARS } from './config.ts'
+import { CANDIDATE_MAX, MESSAGE_CHARS, PLUGIN, QUEUED_MAX, SETTINGS_KEY, SUMMARY_REQUEST, TICK_MS, WINDOW_CHARS } from './config.ts'
 import { readSummary, registerBand, writeSummary } from './band.tsx'
 import { DEFAULT_VARIANT } from './prompts.ts'
 import { settingsFrom, showText, summaryCommand, USAGE } from './settings.ts'
@@ -10,8 +10,9 @@ import type { Calls, Settings } from './settings.ts'
 import { sessionLogPath } from './shared/firing.ts'
 import { PRICES, usageUsd } from './shared/pricing.ts'
 import { appendLine, record, stateDirs } from './shared/record.ts'
-import { buildRequest, captureLine, capturePath, EMPTY_SUMMARY, fileCandidates, sentFiles, formatLog, formatMessages, isBumpTurn, isDue, seedFromCapture } from './summary.ts'
-import type { Previous } from './summary.ts'
+import { PERSON_ORIGINS } from './shared/events.ts'
+import { buildRequest, captureLine, capturePath, EMPTY_SUMMARY, fileCandidates, sentFiles, formatLog, formatMessages, isBumpTurn, isDue, seedFromCapture, withQueued } from './summary.ts'
+import type { Previous, Queued } from './summary.ts'
 
 // Keeps short texts about this session (title, so far, now, files to open) in a band above the
 // chat. A haiku call writes them firstSeconds after a main turn starts, every everySeconds while
@@ -33,6 +34,7 @@ type State = {
   epoch: number // bumped at session.start and session.end, so a call that outlived its conversation writes nothing
   isFirstPending: boolean // a main turn started on an empty band: its first model step makes the first-prompt call
   isTitleProvisional: boolean // the band's title came from the first-prompt call, written before any work
+  queued: Queued[] // the person's prompts sent mid-turn, newest last
 }
 
 const noCalls = (): Calls => ({ count: 0, input: 0, output: 0, cached: 0, usd: 0 })
@@ -65,6 +67,7 @@ function reset(state: State): void {
   state.calls = noCalls()
   state.isFirstPending = false
   state.isTitleProvisional = false
+  state.queued = []
   state.epoch++
 }
 
@@ -84,7 +87,7 @@ async function call($: EngineInterface, state: State, status: SummaryStatus, epo
     const settings = await settingsOf($)
     if (settings.isOff && !isManual) return undefined
     variant = settings.variant
-    const messages = await $.session.messages()
+    const messages = withQueued(await $.session.messages(), state.queued)
     const candidates = fileCandidates(messages, CANDIDATE_MAX)
     const sent = sentFiles(messages)
     let input: string | undefined
@@ -240,6 +243,7 @@ export const register: Register = (on, options) => {
     epoch: 0,
     isFirstPending: false,
     isTitleProvisional: false,
+    queued: [],
   }
   let tick: { cancel: () => void } | undefined
 
@@ -274,6 +278,18 @@ export const register: Register = (on, options) => {
       state.lastInput = undefined
       state.turn++
       state.isFirstPending = state.isInteractive && (await readSummary($)).at === 0
+      // A prompt kept as mid-turn that waited for this turn instead is in the messages now.
+      state.queued = state.queued.filter(q => q.text !== e.text)
+    }
+    return next(e)
+  })
+
+  // A prompt the person sends while a main turn runs reaches the model inside that turn, but not
+  // $.session.messages(): keep it, with where it arrived, so the window shows it as theirs.
+  on('prompt.submit', async ($, e, next) => {
+    if (e.turnId !== undefined && !e.isMeta && !e.command && PERSON_ORIGINS.has(e.origin.kind) && state.turnStartedAt > 0) {
+      const after = (await $.session.messages()).length
+      state.queued = [...state.queued, { text: e.text, after }].slice(-QUEUED_MAX)
     }
     return next(e)
   })
