@@ -109,6 +109,7 @@ function world(on: On, options: { capture?: string; settings?: Record<string, un
   on('session.end', async (_$, e) => ({ sessionId: e.sessionId }))
   on('turn.start', async (_$, e) => ({ turnId: e.turnId }))
   on('turn.complete', async (_$, e) => ({ text: e.answer }))
+  on('prompt.submit', async (_$, e) => ({ text: e.text }))
   on('turn.step', async function* (_$, e) {
     return { turnId: e.turnId, index: e.index, answer: 'ok', toolUses: [], stopReason: 'end_turn' as const, usage: null }
   })
@@ -635,6 +636,29 @@ test('the first prompt is summarized at its first model step with a provisional 
   await step($)
   await w.clock.settle()
   expect(w.requests).toHaveLength(3)
+})
+
+test('a prompt sent mid-turn reaches the window as the person\'s, where it arrived, and only once if it later starts its own turn', async ($, on) => {
+  const w = world(on)
+  await start($)
+  await turnStart($)
+  w.messages.push(wrote('notes/second.md'))
+  await $.prompt.submit({ text: 'also estimate the cost', wait: false, origin: { kind: 'composer' }, turnId: 't1' })
+  await $.prompt.submit({ text: 'a peer relay', wait: false, origin: { kind: 'plugin', name: 'other' }, turnId: 't1' } as never)
+  w.messages.push({ role: 'assistant', text: 'Estimating it now.', toolUses: [] })
+  await w.clock.advance(90_000)
+  const window = String(w.requests[0]!.prompt).split('Recent activity (oldest first, may start mid-way):\n')[1]!
+  expect(window).toContain('→ Write: notes/second.md\nUSER: also estimate the cost\nASSISTANT: Estimating it now.')
+  expect(window).not.toContain('a peer relay')
+
+  await complete($)
+  await w.clock.settle()
+  w.messages.push(user('also estimate the cost'))
+  await turnStart($, 'also estimate the cost')
+  w.messages.push({ role: 'assistant', text: 'Here is the estimate.', toolUses: [] })
+  await w.clock.advance(90_000)
+  const last = String(w.requests.at(-1)!.prompt)
+  expect(last.split('USER: also estimate the cost').length - 1).toBe(1)
 })
 
 test('a resumed session whose band is seeded from its capture makes no first-prompt call', async ($, on) => {
