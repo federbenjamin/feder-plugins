@@ -29,13 +29,15 @@ export function isBumpTurn(text: string): boolean {
 // fold into it.
 const oneLine = (text: string): string => text.replace(/\s+/g, ' ').trim()
 
-function messageBlock(m: SessionMessage, messageChars: number): string | null {
+type Caps = { windowChars: number; messageChars: number; userChars: number }
+
+function messageBlock(m: SessionMessage, caps: Caps): string | null {
   const text = m.text.trim()
   if (m.role === 'user') {
     if (text === '') return null
-    return `${isTypedText(text) ? 'USER' : 'NOTE'}: ${clip(text, messageChars)}`
+    return isTypedText(text) ? `USER: ${clip(text, caps.userChars)}` : `NOTE: ${clip(text, caps.messageChars)}`
   }
-  const lines = text === '' ? [] : [`ASSISTANT: ${clip(text, messageChars)}`]
+  const lines = text === '' ? [] : [`ASSISTANT: ${clip(text, caps.messageChars)}`]
   for (const use of m.toolUses) lines.push(`  → ${use.tool}: ${oneLine(clip(toolInputHead(use.input), TOOL_LINE_CHARS))}${use.isError ? ' (error)' : ''}`)
   return lines.length > 0 ? lines.join('\n') : null
 }
@@ -54,8 +56,8 @@ export function withQueued(messages: readonly SessionMessage[], queued: readonly
   return out
 }
 
-export function formatMessages(messages: readonly SessionMessage[], caps: { windowChars: number; messageChars: number }): string {
-  const blocks = messages.map(m => messageBlock(m, caps.messageChars)).filter((b): b is string => b !== null)
+export function formatMessages(messages: readonly SessionMessage[], caps: Caps): string {
+  const blocks = messages.map(m => messageBlock(m, caps)).filter((b): b is string => b !== null)
   const kept: string[] = []
   let length = 0
   for (let i = blocks.length - 1; i >= 0; i--) {
