@@ -2,7 +2,7 @@ import type { EngineInterface, Register } from 'claude-code'
 import type { Source, SummaryStatus } from '../types'
 import { addCall, firingReason, replyResult } from './call.ts'
 import type { CallOutcome, Trigger } from './call.ts'
-import { CANDIDATE_MAX, MESSAGE_CHARS, PLUGIN, QUEUED_MAX, SETTINGS_KEY, SUMMARY_REQUEST, TICK_MS, WINDOW_CHARS } from './config.ts'
+import { CANDIDATE_MAX, MESSAGE_CHARS, PLUGIN, QUEUED_MAX, SETTINGS_KEY, SUMMARY_REQUEST, TICK_MS, USER_CHARS, WINDOW_CHARS } from './config.ts'
 import { readSummary, registerBand, writeSummary } from './band.tsx'
 import { DEFAULT_VARIANT } from './prompts.ts'
 import { settingsFrom, showText, summaryCommand, USAGE } from './settings.ts'
@@ -100,7 +100,7 @@ async function call($: EngineInterface, state: State, status: SummaryStatus, epo
         await record($, PLUGIN, 'log-missing', firingReason({ source: 'session-log', variant }))
       }
     }
-    input ??= formatMessages(messages, { windowChars: WINDOW_CHARS, messageChars: MESSAGE_CHARS })
+    input ??= formatMessages(messages, { windowChars: WINDOW_CHARS, messageChars: MESSAGE_CHARS, userChars: USER_CHARS })
     if (!isCurrent()) return undefined
     // An ended call is never skipped: its status changes the request.
     if (status === 'running' && !isManual && input === state.lastInput) {

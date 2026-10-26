@@ -35,7 +35,7 @@ test('message formatting distinguishes typed requests, machine notes, assistant 
     { role: 'user', text: '   ', toolUses: [] },
   ] as never
 
-  expect(formatMessages(messages, { windowChars: 2_000, messageChars: 200 })).toBe([
+  expect(formatMessages(messages, { windowChars: 2_000, messageChars: 200, userChars: 200 })).toBe([
     'USER: add the edge case',
     'NOTE: <system-reminder> tool finished',
     'ASSISTANT: I am checking the result.\n  → Read: docs/brief.md\n  → Bash: run-check (error)',
@@ -49,13 +49,16 @@ test('the activity window keeps the newest block even when earlier blocks would 
     { role: 'user', text: 'last request', toolUses: [] },
   ] as never
 
-  expect(formatMessages(messages, { windowChars: 20, messageChars: 200 })).toBe('USER: last request')
+  expect(formatMessages(messages, { windowChars: 20, messageChars: 200, userChars: 200 })).toBe('USER: last request')
 })
 
-test('a message cap preserves the start and end of a long operator request', () => {
-  const messages = [{ role: 'user', text: '0123456789abcdef', toolUses: [] }] as never
+test('a typed request keeps its own larger cap, start and end, while agent text keeps the message cap', () => {
+  const messages = [
+    { role: 'user', text: '0123456789abcdef', toolUses: [] },
+    { role: 'assistant', text: '0123456789abcdef', toolUses: [] },
+  ] as never
 
-  expect(formatMessages(messages, { windowChars: 200, messageChars: 10 })).toBe('USER: 01234\n…\nbcdef')
+  expect(formatMessages(messages, { windowChars: 200, messageChars: 10, userChars: 14 })).toBe('USER: 0123456\n…\n9abcdef\nASSISTANT: 01234\n…\nbcdef')
 })
 
 test('a long session log loses its partial first line while an exact window stays untouched', () => {
@@ -68,12 +71,12 @@ test('a multi-line tool input is one tool line', () => {
     { role: 'assistant', text: 'Running it.', toolUses: [{ tool: 'Bash', input: { command: 'cd app &&\n  pnpm test\r\n\techo done\n' } }] },
   ] as never
 
-  expect(formatMessages(messages, { windowChars: 2_000, messageChars: 200 })).toBe('ASSISTANT: Running it.\n  → Bash: cd app && pnpm test echo done')
+  expect(formatMessages(messages, { windowChars: 2_000, messageChars: 200, userChars: 200 })).toBe('ASSISTANT: Running it.\n  → Bash: cd app && pnpm test echo done')
 })
 
 test('a tool input over the line cap is still one line, its elision folded in', () => {
   const command = `${'a'.repeat(200)}\n${'b'.repeat(200)}`
   const messages = [{ role: 'assistant', text: '', toolUses: [{ tool: 'Bash', input: { command } }, { tool: 'Read', input: { file_path: 'x.md' } }] }] as never
 
-  expect(formatMessages(messages, { windowChars: 2_000, messageChars: 200 }).split('\n')).toEqual([`  → Bash: ${'a'.repeat(150)} … ${'b'.repeat(150)}`, '  → Read: x.md'])
+  expect(formatMessages(messages, { windowChars: 2_000, messageChars: 200, userChars: 200 }).split('\n')).toEqual([`  → Bash: ${'a'.repeat(150)} … ${'b'.repeat(150)}`, '  → Read: x.md'])
 })

@@ -10,6 +10,8 @@ export const FIRST_SECONDS = 90
 export const EVERY_SECONDS = 600
 export const WINDOW_CHARS = 16_000
 export const MESSAGE_CHARS = 1_500
+// A prompt the person typed often defines the task, so it keeps more than the agent's own text.
+export const USER_CHARS = 6_000
 export const TOOL_LINE_CHARS = 300
 export const CANDIDATE_MAX = 8
 // Prompts the person sent mid-turn, kept to put back into the window (the engine's messages omit them).
