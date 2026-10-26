@@ -9,7 +9,7 @@ import { isRecord, isTypedText, SIBLING_TEXTS } from './shared/typed.ts'
 // The summary's pure side: when a tick calls, what the call reads, what it asks, how the reply
 // is read, the capture line and the band's rows.
 
-const EMPTY: Summary = { title: '', soFar: '', now: '', files: [], at: 0, status: 'running', source: 'messages', variant: DEFAULT_VARIANT }
+const EMPTY: Summary = { title: '', lastPrompt: '', soFar: '', now: '', files: [], at: 0, status: 'running', source: 'messages', variant: DEFAULT_VARIANT }
 export const EMPTY_SUMMARY: Summary = Object.freeze(EMPTY)
 
 // A call is due while a main turn runs: the first `firstSeconds` after the turn started, then
@@ -38,6 +38,22 @@ function messageBlock(m: SessionMessage, messageChars: number): string | null {
   const lines = text === '' ? [] : [`ASSISTANT: ${clip(text, messageChars)}`]
   for (const use of m.toolUses) lines.push(`  → ${use.tool}: ${oneLine(clip(toolInputHead(use.input), TOOL_LINE_CHARS))}${use.isError ? ' (error)' : ''}`)
   return lines.length > 0 ? lines.join('\n') : null
+}
+
+// The person's newest typed prompt in the whole session, clipped like a window message; '' before
+// the first.
+export function newestPrompt(messages: readonly SessionMessage[], messageChars: number): string {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const m = messages[i]!
+    const text = m.text.trim()
+    if (m.role === 'user' && text !== '' && isTypedText(text)) return clip(text, messageChars)
+  }
+  return ''
+}
+
+// LAST PROMPT sums up one prompt: while that prompt is unchanged, the line stays as it was written.
+export function keptLastPrompt(r: { newest: string; summarized: string; previous: string; replied: string }): string {
+  return r.newest === r.summarized && r.previous !== '' ? r.previous : r.replied
 }
 
 // A prompt the person sent while a turn ran: the model reads it, but $.session.messages() leaves it
@@ -116,9 +132,9 @@ export function allowedFiles(candidates: readonly string[], previous: readonly s
   return [...new Set([...previous, ...candidates])]
 }
 
-export type Previous = Pick<Summary, 'title' | 'soFar' | 'now' | 'files'>
+export type Previous = Pick<Summary, 'title' | 'lastPrompt' | 'soFar' | 'now' | 'files'>
 
-export function buildRequest(r: { variant: string; source: Source; previous: Previous; input: string; candidates: readonly string[]; sent: readonly string[]; status: SummaryStatus; isTitleProvisional: boolean }): { system: string; prompt: string } {
+export function buildRequest(r: { variant: string; source: Source; previous: Previous; newestPrompt: string; input: string; candidates: readonly string[]; sent: readonly string[]; status: SummaryStatus; isTitleProvisional: boolean }): { system: string; prompt: string } {
   const system = VARIANTS[r.variant] ?? VARIANTS[DEFAULT_VARIANT]!
   const allowed = allowedFiles(r.candidates, r.previous.files)
   const candidates = allowed.length > 0 ? allowed.map(p => `- ${p}${r.sent.includes(p) ? ' (sent to the person)' : ''}`).join('\n') : '(none)'
@@ -127,11 +143,13 @@ export function buildRequest(r: { variant: string; source: Source; previous: Pre
     `Status: ${r.status}`,
     [
       `Previous TITLE: ${r.previous.title || '(none yet)'}${r.isTitleProvisional && r.previous.title ? ' (provisional: written from the first prompt alone)' : ''}`,
+      `Previous LAST PROMPT: ${r.previous.lastPrompt || '(none yet)'}`,
       `Previous SO FAR: ${r.previous.soFar || '(none yet)'}`,
       `Previous NOW: ${r.previous.now || '(none yet)'}`,
       `Previous FILES: ${r.previous.files.join(', ') || 'none'}`,
     ].join('\n'),
     `Candidate files (newest last):\n${candidates}`,
+    `Newest prompt:\n${r.newestPrompt || '(none yet)'}`,
     `${header}\n${r.input}`,
   ].join('\n\n')
   return { system, prompt }
@@ -146,7 +164,7 @@ export function parseTask(text: string): TaskVerdict {
   return verdict === 'same' || verdict === 'new' ? verdict : null
 }
 
-export type Parsed = { title: string; soFar: string; now: string; files: string[]; outcome: 'summary' | 'parse-partial' | 'parse-failed' }
+export type Parsed = { title: string; lastPrompt: string; soFar: string; now: string; files: string[]; outcome: 'summary' | 'parse-partial' | 'parse-failed' }
 
 // A label's value is the rest of its own line; a label with nothing after it counts as absent.
 const lineValue = (text: string, re: RegExp): string | undefined => re.exec(text)?.[1]?.trim()
@@ -158,17 +176,18 @@ const textValue = (text: string, re: RegExp): string | undefined => {
 
 export function parseReply(text: string, previous: Previous, candidates: readonly string[]): Parsed {
   const title = textValue(text, /^TITLE:[^\S\r\n]*(\S.*)$/m)
+  const lastPrompt = textValue(text, /^LAST PROMPT:[^\S\r\n]*(\S.*)$/m)
   const soFar = textValue(text, /^SO FAR:[^\S\r\n]*(\S.*)$/m)
   const now = textValue(text, /^NOW:[^\S\r\n]*(\S.*)$/m)
   const filesText = lineValue(text, /^FILES:[^\S\r\n]*(\S.*)$/m)
-  const found = [title, soFar, now, filesText].filter(v => v !== undefined).length
-  if (found === 0) return { title: previous.title, soFar: previous.soFar, now: previous.now, files: [...previous.files], outcome: 'parse-failed' }
+  const found = [title, lastPrompt, soFar, now, filesText].filter(v => v !== undefined).length
+  if (found === 0) return { title: previous.title, lastPrompt: previous.lastPrompt, soFar: previous.soFar, now: previous.now, files: [...previous.files], outcome: 'parse-failed' }
   const allowed = allowedFiles(candidates, previous.files)
   let files: string[]
   if (filesText === undefined) files = [...previous.files]
   else if (filesText.toLowerCase() === 'none') files = []
   else files = [...new Set(filesText.split(',').map(p => p.trim()))].filter(p => allowed.includes(p)).slice(0, FILES_MAX)
-  return { title: title ?? previous.title, soFar: soFar ?? previous.soFar, now: now ?? previous.now, files, outcome: found === 4 ? 'summary' : 'parse-partial' }
+  return { title: title ?? previous.title, lastPrompt: lastPrompt ?? previous.lastPrompt, soFar: soFar ?? previous.soFar, now: now ?? previous.now, files, outcome: found === 5 ? 'summary' : 'parse-partial' }
 }
 
 export function capturePath(dir: string, sessionId: string): string {
@@ -185,7 +204,9 @@ export type Capture = {
   input: string
   inputChars: number
   candidates: string[]
+  newestPrompt: string
   title: string
+  lastPrompt: string
   soFar: string
   now: string
   files: string[]
@@ -216,6 +237,7 @@ export function seedFromCapture(text: string): Summary | null {
   const at = typeof c.at === 'string' ? Date.parse(c.at) : NaN
   return {
     title: typeof c.title === 'string' ? c.title : '',
+    lastPrompt: typeof c.lastPrompt === 'string' ? c.lastPrompt : '',
     soFar: c.soFar,
     now: c.now,
     files: Array.isArray(c.files) ? c.files.filter((f): f is string => typeof f === 'string') : [],
@@ -226,15 +248,16 @@ export function seedFromCapture(text: string): Summary | null {
   }
 }
 
-// The band's rows: the title, SO FAR and NOW with their texts starting in one column, then the recent files,
+// The band's rows: the title, LAST PROMPT, SO FAR and NOW with their texts starting in one column, then the recent files,
 // then how fresh the texts are. No rows before the first summary, so the band takes no space
 // until there is something to say. The source and variant stay in `/session-summary show`.
-export const BAND_LABEL_WIDTH = 'SO FAR:'.length
+export const BAND_LABEL_WIDTH = 'LAST PROMPT:'.length
 
 export function bandLines(summary: Summary, now: number): { label: string; text: string; dim: boolean; bold?: true }[] {
   if (summary.at === 0 && summary.soFar === '' && summary.now === '') return []
   return [
     ...(summary.title !== '' ? [{ label: '', text: summary.title, dim: false, bold: true as const }] : []),
+    ...(summary.lastPrompt !== '' ? [{ label: 'LAST PROMPT:', text: summary.lastPrompt, dim: false }] : []),
     { label: 'SO FAR:', text: summary.soFar || '(none yet)', dim: false },
     { label: 'NOW:', text: summary.now || '(none yet)', dim: false },
     ...(summary.files.length > 0 ? [{ label: 'RECENT FILES:', text: summary.files.join(', '), dim: true }] : []),

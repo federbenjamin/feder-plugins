@@ -1,8 +1,8 @@
 import { expect, test } from 'claude-code/testing'
 import { DEFAULT_VARIANT, VARIANTS } from '../hooks/prompts.ts'
-import { buildRequest, fileCandidates, parseReply, seedFromCapture, sentFiles, withQueued } from '../hooks/summary.ts'
+import { buildRequest, fileCandidates, keptLastPrompt, newestPrompt, parseReply, seedFromCapture, sentFiles, withQueued } from '../hooks/summary.ts'
 
-const previous = { title: 'Boundary tests', soFar: 'Finished the setup.', now: 'Writing boundary tests.', files: ['src/old.ts'] }
+const previous = { title: 'Boundary tests', lastPrompt: 'You asked for boundary tests.', soFar: 'Finished the setup.', now: 'Writing boundary tests.', files: ['src/old.ts'] }
 
 const assistant = (toolUses: unknown[]) => ({ role: 'assistant', text: '', toolUses })
 
@@ -41,6 +41,7 @@ test('an unknown variant falls back to the default system text while preserving 
     variant: 'removed-variant',
     source: 'session-log',
     previous,
+    newestPrompt: 'add the edge case too',
     input: 'tail of the session log',
     candidates: ['src/first.ts', 'notes/plan.md'],
     sent: ['notes/plan.md'],
@@ -51,22 +52,23 @@ test('an unknown variant falls back to the default system text while preserving 
   expect(request.system).toBe(VARIANTS[DEFAULT_VARIANT])
   expect(request.prompt).toContain('Status: ended')
   expect(request.prompt).toContain('Previous TITLE: Boundary tests (provisional: written from the first prompt alone)\n')
-  expect(request.prompt).toContain('Previous SO FAR: Finished the setup.')
+  expect(request.prompt).toContain('Previous LAST PROMPT: You asked for boundary tests.\nPrevious SO FAR: Finished the setup.')
   expect(request.prompt).toContain('Previous NOW: Writing boundary tests.')
   expect(request.prompt).toContain('Previous FILES: src/old.ts')
   expect(request.prompt).toContain('Candidate files (newest last):\n- src/old.ts\n- src/first.ts\n- notes/plan.md (sent to the person)')
-  expect(request.prompt).toContain("The session's own log (tail):\ntail of the session log")
+  expect(request.prompt).toContain("Newest prompt:\nadd the edge case too\n\nThe session's own log (tail):\ntail of the session log")
 })
 
 test('a complete reply keeps only candidate files in the model order', () => {
   const parsed = parseReply(
-    'TITLE: Boundary tests\nSO FAR: implementation complete\nNOW: waiting for review\nFILES: notes/plan.md, outside.txt, src/first.ts',
+    'TITLE: Boundary tests\nLAST PROMPT: You asked for the edge case.\nSO FAR: implementation complete\nNOW: waiting for review\nFILES: notes/plan.md, outside.txt, src/first.ts',
     previous,
     ['src/first.ts', 'notes/plan.md'],
   )
 
   expect(parsed).toEqual({
     title: 'Boundary tests',
+    lastPrompt: 'You asked for the edge case.',
     soFar: 'implementation complete',
     now: 'waiting for review',
     files: ['notes/plan.md', 'src/first.ts'],
@@ -77,7 +79,7 @@ test('a complete reply keeps only candidate files in the model order', () => {
 test('a partial reply preserves only the fields it omitted', () => {
   const parsed = parseReply('SO FAR: narrowed the fix\nFILES: none', previous, ['src/first.ts'])
 
-  expect(parsed).toEqual({ title: previous.title, soFar: 'narrowed the fix', now: previous.now, files: [], outcome: 'parse-partial' })
+  expect(parsed).toEqual({ title: previous.title, lastPrompt: previous.lastPrompt, soFar: 'narrowed the fix', now: previous.now, files: [], outcome: 'parse-partial' })
 })
 
 test('a reply with no recognized fields preserves every previous value at either session status', () => {
@@ -88,6 +90,7 @@ test('a reply with no recognized fields preserves every previous value at either
 test('a reply with no FILES line keeps the previous files: the model decides when one is stale', () => {
   expect(parseReply('SO FAR: ready to ship', previous, [])).toEqual({
     title: previous.title,
+    lastPrompt: previous.lastPrompt,
     soFar: 'ready to ship',
     now: previous.now,
     files: previous.files,
@@ -105,6 +108,7 @@ test('the final valid capture seeds a sanitized summary after malformed newer-lo
 
   expect(seedFromCapture(text)).toEqual({
     title: '',
+    lastPrompt: '',
     soFar: 'saved work',
     now: 'ready to ship',
     files: ['src/one.ts'],
@@ -123,32 +127,34 @@ test('a capture without a complete text summary cannot seed stale state', () => 
 test('a capture from the session-log source seeds that source and its variant', () => {
   const line = JSON.stringify({ soFar: 'read the log', now: 'waiting', files: [], at: '2026-10-20T10:00:00Z', status: 'ended', source: 'session-log', variant: 'append' })
 
-  expect(seedFromCapture(line)).toEqual({ title: '', soFar: 'read the log', now: 'waiting', files: [], at: Date.parse('2026-10-20T10:00:00Z'), status: 'ended', source: 'session-log', variant: 'append' })
+  expect(seedFromCapture(line)).toEqual({ title: '', lastPrompt: '', soFar: 'read the log', now: 'waiting', files: [], at: Date.parse('2026-10-20T10:00:00Z'), status: 'ended', source: 'session-log', variant: 'append' })
 })
 
 test('an empty label keeps its previous text instead of reading the next label line', () => {
   const candidates = ['src/first.ts']
 
-  expect(parseReply('SO FAR: a\nNOW:\nFILES: none', previous, candidates)).toEqual({ title: previous.title, soFar: 'a', now: previous.now, files: [], outcome: 'parse-partial' })
+  expect(parseReply('SO FAR: a\nNOW:\nFILES: none', previous, candidates)).toEqual({ title: previous.title, lastPrompt: previous.lastPrompt, soFar: 'a', now: previous.now, files: [], outcome: 'parse-partial' })
   expect(parseReply('SO FAR:\nNOW: checking the tests\nFILES: none', previous, candidates)).toEqual({
     title: previous.title,
+    lastPrompt: previous.lastPrompt,
     soFar: previous.soFar,
     now: 'checking the tests',
     files: [],
     outcome: 'parse-partial',
   })
   // The request's "(none yet)" copied back is an empty text, not a title.
-  expect(parseReply('TITLE: none yet\nSO FAR: (none yet)\nNOW: starting\nFILES: none', previous, candidates)).toEqual({ title: '', soFar: '', now: 'starting', files: [], outcome: 'summary' })
+  expect(parseReply('TITLE: none yet\nLAST PROMPT: (none yet)\nSO FAR: (none yet)\nNOW: starting\nFILES: none', previous, candidates)).toEqual({ title: '', lastPrompt: '', soFar: '', now: 'starting', files: [], outcome: 'summary' })
 })
 
 test('a label holding only spaces counts as absent, and three blank labels fail the parse', () => {
-  expect(parseReply('SO FAR: \t \nNOW: b\nFILES: none', previous, ['src/first.ts'])).toEqual({ title: previous.title, soFar: previous.soFar, now: 'b', files: [], outcome: 'parse-partial' })
+  expect(parseReply('SO FAR: \t \nNOW: b\nFILES: none', previous, ['src/first.ts'])).toEqual({ title: previous.title, lastPrompt: previous.lastPrompt, soFar: previous.soFar, now: 'b', files: [], outcome: 'parse-partial' })
   expect(parseReply('SO FAR:\nNOW:  \nFILES:', previous, ['src/first.ts'])).toEqual({ ...previous, outcome: 'parse-failed' })
 })
 
 test('a reply with Windows line ends reads each value from its own line', () => {
   expect(parseReply('SO FAR: a\r\nNOW:\r\nFILES: src/first.ts\r\n', previous, ['src/first.ts'])).toEqual({
     title: previous.title,
+    lastPrompt: previous.lastPrompt,
     soFar: 'a',
     now: previous.now,
     files: ['src/first.ts'],
@@ -180,4 +186,23 @@ test('withQueued puts each mid-turn prompt back after the messages that preceded
   const out = withQueued([m('a'), m('b'), m('c')], [{ text: 'late', after: 9 }, { text: 'first', after: 1 }, { text: 'second', after: 2 }])
   expect(out.map(x => `${x.role}:${x.text}`)).toEqual(['assistant:a', 'user:first', 'assistant:b', 'user:second', 'assistant:c', 'user:late'])
   expect(withQueued([m('a')], [])).toEqual([m('a')])
+})
+
+test('the newest prompt is the last typed user message in the whole session, not a note or the agent', () => {
+  const messages = [
+    { role: 'user', text: 'fix both scripts', toolUses: [] },
+    { role: 'assistant', text: 'Next: kill the servers.', toolUses: [] },
+    { role: 'user', text: '<task-notification>done</task-notification>', toolUses: [] },
+  ]
+
+  expect(newestPrompt(messages as never, 1_500)).toBe('fix both scripts')
+  expect(newestPrompt([] as never, 1_500)).toBe('')
+})
+
+test('LAST PROMPT stays as written while its prompt is unchanged, and follows a new one', () => {
+  const kept = { summarized: 'investigate the artifacts', previous: 'You asked to investigate the artifacts.', replied: 'You asked to build the fix.' }
+
+  expect(keptLastPrompt({ ...kept, newest: 'investigate the artifacts' })).toBe('You asked to investigate the artifacts.')
+  expect(keptLastPrompt({ ...kept, newest: 'ship it' })).toBe('You asked to build the fix.')
+  expect(keptLastPrompt({ ...kept, newest: 'investigate the artifacts', previous: '' })).toBe('You asked to build the fix.')
 })

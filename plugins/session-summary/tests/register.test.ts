@@ -16,7 +16,7 @@ const PLAN = 'notes/plan.md'
 
 const USAGE = { input_tokens: 1200, output_tokens: 80, cache_read_input_tokens: 300, cache_creation_input_tokens: 0 }
 const ZERO = { input_tokens: 0, output_tokens: 0, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 }
-const answer = (soFar: string, now: string, files = PLAN): ModelCompleteResult => ({ isAnswered: true, text: `TITLE: Summary plugin\nSO FAR: ${soFar}\nNOW: ${now}\nFILES: ${files}`, usage: USAGE })
+const answer = (soFar: string, now: string, files = PLAN): ModelCompleteResult => ({ isAnswered: true, text: `TITLE: Summary plugin\nLAST PROMPT: You asked for the plugin.\nSO FAR: ${soFar}\nNOW: ${now}\nFILES: ${files}`, usage: USAGE })
 const ANSWER = answer('Building the summary plugin.', 'Writing its plan.')
 const FAILURES: { outcome: string; reply: ModelCompleteResult }[] = [
   { outcome: 'api-error', reply: { isAnswered: false, reason: 'api-error', status: 529, error: 'overloaded', usage: ZERO } },
@@ -146,6 +146,7 @@ const bandTexts = async ($: Engine) => {
 
 const summary = (changes: Partial<Summary> = {}): Summary => ({
   title: 'Summary plugin',
+  lastPrompt: '',
   soFar: 'Build the summary plugin',
   now: 'Pin its lifecycle contract',
   files: ['plugins/session-summary/hooks/register.ts'],
@@ -189,7 +190,7 @@ test('the band stacks above what another plugin drew there, and leaves it alone 
   expect(await bandTexts($)).toEqual([w.below])
   await turnStart($)
   await w.clock.advance(90_000)
-  expect(await bandTexts($)).toEqual(['Summary plugin', 'SO FAR:', 'Building the summary plugin.', 'NOW:', 'Writing its plan.', 'RECENT FILES:', PLAN, 'updated 0 min ago', w.below])
+  expect(await bandTexts($)).toEqual(['Summary plugin', 'LAST PROMPT:', 'You asked for the plugin.', 'SO FAR:', 'Building the summary plugin.', 'NOW:', 'Writing its plan.', 'RECENT FILES:', PLAN, 'updated 0 min ago', w.below])
 })
 
 test('an interactive session restores its synthetic capture into the band, opening no pane', async ($, on) => {
@@ -219,7 +220,7 @@ test('a main turn gets its first summary 90 s in: one request, one firing line, 
   expect(captures(w)).toEqual([
     expect.objectContaining({ status: 'running', source: 'messages', variant: 'edit', task: null, outcome: 'summary', soFar: 'Building the summary plugin.', now: 'Writing its plan.', files: [PLAN], candidates: [PLAN] }),
   ])
-  expect(await bandTexts($)).toEqual(['Summary plugin', 'SO FAR:', 'Building the summary plugin.', 'NOW:', 'Writing its plan.', 'RECENT FILES:', PLAN, 'updated 0 min ago'])
+  expect(await bandTexts($)).toEqual(['Summary plugin', 'LAST PROMPT:', 'You asked for the plugin.', 'SO FAR:', 'Building the summary plugin.', 'NOW:', 'Writing its plan.', 'RECENT FILES:', PLAN, 'updated 0 min ago'])
 })
 
 test('a running turn is summarized again 600 s later, and once more with status ended when it completes', async ($, on) => {
@@ -340,7 +341,7 @@ test('the ended call of a turn, starting after the next turn started, leaves tha
   await turnStart($, 'STOP JUDGE — open the PR yourself.')
   await w.clock.advance(5_000)
   expect(statuses(w)).toEqual(['running', 'ended'])
-  expect((await bandTexts($)).slice(0, 5)).toEqual(['Summary plugin', 'SO FAR:', 'Turn A done.', 'NOW:', 'Waiting on the person.'])
+  expect((await bandTexts($)).slice(0, 7)).toEqual(['Summary plugin', 'LAST PROMPT:', 'You asked for the plugin.', 'SO FAR:', 'Turn A done.', 'NOW:', 'Waiting on the person.'])
   w.messages.push(wrote('notes/report.md'))
   await w.clock.advance(75_000)
   expect(statuses(w)).toEqual(['running', 'ended'])
@@ -465,7 +466,7 @@ test('a turn whose predecessor\'s running call is still in flight at its firstSe
   await w.clock.advance(10_000)
   expect(statuses(w)).toEqual(['running', 'ended', 'running'])
   expect(outcomes(w)).toEqual(['summary', 'summary', 'summary'])
-  expect((await bandTexts($)).slice(0, 5)).toEqual(['Summary plugin', 'SO FAR:', 'Opening the PR.', 'NOW:', 'Pushing the branch.'])
+  expect((await bandTexts($)).slice(0, 7)).toEqual(['Summary plugin', 'LAST PROMPT:', 'You asked for the plugin.', 'SO FAR:', 'Opening the PR.', 'NOW:', 'Pushing the branch.'])
 })
 
 test('a running call waiting behind the turn before\'s call is dropped when its own turn ends meanwhile, and that turn gets its ended call', async ($, on) => {
@@ -677,7 +678,7 @@ test('/session-summary now makes one call at once, even switched off and outside
   const reply = await run($, 'now')
   expect(w.requests).toHaveLength(1)
   expect(statuses(w)).toEqual(['ended'])
-  expect(reply.text).toMatch(/^now: summary\nTitle: Summary plugin\nSo far: Building the summary plugin\./)
+  expect(reply.text).toMatch(/^now: summary\nTitle: Summary plugin\nLast prompt: You asked for the plugin\.\nSo far: Building the summary plugin\./)
   expect(logLines(w)).toEqual([expect.stringMatching(/^\S+ summary session=synthetic-session ms=\d+ reason=source=messages variant=edit in=1200 out=80 cached=300 usd=\d+\.\d{4} manual$/)])
   expect(await bandTexts($)).toContain('Building the summary plugin.')
 
@@ -718,7 +719,7 @@ test('session.end aborts the call in flight and empties the band', async ($, on)
   await start($)
   await turnStart($)
   await w.clock.advance(90_000)
-  expect((await bandTexts($))[2]).toBe('Building the summary plugin.')
+  expect((await bandTexts($))[4]).toBe('Building the summary plugin.')
 
   w.messages.push(wrote('notes/report.md'))
   w.replies.push(answer('Too late.', 'Too late.'))
