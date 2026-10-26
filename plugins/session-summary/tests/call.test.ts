@@ -2,18 +2,18 @@ import { expect, test } from 'claude-code/testing'
 import type { ModelCompleteResult } from 'claude-code'
 import { addCall, firingReason, replyResult } from '../hooks/call.ts'
 
-const previous = { title: 'Summary plugin', soFar: 'Set the plugin up.', now: 'Writing tests.', files: ['src/old.ts'] }
+const previous = { title: 'Summary plugin', lastPrompt: '', soFar: 'Set the plugin up.', now: 'Writing tests.', files: ['src/old.ts'] }
 const usage = { input_tokens: 1200, output_tokens: 80, cache_read_input_tokens: 300, cache_creation_input_tokens: 40 }
 const zero = { input_tokens: 0, output_tokens: 0, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 }
 
 test('a full reply is a summary the pane takes, with its TASK verdict', () => {
-  const reply: ModelCompleteResult = { isAnswered: true, text: 'TASK: New\nTITLE: Summary plugin\nSO FAR: built it\nNOW: testing it\nFILES: src/new.ts', usage }
+  const reply: ModelCompleteResult = { isAnswered: true, text: 'TASK: New\nTITLE: Summary plugin\nLAST PROMPT: You asked to build it.\nSO FAR: built it\nNOW: testing it\nFILES: src/new.ts', usage }
 
   expect(replyResult(reply, previous, ['src/new.ts'])).toEqual({
     outcome: 'summary',
     failure: '',
     task: 'new',
-    texts: { title: 'Summary plugin', soFar: 'built it', now: 'testing it', files: ['src/new.ts'] },
+    texts: { title: 'Summary plugin', lastPrompt: 'You asked to build it.', soFar: 'built it', now: 'testing it', files: ['src/new.ts'] },
     isTaken: true,
   })
 })

@@ -22,7 +22,8 @@ It starts in the next session. To run it in every session without installing it,
 
 ## How it works
 
-- **A haiku call writes the texts.** It reads a tail window of the session's recent activity (16,000 characters, oldest first) and the previous texts, and answers a TASK verdict and four labelled texts. Tool results are left out; each tool call is one line (`→ Bash: <command>`, `→ Edit: <file>`). A prompt you send while a turn runs reaches the agent inside that turn but is missing from the messages Claude Code hands the plugin, so the plugin keeps it when you press Enter and puts it back in the window as your line, where it arrived.
+- **A haiku call writes the texts.** It reads a tail window of the session's recent activity (16,000 characters, oldest first) and the previous texts, and answers a TASK verdict and five labelled texts, written in Simplified Technical English (ASD-STE100): sentences of 25 words or fewer, one fact each, active voice, simple tenses, plain words. Tool results are left out; each tool call is one line (`→ Bash: <command>`, `→ Edit: <file>`). A prompt you send while a turn runs reaches the agent inside that turn but is missing from the messages Claude Code hands the plugin, so the plugin keeps it when you press Enter and puts it back in the window as your line, where it arrived.
+- **Last prompt.** The plugin finds your newest typed prompt in the whole session and sends it apart from the window; LAST PROMPT sums it up in one sentence. While that prompt is unchanged, LAST PROMPT stays as it was written. SO FAR says where the task stands and does not repeat the request.
 - **Task switches.** Each reply opens with `TASK: same` or `TASK: new`: whether you moved the session to a different outcome than the previous title names. Steps, fixes, reviews, approvals and follow-ups are `same`; a question asked in passing is not a new task. On `same` the title holds word for word and SO FAR is edited; on `new` the title names the new task and SO FAR is written fresh for it, with at most one clause about earlier work. The capture records each verdict.
 - **First prompt.** When a main turn starts while the band is empty (a new session, or after `/clear`), one call runs at the turn's first model step, so the band fills within seconds. Its title is marked provisional in the next call's request, which may replace it once the activity shows the work; after that the title holds as usual. A resumed session whose band is restored from its capture makes no such call.
 - **Cadence.** 90 seconds after a main turn starts, every 10 minutes while it runs, and once more when it ends and hands back to you (status `ended`). A turn that ends before the first 90 seconds makes no call. A call reading the same window as the last summary in the same turn is skipped, and the window is checked again 10 minutes later (a turn's first call is never skipped); a failed call is retried at the same 10 minutes. A turn whose first call comes due while the turn before's call is still running gets it as soon as that call lands, one call at a time.
@@ -34,7 +35,7 @@ It starts in the next session. To run it in every session without installing it,
 
 ## The band
 
-The texts sit in the band directly above the prompt, at the bottom of the screen, in every layout and at any width, under a thin line and on a darker background than the transcript: the title in bold, then `SO FAR:` and `NOW:` with their texts starting in one column, then `RECENT FILES:` when there are any, then when the texts were last updated. The input source and prompt variant are not drawn; `/session-summary show` prints them. The band stays empty until the session's first summary. Claude Code's `[-]` mark at its right end collapses it.
+The texts sit in the band directly above the prompt, at the bottom of the screen, in every layout and at any width, under a thin line and on a darker background than the transcript: the title in bold, then `LAST PROMPT:`, `SO FAR:` and `NOW:` with their texts starting in one column, then `RECENT FILES:` when there are any, then when the texts were last updated. The input source and prompt variant are not drawn; `/session-summary show` prints them. The band stays empty until the session's first summary. Claude Code's `[-]` mark at its right end collapses it.
 
 ## Experiment switches
 
@@ -75,7 +76,7 @@ A call the timer did not start ends its line with its trigger: `manual` for `/se
 | Outcome | Meaning |
 | --- | --- |
 | `summary` | The reply carried all three lines; the band has them |
-| `parse-partial` | Some of the four lines came back; the missing ones kept their previous text |
+| `parse-partial` | Some of the five lines came back; the missing ones kept their previous text |
 | `parse-failed` | No line came back; the band is unchanged |
 | `skip-same` | The window was the same as the last summary's in this turn; no call |
 | `skip-inflight` | A call was due while one of the same turn was still running or waiting for the turn before's, or the turn ended while its call waited; no call |

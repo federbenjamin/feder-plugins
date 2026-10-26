@@ -11,7 +11,7 @@ import { sessionLogPath } from './shared/firing.ts'
 import { PRICES, usageUsd } from './shared/pricing.ts'
 import { appendLine, record, stateDirs } from './shared/record.ts'
 import { PERSON_ORIGINS } from './shared/events.ts'
-import { buildRequest, captureLine, capturePath, EMPTY_SUMMARY, fileCandidates, sentFiles, formatLog, formatMessages, isBumpTurn, isDue, seedFromCapture, withQueued } from './summary.ts'
+import { buildRequest, captureLine, capturePath, EMPTY_SUMMARY, fileCandidates, sentFiles, formatLog, formatMessages, isBumpTurn, isDue, keptLastPrompt, newestPrompt, seedFromCapture, withQueued } from './summary.ts'
 import type { Previous, Queued } from './summary.ts'
 
 // Keeps short texts about this session (title, so far, now, files to open) in a band above the
@@ -34,6 +34,7 @@ type State = {
   epoch: number // bumped at session.start and session.end, so a call that outlived its conversation writes nothing
   isFirstPending: boolean // a main turn started on an empty band: its first model step makes the first-prompt call
   isTitleProvisional: boolean // the band's title came from the first-prompt call, written before any work
+  summarizedPrompt: string // the newest prompt the band's LAST PROMPT sums up; '' until a call takes one
   queued: Queued[] // the person's prompts sent mid-turn, newest last
 }
 
@@ -67,6 +68,7 @@ function reset(state: State): void {
   state.calls = noCalls()
   state.isFirstPending = false
   state.isTitleProvisional = false
+  state.summarizedPrompt = ''
   state.queued = []
   state.epoch++
 }
@@ -90,6 +92,7 @@ async function call($: EngineInterface, state: State, status: SummaryStatus, epo
     const messages = withQueued(await $.session.messages(), state.queued)
     const candidates = fileCandidates(messages, CANDIDATE_MAX)
     const sent = sentFiles(messages)
+    const newest = newestPrompt(messages, MESSAGE_CHARS)
     let input: string | undefined
     if (settings.source === 'session-log') {
       const logFile = dir === '' ? '' : sessionLogPath(dir, id)
@@ -109,14 +112,14 @@ async function call($: EngineInterface, state: State, status: SummaryStatus, epo
     }
 
     const stored = await readSummary($)
-    const previous: Previous = { title: stored.title, soFar: stored.soFar, now: stored.now, files: [...stored.files] }
+    const previous: Previous = { title: stored.title, lastPrompt: stored.lastPrompt, soFar: stored.soFar, now: stored.now, files: [...stored.files] }
     if (!isCurrent()) return undefined
     const startedAt = await $.clock.now()
     const controller = new AbortController()
     state.controller = controller
     let reply
     try {
-      reply = await $.model.complete({ ...SUMMARY_REQUEST, ...buildRequest({ variant, source, previous, input, candidates, sent, status, isTitleProvisional: state.isTitleProvisional }) }, { signal: controller.signal })
+      reply = await $.model.complete({ ...SUMMARY_REQUEST, ...buildRequest({ variant, source, previous, newestPrompt: newest, input, candidates, sent, status, isTitleProvisional: state.isTitleProvisional }) }, { signal: controller.signal })
     } finally {
       if (state.controller === controller) state.controller = undefined
     }
@@ -124,13 +127,17 @@ async function call($: EngineInterface, state: State, status: SummaryStatus, epo
     const ms = endedAt - startedAt
     const usage = reply.usage
     const usd = usageUsd(usage, PRICES.haiku)
-    const result = replyResult(reply, previous, candidates)
+    const replied = replyResult(reply, previous, candidates)
+    const result = { ...replied, texts: { ...replied.texts, lastPrompt: keptLastPrompt({ newest, summarized: state.summarizedPrompt, previous: previous.lastPrompt, replied: replied.texts.lastPrompt }) } }
     // Every await can let session.end reset the state, so each write checks the epoch again
     // after it; the atom update re-runs its change on a version miss, so it checks there too.
     if (isCurrent() && result.isTaken) {
-      const { title, soFar, now, files } = result.texts
-      await writeSummary($, s => (isCurrent() ? { title, soFar, now, files, at: endedAt, status, source, variant } : s))
-      if (isCurrent()) state.isTitleProvisional = trigger === 'first'
+      const { title, lastPrompt, soFar, now, files } = result.texts
+      await writeSummary($, s => (isCurrent() ? { title, lastPrompt, soFar, now, files, at: endedAt, status, source, variant } : s))
+      if (isCurrent()) {
+        state.isTitleProvisional = trigger === 'first'
+        state.summarizedPrompt = newest
+      }
     }
     if (isCurrent()) {
       // Only a call of the running turn feeds skip-same: the turn before's running or ended call,
@@ -150,6 +157,7 @@ async function call($: EngineInterface, state: State, status: SummaryStatus, epo
         input,
         inputChars: input.length,
         candidates,
+        newestPrompt: newest,
         ...result.texts,
         outcome: result.outcome,
         ms,
@@ -243,6 +251,7 @@ export const register: Register = (on, options) => {
     epoch: 0,
     isFirstPending: false,
     isTitleProvisional: false,
+    summarizedPrompt: '',
     queued: [],
   }
   let tick: { cancel: () => void } | undefined

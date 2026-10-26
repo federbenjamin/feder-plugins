@@ -67,6 +67,7 @@ export function showText(info: { summary: Summary; settings: Settings; calls: Ca
   const updated = s.at === 0 ? 'never' : `${Math.floor((info.now - s.at) / 60_000)} min ago (${s.status})`
   return [
     `Title: ${s.title || '(none yet)'}`,
+    `Last prompt: ${s.lastPrompt || '(none yet)'}`,
     `So far: ${s.soFar || '(none yet)'}`,
     `Now: ${s.now || '(none yet)'}`,
     `Files: ${s.files.join(', ') || 'none'}`,

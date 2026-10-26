@@ -25,7 +25,7 @@ export function replyResult(reply: ModelCompleteResult, previous: Previous, cand
     outcome: parsed.outcome,
     failure: '',
     task: parsed.outcome === 'parse-failed' ? null : parseTask(reply.text),
-    texts: { title: parsed.title, soFar: parsed.soFar, now: parsed.now, files: parsed.files },
+    texts: { title: parsed.title, lastPrompt: parsed.lastPrompt, soFar: parsed.soFar, now: parsed.now, files: parsed.files },
     isTaken: parsed.outcome !== 'parse-failed',
   }
 }

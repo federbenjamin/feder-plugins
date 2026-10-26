@@ -3,6 +3,7 @@ export type Source = 'messages' | 'session-log'
 export type SummaryStatus = 'running' | 'ended'
 export type Summary = {
   title: string // what this session is, in ten words or fewer
+  lastPrompt: string // the person's newest typed prompt, summed up in one sentence
   soFar: string
   now: string
   files: string[]
