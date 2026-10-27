@@ -1,15 +1,15 @@
 {
   "name": "morning-report",
-  "version": "0.1.0",
-  "description": "Accountability to your own goals: a daily status report written each night from your Claude Code sessions",
+  "version": "0.2.0",
+  "description": "A nightly status of your Claude Code streams, for you and your agents, plus a running catalog of what is going well and what is not",
   "author": {
-    "name": "federbenjamin"
+    "name": "Benjamin Feder"
   },
   "userConfig": {
     "dataDir": {
       "type": "string",
       "title": "Data folder",
-      "description": "Where the reports, your answers, priorities.md and profile.md live. ~ is your home folder.",
+      "description": "Where status.md, patterns.md, profile.md and the run files live. ~ is your home folder.",
       "default": "~/.morning-report"
     },
     "summaryModel": {
@@ -20,8 +20,8 @@
     },
     "reportModel": {
       "type": "string",
-      "title": "Report model",
-      "description": "The model that writes the report from the summaries.",
+      "title": "Status model",
+      "description": "The model that writes the status and the patterns entry from the summaries.",
       "default": "opus"
     },
     "sessionLogsDir": {
@@ -33,13 +33,7 @@
     "notifyCommand": {
       "type": "string",
       "title": "Notify command",
-      "description": "Optional command run with one message argument when a report is ready or fails. Empty skips it.",
-      "default": ""
-    },
-    "launchCommand": {
-      "type": "string",
-      "title": "Launch command",
-      "description": "Optional command /morning-review runs to start a fast-track item in a new session, with {dir}, {name} and {prompt} filled in. Empty prints the prompts to paste.",
+      "description": "Optional command run with one message argument when a run finishes or fails. Empty skips it.",
       "default": ""
     },
     "gitCommit": {
@@ -57,9 +51,8 @@
     "reportHour": {
       "type": "number",
       "title": "Report hour",
-      "description": "The hour (0–19) /morning-setup schedule runs the report, then hourly for four hours to retry a failed run.",
+      "description": "The hour (0–19) /morning-setup schedule runs the nightly job, then hourly for four hours to retry a failed run.",
       "default": 5
     }
-  },
-  "types": "./types/index.d.ts"
+  }
 }

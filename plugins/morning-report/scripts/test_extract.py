@@ -117,7 +117,6 @@ class ExtractTest(unittest.TestCase):
         self.assertEqual(ids, ["ok1"])
 
     def test_own_slash_commands_drop_session(self):
-        self.write_session("m1", [command("morning-review"), agent("report")])
         self.write_session("m2", [command("morning-run"), agent("report")])
         self.write_session("m3", [command("morning-setup"), agent("interview")])
         self.write_session("m4", [user("<command-name>/morning-run</command-name>"), agent("report")])
@@ -223,8 +222,8 @@ class ExtractTest(unittest.TestCase):
         self.write_session("s", [
             user("before", "2026-10-05T09:00:00Z"),
             agent("agent before", "2026-10-05T09:01:00Z"),
-            command("morning-review", "2026-10-05T10:00:00Z"),
-            user("The morning-report plugin sent a message: Run my morning review. The morning-report mod sent this prompt.", "2026-10-05T10:00:01Z"),
+            command("morning-setup", "2026-10-05T10:00:00Z"),
+            user("The morning-report plugin sent a message: The morning-report mod sent this prompt.", "2026-10-05T10:00:01Z"),
             agent("report shown", "2026-10-05T10:01:00Z"),
             user("answer after", "2026-10-05T10:02:00Z"),
         ])
@@ -239,8 +238,8 @@ class ExtractTest(unittest.TestCase):
             self.assertNotIn(bad, text)
         self.assertEqual(sessions[0]["typed"], 1)
 
-    def test_morning_review_prompt_alone_is_not_typed(self):
-        self.write_session("s", [user("real"), user("The morning-report plugin sent a message: Run my morning review.")])
+    def test_setup_prompt_alone_is_not_typed(self):
+        self.write_session("s", [user("real"), user("The morning-report plugin sent a message: The morning-report mod sent this prompt.")])
         self.assertEqual(self.text_of("s").count("[you]"), 1)
 
     def test_word_morning_without_slash_does_not_drop_session(self):

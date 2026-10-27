@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Yesterday's Claude Code sessions as prose, one block per session, for the morning report.
+"""Yesterday's Claude Code sessions as prose, one block per session, for the nightly status.
 
   extract.py --since ISO --until ISO [--projects DIR] [--session-logs DIR]
 
@@ -7,8 +7,9 @@ Prints JSON: {"sessions": [{"id", "project", "start", "end", "typed", "active_mi
 "active_minutes": <all sessions, overlaps counted once>, "projects": [{"project", "active_minutes"}]}.
 Keeps what the person typed (including prompts queued mid-turn), the agent's prose, and each
 subagent's task and final report; drops tool calls and results. Headless sessions (`claude -p`,
-the SDK) are dropped whole; in a session where /morning-review, /morning-run or /morning-setup was
-run, everything from the engine's record of that command on is dropped. The output stays under OUTPUT_CAP UTF-8 bytes. Read-only.
+the SDK) are dropped whole; in a session where /morning-run or /morning-setup was run, everything
+from the engine's record of that command on is dropped. The output stays under OUTPUT_CAP UTF-8
+bytes. Read-only.
 """
 import argparse
 import datetime as dt
@@ -25,11 +26,11 @@ NOT_TYPED = (
     "From the session", "From the owning session",
     # Machine-sent prompts: a cache keepalive, and a relay that answers for the person while they are away.
     "keepalive ping", "Last keepalive ping", "automessage:",
-    # A prompt this plugin submitted (the review), as the engine records it.
+    # A prompt this plugin submitted (the setup interview), as the engine records it.
     "The morning-report plugin sent a message:",
 )
 KEEPALIVE_REPLY = "ok"
-OWN_COMMANDS = ("morning-review", "morning-run", "morning-setup")
+OWN_COMMANDS = ("morning-run", "morning-setup")
 OWN_COMMAND = re.compile(r"^/(%s)(\s|$)" % "|".join(OWN_COMMANDS))
 # The engine records a slash command as a system/local_command entry, not as typed text.
 OWN_COMMAND_RECORD = re.compile(r"<command-name>/(%s)</command-name>" % "|".join(OWN_COMMANDS))
