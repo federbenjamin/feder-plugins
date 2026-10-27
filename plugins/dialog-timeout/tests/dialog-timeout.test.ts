@@ -145,12 +145,13 @@ function hooked(opts: { isAbortRefused?: boolean } = {}) {
   const clock = { now: T0, tick: undefined as (() => Promise<void>) | undefined }
   const logged: string[] = []
   const aborted: string[] = []
+  const stored: [string, unknown][] = []
   const done = { exitCode: 0, stdout: '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false }
   const $ = {
     env: { get: async (name: string) => (name === 'STOPSTOPPING_DIR' ? '/tmp/ss' : undefined) },
     fs: { exists: async () => true, write: async () => {} },
     session: { id: async () => 'sess-1' },
-    store: { get: async () => undefined, set: async () => {} },
+    store: { get: async () => undefined, set: async (key: string, value: unknown) => void stored.push([key, value]) },
     ui: { status: () => {} },
     command: { register: async () => ({ command: COMMAND }) },
     prompt: { fill: async () => ({ isFilled: false, refusal: 'dialog', text: '' }), submit: async () => ({ text: '' }) },
@@ -173,7 +174,7 @@ function hooked(opts: { isAbortRefused?: boolean } = {}) {
   } as unknown as EngineInterface
   const next = async (e: unknown) => e
   const fire = (event: string, e: unknown) => handlers.get(event)!($, e, next)
-  return { clock, logged, aborted, fire }
+  return { clock, logged, aborted, stored, fire }
 }
 
 const overdue = async (h: ReturnType<typeof hooked>, opts: { isSubagentStarted?: boolean } = {}) => {
@@ -204,4 +205,32 @@ test('a turn that could not be ended logs afk-failed once', async () => {
   const h = hooked({ isAbortRefused: true })
   await overdue(h)
   expect(h.logged).toEqual(['1970-01-01T00:46:40Z afk-failed session=sess-1 ms=0 reason=could not end the waiting turn\n'])
+})
+
+test('/dialog-timeout with no args or junk writes nothing to the store; off, on and minutes store the setting', async () => {
+  const h = hooked()
+  await h.fire('session.start', { isInteractive: true })
+  for (const args of ['', '   ', 'soon', '0', '10 20']) await h.fire('command.run', { args })
+  expect(h.stored).toEqual([])
+  await h.fire('command.run', { args: 'off' })
+  await h.fire('command.run', { args: 'on' })
+  await h.fire('command.run', { args: '10' })
+  expect(h.stored).toEqual([
+    ['setting', { minutes: 30, isOff: true }],
+    ['setting', { minutes: 30, isOff: false }],
+    ['setting', { minutes: 10, isOff: false }],
+  ])
+})
+
+test("a main turn that completes under another id than the running one's logs turn-id-mismatch; its own, a subagent's or an idle complete logs nothing", async () => {
+  const h = hooked()
+  await h.fire('session.start', { isInteractive: true })
+  await h.fire('turn.start', { turnId: 't1' })
+  await h.fire('turn.complete', { turnId: 'a1', agentId: 'agent-1' })
+  expect(h.logged).toEqual([])
+  await h.fire('turn.complete', { turnId: 't2' })
+  expect(h.logged).toEqual(['1970-01-01T00:16:40Z turn-id-mismatch session=sess-1 ms=0 reason=running=t1 completed=t2\n'])
+  await h.fire('turn.complete', { turnId: 't1' })
+  await h.fire('turn.complete', { turnId: 't3' })
+  expect(h.logged).toHaveLength(1)
 })

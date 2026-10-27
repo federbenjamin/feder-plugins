@@ -322,6 +322,8 @@ export const register: Register = (on, options) => {
       state.mainTurn = mainTurnEnded(state.mainTurn, e)
       state.isTurnSummarized = false
       if (isSummarized) void summarize($, state, 'ended')
+      // A main complete under another id leaves the turn running here: log it.
+      if (state.mainTurn !== undefined) await record($, PLUGIN, 'turn-id-mismatch', `running=${state.mainTurn.turnId} completed=${e.turnId}`)
     }
     return result
   })
