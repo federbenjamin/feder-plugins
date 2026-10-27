@@ -1,5 +1,6 @@
 // The shapes every plugin shares live once, in shared/: no plugin's own hooks file appends to the
-// firing log, resolves the state dir, or defines the event predicates again.
+// firing log, resolves the state dir, or defines the event predicates, the call pool or the
+// model-call retry again.
 //   node --test scripts/*.test.ts
 import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -7,7 +8,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
 const REPO = join(import.meta.dirname, '..')
-const PLUGINS = ['dialog-timeout', 'cache-keepalive', 'stop-judge', 'session-log', 'session-summary']
+const PLUGINS = ['dialog-timeout', 'cache-keepalive', 'stop-judge', 'session-log', 'session-summary', 'morning-report']
 
 // Each plugin's own hooks files: hooks/*.ts and *.tsx, not the generated hooks/shared/ copies.
 function ownHooksFiles(): { path: string; text: string }[] {
@@ -29,9 +30,11 @@ const SHARED_ONLY: { what: string; re: RegExp }[] = [
   { what: 'a clip helper', re: /function\s+clip\b/ },
   { what: 'actionSummary', re: /function\s+actionSummary/ },
   { what: 'the session-log path', re: /function\s+sessionLogPath/ },
+  { what: 'the call pool', re: /function\s+pool\b/ },
+  { what: 'the model-call retry', re: /function\s+(retryDelayS|isPermanent|tooManyFailed)\b|PERMANENT_ERRORS\s*[:=]/ },
 ]
 
-test('the firing-log append, the state dir and the event predicates are defined only in shared/', () => {
+test('the firing-log append, the state dir, the event predicates, the pool and the retry are defined only in shared/', () => {
   const files = ownHooksFiles()
   assert.ok(files.some(f => f.path.endsWith(join('stop-judge', 'hooks', 'register.ts'))))
   const hits = files.flatMap(f => SHARED_ONLY.filter(s => s.re.test(f.text)).map(s => `${f.path}: ${s.what}`))
