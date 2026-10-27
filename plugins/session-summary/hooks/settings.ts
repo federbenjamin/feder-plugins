@@ -1,6 +1,8 @@
 import type { Source, Summary } from '../types'
 import { EVERY_SECONDS, FIRST_SECONDS } from './config.ts'
 import { DEFAULT_VARIANT, isVariant } from './prompts.ts'
+import { isFlag, isOneOf, isPositiveInteger, parseCommand, positiveInteger, readSettings } from './shared/settings.ts'
+import type { Grammar } from './shared/settings.ts'
 
 // The /session-summary command's pure side: the stored settings, the grammar, the show text.
 
@@ -8,18 +10,11 @@ export type Settings = { isOff: boolean; firstSeconds: number; everySeconds: num
 
 export const DEFAULT_SETTINGS: Settings = Object.freeze({ isOff: false, firstSeconds: FIRST_SECONDS, everySeconds: EVERY_SECONDS, source: 'messages', variant: DEFAULT_VARIANT })
 
-const isPositiveInteger = (v: unknown): v is number => Number.isSafeInteger(v) && (v as number) > 0
-export const isSource = (v: unknown): v is Source => v === 'messages' || v === 'session-log'
+export const isSource = isOneOf<Source>(['messages', 'session-log'])
+const isVariantName = (v: unknown): v is string => typeof v === 'string' && isVariant(v)
 
 export function settingsFrom(value: unknown): Settings {
-  const v = (typeof value === 'object' && value !== null ? value : {}) as Record<string, unknown>
-  return {
-    isOff: v.isOff === true,
-    firstSeconds: isPositiveInteger(v.firstSeconds) ? v.firstSeconds : DEFAULT_SETTINGS.firstSeconds,
-    everySeconds: isPositiveInteger(v.everySeconds) ? v.everySeconds : DEFAULT_SETTINGS.everySeconds,
-    source: isSource(v.source) ? v.source : DEFAULT_SETTINGS.source,
-    variant: typeof v.variant === 'string' && isVariant(v.variant) ? v.variant : DEFAULT_SETTINGS.variant,
-  }
+  return readSettings(value, DEFAULT_SETTINGS, { isOff: isFlag, firstSeconds: isPositiveInteger, everySeconds: isPositiveInteger, source: isSource, variant: isVariantName })
 }
 
 export type Action =
@@ -35,29 +30,27 @@ export type Action =
 
 export const USAGE = '/session-summary [on|off|first <seconds>|every <seconds>|source messages|session-log|variant <name>|show|now]'
 
-const seconds = (word: string): number | undefined => {
-  if (!/^\d+$/.test(word)) return undefined
-  const n = Number(word)
-  return isPositiveInteger(n) ? n : undefined
+const seconds =
+  (kind: 'first' | 'every') =>
+  (word: string): Action | undefined => {
+    const n = positiveInteger(word)
+    return n === undefined ? undefined : { kind, seconds: n }
+  }
+
+const GRAMMAR: Grammar<Action> = {
+  empty: { kind: 'show' },
+  words: { on: { kind: 'on' }, off: { kind: 'off' }, show: { kind: 'show' }, now: { kind: 'now' } },
+  valued: {
+    first: seconds('first'),
+    every: seconds('every'),
+    source: v => (isSource(v) ? { kind: 'source', source: v } : undefined),
+    variant: v => (isVariant(v) ? { kind: 'variant', variant: v } : undefined),
+  },
+  usage: { kind: 'usage' },
 }
 
 export function summaryCommand(args: string): Action {
-  const words = args.trim().split(/\s+/).filter(Boolean)
-  const [verb, arg, extra] = [words[0]?.toLowerCase(), words[1], words[2]]
-  if (verb === undefined) return { kind: 'show' }
-  if (extra !== undefined) return { kind: 'usage' }
-  if (arg === undefined) {
-    if (verb === 'on' || verb === 'off' || verb === 'show' || verb === 'now') return { kind: verb }
-    return { kind: 'usage' }
-  }
-  if (verb === 'first' || verb === 'every') {
-    const n = seconds(arg)
-    return n === undefined ? { kind: 'usage' } : { kind: verb, seconds: n }
-  }
-  const value = arg.toLowerCase()
-  if (verb === 'source' && isSource(value)) return { kind: 'source', source: value }
-  if (verb === 'variant' && isVariant(value)) return { kind: 'variant', variant: value }
-  return { kind: 'usage' }
+  return parseCommand(args, GRAMMAR)
 }
 
 export type Calls = { count: number; input: number; output: number; cached: number; usd: number }

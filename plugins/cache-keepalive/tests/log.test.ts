@@ -50,6 +50,25 @@ test('COLD_LIMIT cold pings log stopped-cold once, after their bump lines', asyn
   expect(logged.at(-1)?.stdin).toMatch(new RegExp(`^\\S+ stopped-cold session=sess-1 ms=0 reason=${COLD_LIMIT} pings in a row\\n$`))
 })
 
+test("a main turn that completes under another id than the running one's logs turn-id-mismatch; a subagent's, its own or an idle complete logs nothing", async ($, on) => {
+  const { clock, logged } = world(on)
+  await start($)
+  await $.turn.start({ text: 'hi', turnId: 't1' })
+  for await (const _ of $.turn.step({ turnId: 't1', index: 0, model: 'claude-opus-5-5', messageCount: 1 })) {
+    // drain
+  }
+  await $.turn.complete({ turnId: 'a1', agentId: 'agent-1', reason: 'answer', answer: 'ok', durationMs: 1, isAborted: false })
+  expect(outcomes(logged)).toEqual([])
+  await $.turn.complete({ turnId: 't2', reason: 'answer', answer: 'ok', durationMs: 1, isAborted: false })
+  expect(outcomes(logged)).toEqual(['turn-id-mismatch'])
+  expect(logged[0]?.stdin).toMatch(/^\S+ turn-id-mismatch session=sess-1 ms=0 reason=running=t1 completed=t2\n$/)
+  await clock.advance(HOUR - LEAD_MS)
+  expect(outcomes(logged)).toEqual(['turn-id-mismatch'])
+  await $.turn.complete({ turnId: 't1', reason: 'answer', answer: 'ok', durationMs: 1, isAborted: false })
+  await $.turn.complete({ turnId: 't3', reason: 'answer', answer: 'ok', durationMs: 1, isAborted: false })
+  expect(outcomes(logged)).toEqual(['turn-id-mismatch'])
+})
+
 test('a ping that got no response logs no-response once', async ($, on) => {
   const { clock, logged, step } = world(on)
   await start($)

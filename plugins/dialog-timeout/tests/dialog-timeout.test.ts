@@ -1,11 +1,14 @@
 import { expect, mock, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 import type { EngineInterface, On, PluginOptions } from 'claude-code'
-import { COMMAND, DEFAULT_MINUTES, dialogTimeoutCommand, envMinutesFrom, observe, register, sessionSetting, settingFrom, TICK_MS } from '../hooks/register'
+import { COMMAND, observe, register, TICK_MS } from '../hooks/register'
+import { applyCommand, DEFAULT_MINUTES, dialogTimeoutCommand, envMinutesFrom, sessionSetting, settingsFrom } from '../hooks/settings'
+import type { Settings } from '../hooks/settings'
 
 const T0 = 1_000_000
 const TIMEOUT = DEFAULT_MINUTES * 60_000
 const on30 = { minutes: 30, isOff: false }
+const command = (args: string, s: Settings, envMinutes?: number) => applyCommand(s, dialogTimeoutCommand(args), envMinutes)
 
 test('a dialog is overdue the set time after the first tick that saw it', async () => {
   expect(observe(0, true, T0, TIMEOUT)).toEqual({ openSince: T0, isOverdue: false })
@@ -19,18 +22,22 @@ test('a tick with no dialog restarts the count', async () => {
 })
 
 test('/dialog-timeout takes minutes, off and on, and reports the setting for anything else', async () => {
-  expect(dialogTimeoutCommand(' 10 ', on30).setting).toEqual({ minutes: 10, isOff: false })
-  expect(dialogTimeoutCommand('OFF', on30).setting).toEqual({ minutes: 30, isOff: true })
-  expect(dialogTimeoutCommand('on', { minutes: 10, isOff: true }).setting).toEqual({ minutes: 10, isOff: false })
-  expect(dialogTimeoutCommand('5', { minutes: 10, isOff: true }).setting).toEqual({ minutes: 5, isOff: false })
-  for (const bad of ['', '0', '-3', '1.5', 'soon']) expect(dialogTimeoutCommand(bad, on30).setting).toBe(on30)
-  expect(dialogTimeoutCommand('', { minutes: 10, isOff: true }).text).toBe('dialog-timeout is off (10 min when on); /dialog-timeout <minutes>, off, or on')
+  expect(dialogTimeoutCommand(' 10 ')).toEqual({ kind: 'minutes', minutes: 10 })
+  expect(dialogTimeoutCommand('')).toEqual({ kind: 'status' })
+  expect(dialogTimeoutCommand('soon')).toEqual({ kind: 'usage' })
+  expect(command(' 10 ', on30).setting).toEqual({ minutes: 10, isOff: false })
+  expect(command('OFF', on30).setting).toEqual({ minutes: 30, isOff: true })
+  expect(command('on', { minutes: 10, isOff: true }).setting).toEqual({ minutes: 10, isOff: false })
+  expect(command('5', { minutes: 10, isOff: true }).setting).toEqual({ minutes: 5, isOff: false })
+  for (const bad of ['', '0', '-3', '1.5', 'soon', '10 20']) expect(command(bad, on30).setting).toBe(on30)
+  expect(command('', { minutes: 10, isOff: true }).text).toBe('dialog-timeout is off (10 min when on); /dialog-timeout <minutes>, off, or on')
+  expect(command('soon', { minutes: 10, isOff: true }).text).toBe('dialog-timeout is off (10 min when on); /dialog-timeout <minutes>, off, or on')
 })
 
 test('a stored value that is not a setting reads as the default', async () => {
-  expect(settingFrom(undefined)).toEqual(on30)
-  expect(settingFrom({ minutes: 0, isOff: 'yes' })).toEqual(on30)
-  expect(settingFrom({ minutes: 10, isOff: true })).toEqual({ minutes: 10, isOff: true })
+  expect(settingsFrom(undefined)).toEqual(on30)
+  expect(settingsFrom({ minutes: 0, isOff: 'yes' })).toEqual(on30)
+  expect(settingsFrom({ minutes: 10, isOff: true })).toEqual({ minutes: 10, isOff: true })
 })
 
 test('DIALOG_TIMEOUT_MINUTES replaces the stored minutes in this session alone, and off still wins', async () => {
@@ -39,11 +46,11 @@ test('DIALOG_TIMEOUT_MINUTES replaces the stored minutes in this session alone, 
   expect(sessionSetting({ minutes: 10, isOff: false }, 2)).toEqual({ minutes: 2, isOff: false })
   expect(sessionSetting({ minutes: 10, isOff: true }, 2)).toEqual({ minutes: 2, isOff: true })
   expect(sessionSetting(undefined, undefined)).toEqual(on30)
-  const set = dialogTimeoutCommand('10', on30, 2)
+  const set = command('10', on30, 2)
   expect(set.setting).toEqual({ minutes: 10, isOff: false })
   expect(set.text).toBe('dialog-timeout 10 min: a dialog left open that long ends the turn with /afk (this session: 2 min, from DIALOG_TIMEOUT_MINUTES)')
-  expect(dialogTimeoutCommand('', on30, 2).text).toBe('dialog-timeout is 30 min; /dialog-timeout <minutes>, off, or on (this session: 2 min, from DIALOG_TIMEOUT_MINUTES)')
-  expect(dialogTimeoutCommand('off', on30, 2).text).toBe('dialog-timeout off: open dialogs wait for you, in every session')
+  expect(command('', on30, 2).text).toBe('dialog-timeout is 30 min; /dialog-timeout <minutes>, off, or on (this session: 2 min, from DIALOG_TIMEOUT_MINUTES)')
+  expect(command('off', on30, 2).text).toBe('dialog-timeout off: open dialogs wait for you, in every session')
 })
 
 // The engine beneath: a clock at T0, a store holding `stored`, an environment holding `env`, and
@@ -81,6 +88,17 @@ test('the prompt box is asked only while a main turn runs', async ($, on) => {
   await endTurn($, 't1')
   await clock.advance(10 * TICK_MS)
   expect(box.fills).toBe(2)
+})
+
+test("a subagent's turn leaves the main turn tracked: the asking stops when the main turn ends", async ($, on) => {
+  const { clock, box } = world(on)
+  await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
+  await $.turn.start({ text: 'hi', turnId: 't1' })
+  await $.turn.start({ text: 'work', turnId: 'a1', agentId: 'agent-1' })
+  const before = box.fills
+  await endTurn($, 't1')
+  await clock.advance(10 * TICK_MS)
+  expect(box.fills).toBe(before)
 })
 
 test('/dialog-timeout off stops the asking and shows in the status line; on brings it back', async ($, on) => {
@@ -126,17 +144,20 @@ function hooked(opts: { isAbortRefused?: boolean } = {}) {
   register(fakeOn, {} as PluginOptions)
   const clock = { now: T0, tick: undefined as (() => Promise<void>) | undefined }
   const logged: string[] = []
+  const aborted: string[] = []
+  const stored: [string, unknown][] = []
   const done = { exitCode: 0, stdout: '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false }
   const $ = {
     env: { get: async (name: string) => (name === 'STOPSTOPPING_DIR' ? '/tmp/ss' : undefined) },
     fs: { exists: async () => true, write: async () => {} },
     session: { id: async () => 'sess-1' },
-    store: { get: async () => undefined, set: async () => {} },
+    store: { get: async () => undefined, set: async (key: string, value: unknown) => void stored.push([key, value]) },
     ui: { status: () => {} },
     command: { register: async () => ({ command: COMMAND }) },
     prompt: { fill: async () => ({ isFilled: false, refusal: 'dialog', text: '' }), submit: async () => ({ text: '' }) },
     turn: {
-      abort: async () => {
+      abort: async (init: { turnId: string }) => {
+        aborted.push(init.turnId)
         if (opts.isAbortRefused) throw new Error('refused')
       },
     },
@@ -153,12 +174,13 @@ function hooked(opts: { isAbortRefused?: boolean } = {}) {
   } as unknown as EngineInterface
   const next = async (e: unknown) => e
   const fire = (event: string, e: unknown) => handlers.get(event)!($, e, next)
-  return { clock, logged, fire }
+  return { clock, logged, aborted, stored, fire }
 }
 
-const overdue = async (h: ReturnType<typeof hooked>) => {
+const overdue = async (h: ReturnType<typeof hooked>, opts: { isSubagentStarted?: boolean } = {}) => {
   await h.fire('session.start', { isInteractive: true })
   await h.fire('turn.start', { turnId: 't1' })
+  if (opts.isSubagentStarted) await h.fire('turn.start', { turnId: 'a1', agentId: 'agent-1' })
   await h.clock.tick!()
   h.clock.now = T0 + TIMEOUT
   await h.clock.tick!()
@@ -172,8 +194,43 @@ test('a dialog left open past the timeout ends the turn and logs afk once', asyn
   expect(h.logged).toEqual([`1970-01-01T00:46:40Z afk session=sess-1 ms=0 reason=dialog open ${DEFAULT_MINUTES} min, sent /afk\n`])
 })
 
+test("the overdue abort ends the main turn, not a subagent's that started after it", async () => {
+  const h = hooked()
+  await overdue(h, { isSubagentStarted: true })
+  expect(h.aborted).toEqual(['t1'])
+  expect(h.logged).toEqual([`1970-01-01T00:46:40Z afk session=sess-1 ms=0 reason=dialog open ${DEFAULT_MINUTES} min, sent /afk\n`])
+})
+
 test('a turn that could not be ended logs afk-failed once', async () => {
   const h = hooked({ isAbortRefused: true })
   await overdue(h)
   expect(h.logged).toEqual(['1970-01-01T00:46:40Z afk-failed session=sess-1 ms=0 reason=could not end the waiting turn\n'])
+})
+
+test('/dialog-timeout with no args or junk writes nothing to the store; off, on and minutes store the setting', async () => {
+  const h = hooked()
+  await h.fire('session.start', { isInteractive: true })
+  for (const args of ['', '   ', 'soon', '0', '10 20']) await h.fire('command.run', { args })
+  expect(h.stored).toEqual([])
+  await h.fire('command.run', { args: 'off' })
+  await h.fire('command.run', { args: 'on' })
+  await h.fire('command.run', { args: '10' })
+  expect(h.stored).toEqual([
+    ['setting', { minutes: 30, isOff: true }],
+    ['setting', { minutes: 30, isOff: false }],
+    ['setting', { minutes: 10, isOff: false }],
+  ])
+})
+
+test("a main turn that completes under another id than the running one's logs turn-id-mismatch; its own, a subagent's or an idle complete logs nothing", async () => {
+  const h = hooked()
+  await h.fire('session.start', { isInteractive: true })
+  await h.fire('turn.start', { turnId: 't1' })
+  await h.fire('turn.complete', { turnId: 'a1', agentId: 'agent-1' })
+  expect(h.logged).toEqual([])
+  await h.fire('turn.complete', { turnId: 't2' })
+  expect(h.logged).toEqual(['1970-01-01T00:16:40Z turn-id-mismatch session=sess-1 ms=0 reason=running=t1 completed=t2\n'])
+  await h.fire('turn.complete', { turnId: 't1' })
+  await h.fire('turn.complete', { turnId: 't3' })
+  expect(h.logged).toHaveLength(1)
 })

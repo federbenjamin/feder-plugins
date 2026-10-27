@@ -63,7 +63,7 @@ Every firing appends one line to `~/.claude/stopstopping/logs/dialog-timeout.log
 <utc> <outcome> session=<id> ms=<n> reason=<text>
 ```
 
-Outcomes: `afk` (a dialog stayed open for the set minutes and the turn ended with `/afk`) and `afk-failed` (the turn could not be ended).
+Outcomes: `afk` (a dialog stayed open for the set minutes and the turn ended with `/afk`), `afk-failed` (the turn could not be ended), and `turn-id-mismatch` (a main turn completed under another id than the running one's, which stays tracked; the reason names both ids).
 
 Read it back:
 

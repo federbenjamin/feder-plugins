@@ -1,5 +1,6 @@
 import { expect, test } from 'claude-code/testing'
-import { accountOf, bumpText, capFor, COLD_LIMIT, followsFirstRequest, HEADROOM_MS, isAccountChanged, isConversationReplaced, isDue, keepaliveCommand, LEAD_MS, OFF_TOOL, TICK_MS, wasCold } from '../hooks/register'
+import { accountOf, bumpText, capFor, COLD_LIMIT, followsFirstRequest, HEADROOM_MS, isAccountChanged, isConversationReplaced, isDue, LEAD_MS, OFF_TOOL, TICK_MS, wasCold } from '../hooks/register'
+import { keepaliveCommand, keepaliveReply } from '../hooks/settings'
 import { COLD, HOUR, mainTurn, run, SUMMARY, T0, typed, WARM, world } from './world'
 
 const base = { lastSend: T0, bumpedFor: 0, isStopped: false, isOff: false, ttl: HOUR, isBusy: false }
@@ -37,9 +38,13 @@ test('only the last bump asks for a handoff', async () => {
 })
 
 test('/keepalive takes off and on, and reports the state for anything else', async () => {
-  expect(keepaliveCommand(' OFF ', false).isOff).toBe(true)
-  expect(keepaliveCommand('on', true).isOff).toBe(false)
-  expect(keepaliveCommand('', true)).toEqual({ isOff: true, text: 'keepalive is off; /keepalive off or /keepalive on' })
+  expect(keepaliveCommand(' OFF ')).toEqual({ kind: 'off' })
+  expect(keepaliveReply(false, keepaliveCommand(' OFF ')).isOff).toBe(true)
+  expect(keepaliveReply(true, keepaliveCommand('on')).isOff).toBe(false)
+  expect(keepaliveReply(true, keepaliveCommand(''))).toEqual({ isOff: true, text: 'keepalive is off; /keepalive off or /keepalive on' })
+  expect(keepaliveCommand('off now')).toEqual({ kind: 'status' })
+  expect(keepaliveCommand('later')).toEqual({ kind: 'status' })
+  expect(keepaliveReply(false, keepaliveCommand('off now'))).toEqual({ isOff: false, text: 'keepalive is on; /keepalive off or /keepalive on' })
 })
 
 test('a bump that wrote more than it read found the cache cold', async () => {
@@ -164,7 +169,7 @@ test('the keepalive_off tool turns the pings off like /keepalive off, and logs i
   await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
   await mainTurn($, 't1')
   const { result } = await $.tool.call({ tool: `mcp__cache-keepalive__${OFF_TOOL}`, tool_use_id: 'toolu_1' })
-  expect(result).toBe(keepaliveCommand('off', false).text)
+  expect(result).toBe(keepaliveReply(false, keepaliveCommand('off')).text)
   expect(statuses.at(-1)).toBe('keepalive off')
   expect(logged.map(l => l.stdin.split(' ')[1])).toEqual(['off'])
   await clock.advance(HOUR)

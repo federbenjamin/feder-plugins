@@ -1,6 +1,6 @@
 import { PROMPT } from './prompt.ts'
 import { clip } from './shared/text.ts'
-import { contentText, parseRow, SIBLING_TEXTS, typedText } from './shared/typed.ts'
+import { contentText, isRecord, parseRow, SIBLING_TEXTS, typedText } from './shared/typed.ts'
 import type { TranscriptRow } from './shared/typed.ts'
 
 // The stop judge's pure side: which transcript rows frame a turn, the request to the model, its
@@ -46,8 +46,6 @@ export type Outcome = (typeof OUTCOMES)[number]
 
 type Opening = 'human' | 'plugin' | 'none'
 type Verdict = { verdict: 'stop' | 'continue'; reason: string; fields: Record<string, unknown> }
-
-const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
 
 // JSON lines of a transcript tail; the first line may be cut, and sidechain rows are not the session's.
 export function parseRows(text: string): TranscriptRow[] {

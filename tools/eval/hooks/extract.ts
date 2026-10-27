@@ -2,7 +2,7 @@ import { assistantText, framingAndPrior, minutesFact, parseRows, splitTurn, TAIL
 import type { MinutesGap } from './judge/judge.ts'
 import { parseFiringLine } from './judge/shared/firing.ts'
 import type { FiringLine } from './judge/shared/firing.ts'
-import { parseRow, typedText } from './judge/shared/typed.ts'
+import { isRecord, parseRow, typedText } from './judge/shared/typed.ts'
 import type { TranscriptRow } from './judge/shared/typed.ts'
 
 // Records of judged stops: what the judge saw at each firing, rebuilt from the session's
@@ -30,7 +30,6 @@ const TOOL_RESULT = '"type":"tool_result"'
 // written after the model call).
 const FIRING_LAG_MS = 2000
 
-const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
 const timeOf = (row: TranscriptRow): number => (typeof row.timestamp === 'string' ? Date.parse(row.timestamp) : Number.NaN)
 
 export function transcriptRows(grepped: string): TranscriptRow[] {

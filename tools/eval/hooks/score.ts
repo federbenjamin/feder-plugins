@@ -1,5 +1,6 @@
 import { confidenceOf, judgeOutcome } from './judge/judge.ts'
 import type { JudgeReply, MinutesGap } from './judge/judge.ts'
+import { isRecord } from './judge/shared/typed.ts'
 
 // One model call of a run, the graders' labels, and the command's arguments.
 
@@ -26,8 +27,6 @@ export type RunRecord = Call & {
 export type Grade = { id: string; verdict: 'stop' | 'continue'; case: string; confidence: string }
 
 export type { JudgeReply }
-
-const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
 
 // Every call of a run: each repeat of each record in each arm, a record's arms side by side so
 // both meet the same API conditions.
