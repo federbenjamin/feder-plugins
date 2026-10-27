@@ -8,26 +8,24 @@ import {
   contentOfReply,
   COST_PER_TURN_USD,
   estimateUsd,
-  isPermanent,
   mayHoldTurn,
   MIN_TYPED,
   packSessions,
   parseReaderLines,
   pool,
   POOL,
-  retryDelayS,
   ROW_GREP_PATTERN,
   selectCandidates,
   sessionDates,
   SYNTH_INPUT_MAX_CHARS,
   synthesisInput,
-  tooManyFailed,
   TURN_CAP,
   typedTurnsOf,
   verifyReaderLines,
   windowText,
 } from './derive.ts'
 import type { Batch, Session } from './derive.ts'
+import { isPermanent, retryDelayS, tooManyFailed } from './shared/retry.ts'
 import { COMMAND } from './settings.ts'
 import { PRICES, usageUsd } from './shared/pricing.ts'
 import { record, stateDirs } from './shared/record.ts'

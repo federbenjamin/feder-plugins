@@ -5,6 +5,7 @@ import { countOutcomes, firingLine, firingRecord, sessionLogPath, sessionLogsDir
 import { pool } from '../hooks/shared/pool.ts'
 import { PRICES, usageUsd } from '../hooks/shared/pricing.ts'
 import { appendLine, record, stateDirs } from '../hooks/shared/record.ts'
+import { isPermanent, retryDelayS, tooManyFailed } from '../hooks/shared/retry.ts'
 import { toolInputHead } from '../hooks/shared/text.ts'
 import { contentText, isTypedText, NOT_TYPED, parseRow, SIBLING_TEXTS, typedText } from '../hooks/shared/typed.ts'
 
@@ -250,4 +251,58 @@ test('appendLine writes an absent file empty then appends with tee, an existing 
 
   const failing = appendWorld({}, { exists: false, failWrite: true })
   await expect(appendLine(failing.$, '/x/a.jsonl', 'three\n')).rejects.toThrow('read-only')
+})
+
+test('isPermanent is true for each no-wait-clears error and false for transient ones', async () => {
+  for (const error of [
+    'authentication_failed', 'oauth_org_not_allowed', 'account_on_hold', 'verification_required',
+    'billing_error', 'cloud_credential_error', 'invalid_request', 'model_not_found',
+  ]) {
+    expect(isPermanent({ reason: 'api-error', error })).toBe(true)
+  }
+  expect(isPermanent({ reason: 'api-error', status: 429, error: 'rate_limit' })).toBe(false)
+  expect(isPermanent({ reason: 'api-error', status: 529, error: 'overloaded' })).toBe(false)
+  expect(isPermanent({ reason: 'api-error', status: null, error: 'unknown' })).toBe(false)
+  expect(isPermanent({ reason: 'empty-reply' })).toBe(false)
+  expect(isPermanent({ reason: 'aborted' })).toBe(false)
+})
+
+test('retryDelayS gives a permanent error no retry at any attempt', async () => {
+  const f = { reason: 'api-error', status: 401, error: 'authentication_failed' }
+  for (const attempt of [0, 1, 2, 3]) expect(retryDelayS(f, attempt)).toBeUndefined()
+})
+
+test('retryDelayS retries a 429 with backoff 30, 60, 120, 240 then gives up', async () => {
+  const f = { reason: 'api-error', status: 429, error: 'rate_limit' }
+  expect([0, 1, 2, 3].map(a => retryDelayS(f, a))).toEqual([30, 60, 120, 240])
+  expect(retryDelayS(f, 4)).toBeUndefined()
+  expect(retryDelayS(f, 10)).toBeUndefined()
+})
+
+test('retryDelayS backs off the same for 5xx, null status and empty replies', async () => {
+  for (const f of [
+    { reason: 'api-error', status: 529, error: 'overloaded' },
+    { reason: 'api-error', status: 500, error: 'server_error' },
+    { reason: 'api-error', status: null, error: 'unknown' },
+    { reason: 'empty-reply' },
+  ]) {
+    expect([0, 1, 2, 3, 4].map(a => retryDelayS(f, a))).toEqual([30, 60, 120, 240, undefined])
+  }
+})
+
+test('retryDelayS retries an aborted call once after 30s', async () => {
+  expect(retryDelayS({ reason: 'aborted' }, 0)).toBe(30)
+  expect(retryDelayS({ reason: 'aborted' }, 1)).toBeUndefined()
+  expect(retryDelayS({ reason: 'aborted' }, 2)).toBeUndefined()
+})
+
+test('tooManyFailed is true only when more than half failed', async () => {
+  expect(tooManyFailed(0, 0)).toBe(false)
+  expect(tooManyFailed(1, 0)).toBe(false)
+  expect(tooManyFailed(2, 1)).toBe(false)
+  expect(tooManyFailed(3, 1)).toBe(false)
+  expect(tooManyFailed(3, 2)).toBe(true)
+  expect(tooManyFailed(4, 2)).toBe(false)
+  expect(tooManyFailed(4, 3)).toBe(true)
+  expect(tooManyFailed(1, 1)).toBe(true)
 })
