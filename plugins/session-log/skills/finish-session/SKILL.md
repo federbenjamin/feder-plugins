@@ -23,6 +23,8 @@ Done now if it is minutes of reversible work answered by a rule or the code (an 
 
 Worktrees removed, spawns and shells stopped, the install green where setup changed; a branch or PR still open is an open item. Flip each done Todo line in the session log (`— done`).
 
+Turn off the cache-keepalive pings for this session: call the `mcp__cache-keepalive__keepalive_off` tool (load it with ToolSearch when it is deferred). Absent, cache-keepalive is not installed: skip this.
+
 ## 4. Hand off only what is open
 
 Open to do is empty: no handoff; the session is finished. Anything open: run the `handoff` skill, so a fresh session can pick the open items up.
