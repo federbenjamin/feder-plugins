@@ -536,7 +536,6 @@ test('a profile with no Watch for list skips the patterns call', OPTIONS, async 
 for (const [why, a, reason] of [
   ['a status answer with no stream block', { status: 'Sorry, I ran out of room.' }, 'no stream block'],
   ['a status block without its last touched date', { status: '## parser\n- what: the parser' }, 'without a "last touched: YYYY-MM-DD" line (parser)'],
-  ['a patterns answer without its lists', { patterns: 'All good.' }, 'lacks its Going well or Not working list'],
 ] as const) {
   test(`${why} fails the run, writes nothing, and keeps the watermark`, OPTIONS, async ($, on) => {
     const seen = runWorld(on, { extract: extractOf([small('a')]), profile: PROFILE, files: { [RUNS]: '' }, model: answers(a) })
@@ -547,6 +546,75 @@ for (const [why, a, reason] of [
     expect(seen.log.map(l => l.split(' ')[1])).toEqual(['run-failed'])
   })
 }
+
+test('a patterns answer without its lists writes the status, skips only the entry, and says why in the run record, the result and the notification', { options: { ...OPTIONS.options, notifyCommand: '/bin/notify' } }, async ($, on) => {
+  const today = TODAY_LOCAL()
+  const seen = runWorld(on, {
+    extract: extractOf([small('a')]),
+    profile: PROFILE,
+    files: { [RUNS]: '' },
+    model: answers({ patterns: 'All good.' }),
+  })
+  const why = 'the patterns answer lacks its Going well or Not working list'
+  expect(await morningRun($)).toBe(`wrote ${DATA}/status.md (1 stream) and patterns skipped (${why})`)
+  expect([...seen.writes.keys()]).toEqual([`${RUNS}/${today}-summaries.md`, `${RUNS}/${today}-status.md`, `${DATA}/status.md`, `${RUNS}/${today}-run.json`, `${DATA}/state.json`])
+  expect(JSON.parse(seen.writes.get(`${RUNS}/${today}-run.json`)!).patterns).toBe(`skipped: ${why}`)
+  expect(JSON.parse(seen.writes.get(`${DATA}/state.json`)!).reportDate).toBe(today)
+  expect(seen.log.map(l => l.split(' ')[1])).toEqual(['run-written'])
+  expect(seen.log[0]).toContain(why)
+  expect(seen.argv.find(a => a[0] === '/bin/notify')![1]).toContain(`patterns skipped (${why})`)
+})
+
+test('a window whose summaries are all idle makes no model call after the summaries, carries the previous status, and still writes the run record', OPTIONS, async ($, on) => {
+  const today = TODAY_LOCAL()
+  const yesterday = daysBefore(today, 1)
+  const seen = runWorld(on, {
+    extract: extractOf([small('a'), small('b')]),
+    profile: PROFILE,
+    files: { [RUNS]: '', [`${RUNS}/${yesterday}-status.md`]: `## carried\n- what: kept\n- last touched: ${yesterday}` },
+    model: call => ({ isAnswered: true, text: call.system.startsWith('SUMMARIZER') ? '## a — idle\n\n## b — idle' : 'unused' }),
+  })
+  expect(await morningRun($)).toBe(`wrote ${DATA}/status.md (1 stream) and patterns skipped (only idle sessions)`)
+  expect(callsOf(seen, 'STATUS')).toEqual([])
+  expect(callsOf(seen, 'PATTERNS')).toEqual([])
+  expect(seen.writes.get(`${DATA}/status.md`)).toContain(`## carried\n- what: kept\n- last touched: ${yesterday}`)
+  expect(JSON.parse(seen.writes.get(`${RUNS}/${today}-run.json`)!).patterns).toBe('skipped: only idle sessions')
+})
+
+test('a window of idle sessions and no previous status writes the empty status instead of failing', OPTIONS, async ($, on) => {
+  const seen = runWorld(on, {
+    extract: extractOf([small('a')]),
+    files: { [RUNS]: '' },
+    model: call => ({ isAnswered: true, text: call.system.startsWith('SUMMARIZER') ? '## a — idle' : 'unused' }),
+  })
+  expect((await morningRun($)).startsWith(`wrote ${DATA}/status.md (0 streams)`)).toBe(true)
+  expect(seen.writes.get(`${DATA}/status.md`)).toContain('(no streams yet)')
+})
+
+test('a status answer that drops a previous stream or restamps an untouched one is corrected: the stream is carried and keeps its date', OPTIONS, async ($, on) => {
+  const today = TODAY_LOCAL()
+  const yesterday = daysBefore(today, 1)
+  const old = daysBefore(today, 5)
+  const seen = runWorld(on, {
+    extract: extractOf([small('a')]),
+    files: {
+      [RUNS]: '',
+      [`${RUNS}/${yesterday}-status.md`]: `## dropped-by-model\n- what: x\n- last touched: ${old}\n\n## restamped\n- what: y\n- last touched: ${old}`,
+    },
+    model: call => ({
+      isAnswered: true,
+      text: call.system.startsWith('STATUS')
+        ? `${touched(today)}\n\n## restamped\n- what: y\n- last touched: ${today}`
+        : '## a — did a thing\nstream: parser',
+    }),
+  })
+  await morningRun($)
+  const status = seen.writes.get(`${DATA}/status.md`)!
+  expect(status).toContain(`## dropped-by-model\n- what: x\n- last touched: ${old}`)
+  expect(status).toContain(`## restamped\n- what: y\n- last touched: ${old}`)
+  expect(status).not.toContain(`## restamped\n- what: y\n- last touched: ${today}`)
+  expect(status).toContain(touched(today))
+})
 
 test('a quiet window makes no model call beyond none, carries the previous streams, and drops one silent for 30 days', OPTIONS, async ($, on) => {
   const today = TODAY_LOCAL()

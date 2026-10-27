@@ -93,6 +93,42 @@ export function statusBlocks(answer: string, sessions: number): { blocks: Stream
   return { blocks }
 }
 
+const IDLE = /\s—\s+idle\s*$/
+const STREAM_LINE = /^stream:\s*(.+?)\s*$/
+
+// True when the window's summaries are all `## <id> — idle` lines: sessions with nothing to report,
+// so the status call has nothing to move and the previous status is carried as it stands.
+export function onlyIdle(summaries: readonly string[]): boolean {
+  const headings = summaries.flatMap(s => s.split('\n').filter(l => l.startsWith('## ')))
+  return headings.length > 0 && headings.every(h => IDLE.test(h))
+}
+
+// The answer's blocks made to honour the carry-forward rules the model is told but may break: a
+// previous stream the answer left out is appended unchanged, so a stream leaves only through
+// Dropped; and a block that moved its date though no summary names it keeps its previous block.
+// The date check stands down when a summary's stream name has no block of its own, since the
+// model maps summary names onto existing streams and the match cannot then be told by name.
+export function carryForward(blocks: readonly StreamBlock[], previous: readonly StreamBlock[], summaries: readonly string[]): StreamBlock[] {
+  const named = new Set(summaries.flatMap(s => s.split('\n').map(l => STREAM_LINE.exec(l)?.[1]).filter((n): n is string => n !== undefined)))
+  const answered = new Set(blocks.map(b => b.name))
+  const mapped = [...named].some(n => !answered.has(n))
+  const before = new Map(previous.map(b => [b.name, b]))
+  const settled = blocks.map(b => {
+    const was = before.get(b.name)
+    return was !== undefined && !mapped && !named.has(b.name) && b.lastTouched > was.lastTouched ? was : b
+  })
+  return [...settled, ...previous.filter(b => !answered.has(b.name))]
+}
+
+const WORKTREE = /^(.+?)\/\.claude\/worktrees\/([^/]+)(?:\/.*)?$/
+
+// A session run in a git worktree belongs to the repo above `.claude/worktrees/`: that folder is the
+// path the status gives, and the worktree is named beside it.
+export function repoFolder(project: string): string {
+  const m = WORKTREE.exec(project)
+  return m ? `${m[1]} (worktree ${m[2]})` : project
+}
+
 function blockText(b: StreamBlock): string {
   return [`## ${b.name}`, ...b.lines].join('\n')
 }
@@ -129,7 +165,7 @@ export function statusPrompt({ today, since, until, offsetMinutes, sessions, fai
     const ms = Date.parse(iso)
     return Number.isNaN(ms) ? 'unknown' : localDate(ms, offsetMinutes)
   }
-  const sessionLines = sessions.map(s => `- ${s.id}: ${s.project}, last message ${dateOf(s.end)}`)
+  const sessionLines = sessions.map(s => `- ${s.id}: ${repoFolder(s.project)}, last message ${dateOf(s.end)}`)
   return [
     `Today is ${today}. Window: ${since} → ${until}.`,
     `# Sessions in the window (id: folder, local date of the last message)\n${sessionLines.join('\n') || '(none)'}${failed ? `\n- sessions not summarized: ${failed}` : ''}`,

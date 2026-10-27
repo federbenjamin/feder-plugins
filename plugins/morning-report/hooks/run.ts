@@ -3,6 +3,8 @@ import { commitData, complete, extractWindow, listNames, notify, readOr, readPro
 import { alreadyWritten, localDate, nextState, notSummarized, parseState, plural, runRecordName, SUMMARY_NO_PROFILE, windowForRun, type RunArgs, type UsageByModel } from './pipeline.ts'
 import {
   applyDrops,
+  carryForward,
+  onlyIdle,
   parsePatterns,
   parseStreams,
   patternsEntryText,
@@ -59,7 +61,7 @@ export async function runMorning($: EngineInterface, cfg: Config, args: RunArgs)
     const previousDay = previousStatusDay(await listNames($, runsDir), today)
     const previous = previousDay === undefined ? [] : parseStreams(await readOr($, `${runsDir}/${statusName(previousDay)}`, '')).blocks
     const watch = watchFor(profile)
-    const quiet = sessions.length === 0
+    const quiet = sessions.length === 0 || onlyIdle(summaries)
     const call = async (name: 'status.md' | 'patterns.md', system: string, prompt: string) =>
       complete($, { model: cfg.reportModel, system, prompt, maxTokens: REPORT_MAX_TOKENS, timeoutMs: REPORT_TIMEOUT_MS }, usage).catch((err: unknown) => {
         throw new Error(`${name}: ${err instanceof Error ? err.message : String(err)}`)
@@ -71,14 +73,26 @@ export async function runMorning($: EngineInterface, cfg: Config, args: RunArgs)
 
     const parsedStatus = statusAnswer === undefined ? { blocks: previous } : statusBlocks(statusAnswer, sessions.length)
     if ('error' in parsedStatus) throw new Error(parsedStatus.error)
+    const blocks = statusAnswer === undefined ? parsedStatus.blocks : carryForward(parsedStatus.blocks, previous, summaries)
+    // The status is the product; a patterns answer that does not parse costs only its own entry.
     const entry = patternsAnswer === undefined ? undefined : parsePatterns(patternsAnswer)
-    if (patternsAnswer !== undefined && entry === undefined) throw new Error('the patterns answer lacks its Going well or Not working list; nothing written')
+    const patternsRefused = patternsAnswer !== undefined && entry === undefined
 
-    const { kept, dropped } = applyDrops(parsedStatus.blocks, today)
+    const { kept, dropped } = applyDrops(blocks, today)
     const status = renderStatus({ today, since, until, kept, dropped })
     const patternsPath = `${cfg.dataDir}/patterns.md`
     const patterns = entry === undefined ? 'skipped' : 'written'
-    const patternsWhy = quiet ? 'no sessions' : profile === undefined ? 'no profile.md' : watch === undefined ? 'no Watch for list in profile.md' : ''
+    const patternsWhy = patternsRefused
+      ? 'the patterns answer lacks its Going well or Not working list'
+      : sessions.length === 0
+        ? 'no sessions'
+        : quiet
+          ? 'only idle sessions'
+          : profile === undefined
+            ? 'no profile.md'
+            : watch === undefined
+              ? 'no Watch for list in profile.md'
+              : ''
 
     await $.fs.write(summariesPath, summaries.join('\n\n') + '\n')
     await $.fs.write(`${runsDir}/${statusName(today)}`, status)
@@ -102,7 +116,7 @@ export async function runMorning($: EngineInterface, cfg: Config, args: RunArgs)
     const saved = cfg.gitCommit ? `; ${await commitData($, cfg, `morning: ${today}`)}` : ''
     await $.fs.write(statePath, JSON.stringify(nextState(since, until, today)) + '\n')
     const streams = `${plural(kept.length, 'stream')}${dropped.length ? `, ${dropped.length} dropped` : ''}`
-    await notify($, cfg, `Morning status ready (${plural(sessions.length, 'session')}, ${streams}): ${cfg.dataDir}/status.md`)
+    await notify($, cfg, `Morning status ready (${plural(sessions.length, 'session')}, ${streams}): ${cfg.dataDir}/status.md${patternsRefused ? `; patterns skipped (${patternsWhy})` : ''}`)
     const patternsText = entry === undefined ? `patterns skipped (${patternsWhy})` : `${patternsPath}`
     return { outcome: 'written', text: `wrote ${cfg.dataDir}/status.md (${streams}) and ${patternsText}${notSummarized(failed)}${saved}${note}` }
   } catch (err) {

@@ -2,8 +2,10 @@ import { test, expect } from 'claude-code/testing'
 import type { Session } from '../hooks/pipeline.ts'
 import {
   applyDrops,
+  carryForward,
   daysBetween,
   NOTHING_SEEN,
+  onlyIdle,
   parsePatterns,
   parseStreams,
   PATTERNS_HEADER,
@@ -11,6 +13,7 @@ import {
   patternsPrompt,
   previousStatusDay,
   renderStatus,
+  repoFolder,
   statusBlocks,
   statusName,
   statusPrompt,
@@ -183,4 +186,50 @@ test('patternsPrompt carries the date, the window, the not-summarized count and 
   expect(patternsPrompt({ today: '2026-10-06', since: 'S', until: 'U', failed: 2, summaries: ['## a — one'] })).toBe(
     'Today is 2026-10-06. Window: S → U. 2 sessions could not be summarized and are not below.\n\n# Session summaries for the window\n## a — one',
   )
+})
+
+test('carryForward appends each previous stream the answer lacks, unchanged', async () => {
+  const gone = block('gone', '2026-09-20', ['- what: kept'])
+  const out = carryForward([block('new', '2026-10-06')], [gone, block('same', '2026-10-01')], ['## s — x\nstream: new'])
+  expect(out.map(b => b.name)).toEqual(['new', 'gone', 'same'])
+  expect(out[1]).toEqual(gone)
+  expect(carryForward([], [], [])).toEqual([])
+})
+
+test('carryForward restores the previous block of a stream whose date moved though no summary names it', async () => {
+  const stale = block('stale', '2026-10-01', ['- what: old'])
+  const summaries = ['## s — x\nstream: fresh']
+  const out = carryForward([block('fresh', '2026-10-06'), block('stale', '2026-10-06', ['- what: changed'])], [stale], summaries)
+  expect(out).toEqual([block('fresh', '2026-10-06'), stale])
+  const named = carryForward([block('stale', '2026-10-06')], [stale], ['## s — x\nstream: stale'])
+  expect(named).toEqual([block('stale', '2026-10-06')])
+  const same = carryForward([block('stale', '2026-10-01')], [stale], summaries)
+  expect(same).toEqual([block('stale', '2026-10-01')])
+})
+
+test('carryForward leaves dates alone when a summary stream name has no block, since the model mapped it onto an existing stream', async () => {
+  const mapped = carryForward([block('existing', '2026-10-06')], [block('existing', '2026-10-01')], ['## s — x\nstream: other name'])
+  expect(mapped).toEqual([block('existing', '2026-10-06')])
+})
+
+test('onlyIdle is true only when there is a heading and every heading is an idle line', async () => {
+  expect(onlyIdle(['## a — idle', '## b — idle'])).toBe(true)
+  expect(onlyIdle(['## a — idle\n\n## b — idle'])).toBe(true)
+  expect(onlyIdle(['## a — idle', '## b — parser\nstream: p'])).toBe(false)
+  expect(onlyIdle(['## a — not summarized (api-error)'])).toBe(false)
+  expect(onlyIdle([])).toBe(false)
+})
+
+test('repoFolder gives the repo above a .claude/worktrees segment and names the worktree, and leaves other folders alone', async () => {
+  expect(repoFolder('/work/app/.claude/worktrees/feat-x')).toBe('/work/app (worktree feat-x)')
+  expect(repoFolder('/work/app/.claude/worktrees/feat-x/sub/dir')).toBe('/work/app (worktree feat-x)')
+  expect(repoFolder('/work/app')).toBe('/work/app')
+  expect(repoFolder('/work/.claude/other')).toBe('/work/.claude/other')
+})
+
+test('statusPrompt lists a worktree session under its repo folder', async () => {
+  const session: Session = { id: 'w', project: '/work/app/.claude/worktrees/feat-x', start: '2026-10-06T12:00:00+00:00', end: '2026-10-06T12:00:00+00:00', typed: 1, active_minutes: 1, text: '' }
+  const prompt = statusPrompt({ today: '2026-10-06', since: 's', until: 'u', offsetMinutes: 0, sessions: [session], failed: 0, previousDay: undefined, previous: [], summaries: [] })
+  expect(prompt).toContain('- w: /work/app (worktree feat-x), last message 2026-10-06')
+  expect(prompt).not.toContain('.claude/worktrees')
 })

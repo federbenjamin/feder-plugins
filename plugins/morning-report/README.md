@@ -30,7 +30,7 @@ One block per stream, the most recently touched first:
 - last touched: YYYY-MM-DD
 ```
 
-Each night's status starts from the previous one: a stream no session touched is carried as it was, with its date unchanged. A stream silent for 30 days is listed once under `## Dropped` with the day it went, then left out. The plugin, not the model, decides the dates, the order and the drops.
+Each night's status starts from the previous one: a stream no session touched is carried as it was, with its date unchanged. A stream silent for 30 days is listed once under `## Dropped` with the day it went, then left out. The plugin appends any previous stream the answer leaves out, so a stream leaves only through `## Dropped`; restores a stream's previous block when the answer moves its date though no summary names it (checked only when every summary stream name has a block of its own); orders the blocks; and applies the drops.
 
 ### `patterns.md`
 
@@ -46,7 +46,7 @@ One entry per day, oldest first:
 - Nothing seen.
 ```
 
-Only what fits the `## Watch for` list in your `profile.md` goes in. With no profile, or a list that reads `(none)`, the run writes the status and skips the entry. A day with no sessions gets no entry, and a rerun of a day replaces that day's entry.
+Only what fits the `## Watch for` list in your `profile.md` goes in. With no profile, or a list that reads `(none)`, the run writes the status and skips the entry. A day with no sessions, or only idle ones, gets no entry, and a rerun of a day replaces that day's entry. If the patterns answer lacks either list, the status is still written, the entry is skipped, and the reason lands in the run record, the notification and the firing log; `/morning-run --force` the same day writes it again.
 
 ## Usage
 
@@ -116,8 +116,8 @@ Everything lands in `dataDir`:
 1. **At `reportHour`:** launchd (macOS) runs `claude -p /morning-run`, and again on the hour for four hours. A fire whose day already has `runs/<date>-run.json`, or whose date `state.json` names, stops there.
 2. **Extract:** `scripts/extract.py` pulls the window's sessions as prose: what you typed, the agent's text, and each subagent's task and final report. It keeps prompts you typed while a turn ran. It drops tool output, headless sessions, and, in a session where you ran `/morning-setup` or `/morning-run`, everything from that command on.
 3. **Summarize:** one call to `summaryModel` per batch of sessions, a long session alone and short ones together (`prompts/summarizer.md`, with your profile inserted so friction follows your Watch for list).
-4. **Status and patterns:** two `reportModel` calls at once. `prompts/status.md` reads the previous status, the sessions list (each session's folder and the date of its last message) and the summaries, and writes every block. `prompts/patterns.md` reads your Watch for list and the summaries, and writes the two lists. A window with no sessions makes neither call: the previous status is carried, with the drops applied.
-5. **Output:** only when both answers parse (every status block has its `last touched` date, at least one block when the window had sessions; the patterns answer has both lists) does the plugin write the files, then the run record, then advance the watermark and run `notifyCommand`. Otherwise nothing is written and the watermark stays, so the next fire covers the gap.
+4. **Status and patterns:** two `reportModel` calls at once. `prompts/status.md` reads the previous status, the sessions list (each session's folder and the date of its last message) and the summaries, and writes every block. `prompts/patterns.md` reads your Watch for list and the summaries, and writes the two lists. A window with no sessions, or whose summaries are all idle lines, makes neither call: the previous status is carried, with the drops applied. The sessions list shows a session run in a git worktree as its repo folder, with the worktree named after it.
+5. **Output:** only when the status answer parses (every block has its `last touched` date, at least one block when the window had stream-worthy sessions) does the plugin write the files, then the run record, then advance the watermark and run `notifyCommand`. Otherwise nothing is written and the watermark stays, so the next fire covers the gap. A patterns answer that does not parse skips only its entry.
 
 The window runs from the last successful run to now, capped at `MAX_WINDOW_MS` (`hooks/pipeline.ts`).
 
