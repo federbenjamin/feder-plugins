@@ -82,6 +82,7 @@ export function world(on: On) {
     return { value: undefined }
   })
   on('command.register', async (_$, e) => ({ value: { command: e.name } }))
+  on('tool.register', async (_$, e) => ({ value: { tool: `mcp__cache-keepalive__${e.name}` } }))
   on('session.compact', async (_$, e) => ({ messages: e.messages }))
   return { clock, submitted, asUser, statuses, acct, step, logged }
 }
