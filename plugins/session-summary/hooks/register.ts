@@ -10,7 +10,8 @@ import type { Calls, Settings } from './settings.ts'
 import { sessionLogPath } from './shared/firing.ts'
 import { PRICES, usageUsd } from './shared/pricing.ts'
 import { appendLine, record, stateDirs } from './shared/record.ts'
-import { PERSON_ORIGINS } from './shared/events.ts'
+import { mainTurnEnded, mainTurnStarted, PERSON_ORIGINS } from './shared/events.ts'
+import type { MainTurn } from './shared/events.ts'
 import { buildRequest, captureLine, capturePath, EMPTY_SUMMARY, fileCandidates, sentFiles, formatLog, formatMessages, isBumpTurn, isDue, keptLastPrompt, newestPrompt, seedFromCapture, withQueued } from './summary.ts'
 import type { Previous, Queued } from './summary.ts'
 
@@ -22,7 +23,7 @@ import type { Previous, Queued } from './summary.ts'
 
 type State = {
   isInteractive: boolean
-  turnStartedAt: number // when the running main turn started, ms; 0 when none runs
+  mainTurn: MainTurn | undefined // the running main turn, with when it started
   lastCallAt: number // when a tick last started a running call in this turn, ms; 0 before the first
   isTurnSummarized: boolean
   lastInput: string | undefined // the window of the last summary a call of this turn left in the band
@@ -58,7 +59,7 @@ async function seed($: EngineInterface): Promise<void> {
 }
 
 function reset(state: State): void {
-  state.turnStartedAt = 0
+  state.mainTurn = undefined
   state.lastCallAt = 0
   state.isTurnSummarized = false
   state.lastInput = undefined
@@ -191,7 +192,7 @@ async function summarize($: EngineInterface, state: State, status: SummaryStatus
   while (state.inFlight !== undefined) await state.inFlight.catch(() => undefined)
   if (epoch !== state.epoch || !state.isInteractive) return undefined
   // A running call whose turn ended while it waited leaves that turn to its ended call.
-  if (status === 'running' && trigger !== 'manual' && (turn !== state.turn || state.turnStartedAt === 0)) {
+  if (status === 'running' && trigger !== 'manual' && (turn !== state.turn || state.mainTurn === undefined)) {
     await skipInflight($, await settingsOf($))
     return 'skip-inflight'
   }
@@ -212,7 +213,7 @@ async function summarize($: EngineInterface, state: State, status: SummaryStatus
 async function onTick($: EngineInterface, state: State): Promise<void> {
   const settings = await settingsOf($)
   const now = await $.clock.now()
-  if (!isDue({ now, turnStartedAt: state.turnStartedAt, lastCallAt: state.lastCallAt, ...settings })) return
+  if (!isDue({ now, turnStartedAt: state.mainTurn?.startedAt ?? 0, lastCallAt: state.lastCallAt, ...settings })) return
   const turn = state.turn
   if (state.claimedTurn === turn) {
     await skipInflight($, settings)
@@ -239,7 +240,7 @@ export const register: Register = (on, options) => {
 
   const state: State = {
     isInteractive: false,
-    turnStartedAt: 0,
+    mainTurn: undefined,
     lastCallAt: 0,
     isTurnSummarized: false,
     lastInput: undefined,
@@ -281,7 +282,7 @@ export const register: Register = (on, options) => {
 
   on('turn.start', async ($, e, next) => {
     if (!e.agentId && !isBumpTurn(e.text)) {
-      state.turnStartedAt = await $.clock.now()
+      state.mainTurn = mainTurnStarted(state.mainTurn, e, await $.clock.now())
       state.lastCallAt = 0
       state.isTurnSummarized = false
       state.lastInput = undefined
@@ -296,7 +297,7 @@ export const register: Register = (on, options) => {
   // A prompt the person sends while a main turn runs reaches the model inside that turn, but not
   // $.session.messages(): keep it, with where it arrived, so the window shows it as theirs.
   on('prompt.submit', async ($, e, next) => {
-    if (e.turnId !== undefined && !e.isMeta && !e.command && PERSON_ORIGINS.has(e.origin.kind) && state.turnStartedAt > 0) {
+    if (e.turnId !== undefined && !e.isMeta && !e.command && PERSON_ORIGINS.has(e.origin.kind) && state.mainTurn !== undefined) {
       const after = (await $.session.messages()).length
       state.queued = [...state.queued, { text: e.text, after }].slice(-QUEUED_MAX)
     }
@@ -318,7 +319,7 @@ export const register: Register = (on, options) => {
     const result = await next(e)
     if (!e.agentId) {
       const isSummarized = state.isTurnSummarized
-      state.turnStartedAt = 0
+      state.mainTurn = mainTurnEnded(state.mainTurn, e)
       state.isTurnSummarized = false
       if (isSummarized) void summarize($, state, 'ended')
     }
@@ -363,7 +364,7 @@ export const register: Register = (on, options) => {
       // keep their schedule.
       case 'now': {
         if (!state.isInteractive) return { text: 'now: no call; summaries run in interactive sessions only' }
-        const outcome = await summarize($, state, state.turnStartedAt > 0 ? 'running' : 'ended', 'manual')
+        const outcome = await summarize($, state, state.mainTurn !== undefined ? 'running' : 'ended', 'manual')
         return { text: `now: ${outcome ?? 'no call; the conversation reset'}\n${await show($, await settingsOf($), state.calls)}` }
       }
       case 'usage':

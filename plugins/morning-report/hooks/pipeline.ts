@@ -1,4 +1,5 @@
 import { tooManyFailed, type CallFailure } from './shared/retry.ts'
+import { parseCommand, type Grammar } from './shared/settings.ts'
 
 // The run's pure side: the window and its state, the session batches, the summary outcome, the
 // extract's shape, the prompt fills, and the option and argument parsing. status.ts holds the
@@ -266,13 +267,15 @@ export const SETUP_USAGE = `usage: /morning-setup ${SETUP_ARGUMENT_HINT}`
 
 export type SetupArgs = { kind: 'interview' } | { kind: 'schedule' } | { kind: 'remove' } | { kind: 'usage' }
 
-const SETUP_WORDS = ['schedule', 'remove'] as const
+const SETUP_GRAMMAR: Grammar<SetupArgs> = {
+  empty: { kind: 'interview' },
+  words: { schedule: { kind: 'schedule' }, remove: { kind: 'remove' } },
+  valued: {},
+  usage: { kind: 'usage' },
+}
 
 export function parseSetupArgs(args: string): SetupArgs {
-  const words = args.trim().split(/\s+/).filter(Boolean)
-  if (words.length === 0) return { kind: 'interview' }
-  const word = words.length === 1 ? SETUP_WORDS.find(w => w === words[0]) : undefined
-  return word === undefined ? { kind: 'usage' } : { kind: word }
+  return parseCommand(args, SETUP_GRAMMAR)
 }
 
 export type ScanInput = { since: string; until: string; days: number; summaries: readonly string[] }

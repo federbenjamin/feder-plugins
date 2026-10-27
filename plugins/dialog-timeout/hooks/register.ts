@@ -1,5 +1,8 @@
 import type { Register } from 'claude-code'
-import { PERSON_ORIGINS } from './shared/events.ts'
+import { applyCommand, dialogTimeoutCommand, envMinutesFrom, sessionSetting, settingsFrom, SETTINGS_KEY } from './settings.ts'
+import type { Settings } from './settings.ts'
+import { mainTurnEnded, mainTurnStarted, PERSON_ORIGINS } from './shared/events.ts'
+import type { MainTurn } from './shared/events.ts'
 import { record } from './shared/record.ts'
 
 // Ends a main turn that has sat on an open dialog (a permission prompt, an AskUserQuestion) for
@@ -10,39 +13,9 @@ import { record } from './shared/record.ts'
 // tick, so sessions already open follow a change. DIALOG_TIMEOUT_MINUTES in the session's
 // environment replaces the minutes for that session alone; `off` still wins over it.
 
-export const DEFAULT_MINUTES = 30
 export const TICK_MS = 30_000
 export const AFK_TEXT = 'automessage: user is /afk'
 export const COMMAND = 'dialog-timeout'
-const SETTING = 'setting'
-
-export type DialogTimeoutSetting = {
-  minutes: number // how long a dialog may stay open before the turn ends with /afk
-  isOff: boolean // /dialog-timeout off; `on` restores `minutes`
-}
-
-const fresh = (): DialogTimeoutSetting => ({ minutes: DEFAULT_MINUTES, isOff: false })
-
-// The stored setting, or the default for a value that is missing or not a setting.
-export function settingFrom(value: unknown): DialogTimeoutSetting {
-  const v = (value ?? {}) as Partial<DialogTimeoutSetting>
-  return {
-    minutes: typeof v.minutes === 'number' && Number.isInteger(v.minutes) && v.minutes >= 1 ? v.minutes : DEFAULT_MINUTES,
-    isOff: v.isOff === true,
-  }
-}
-
-// DIALOG_TIMEOUT_MINUTES as whole minutes of at least 1; any other value is ignored.
-export function envMinutesFrom(value: string | undefined): number | undefined {
-  const v = value?.trim() ?? ''
-  return /^\d+$/.test(v) && Number(v) >= 1 ? Number(v) : undefined
-}
-
-// The setting this session runs on: the stored one, with the environment's minutes in place of its own.
-export function sessionSetting(stored: unknown, envMinutes: number | undefined): DialogTimeoutSetting {
-  const s = settingFrom(stored)
-  return envMinutes === undefined ? s : { ...s, minutes: envMinutes }
-}
 
 // One tick's reading: when the open dialog was first seen (0 for none), and whether it is overdue.
 export function observe(openSince: number, isDialog: boolean, now: number, timeoutMs: number): { openSince: number; isOverdue: boolean } {
@@ -51,31 +24,12 @@ export function observe(openSince: number, isDialog: boolean, now: number, timeo
   return { openSince: since, isOverdue: now - since >= timeoutMs }
 }
 
-// `/dialog-timeout <minutes>|off|on`: the stored setting after the args, and the line the command
-// prints, which names the environment's minutes when they are what this session runs on.
-export function dialogTimeoutCommand(args: string, s: DialogTimeoutSetting, envMinutes?: number): { setting: DialogTimeoutSetting; text: string } {
-  const { setting, text } = storedCommand(args, s)
-  const note = envMinutes !== undefined && !setting.isOff ? ` (this session: ${envMinutes} min, from DIALOG_TIMEOUT_MINUTES)` : ''
-  return { setting, text: text + note }
-}
-
-function storedCommand(args: string, s: DialogTimeoutSetting): { setting: DialogTimeoutSetting; text: string } {
-  const arg = args.trim().toLowerCase()
-  if (arg === 'off') return { setting: { ...s, isOff: true }, text: 'dialog-timeout off: open dialogs wait for you, in every session' }
-  if (arg === 'on' || /^\d+$/.test(arg)) {
-    const minutes = arg === 'on' ? s.minutes : Number(arg)
-    if (minutes >= 1) return { setting: { minutes, isOff: false }, text: `dialog-timeout ${minutes} min: a dialog left open that long ends the turn with /afk` }
-  }
-  const state = s.isOff ? `off (${s.minutes} min when on)` : `${s.minutes} min`
-  return { setting: s, text: `dialog-timeout is ${state}; /dialog-timeout <minutes>, off, or on` }
-}
-
-const statusFor = (s: DialogTimeoutSetting): string | undefined => (s.isOff ? 'dialog-timeout off' : undefined)
+const statusFor = (s: Settings): string | undefined => (s.isOff ? 'dialog-timeout off' : undefined)
 
 export const register: Register = on => {
-  let setting = fresh()
+  let setting = settingsFrom(undefined)
   let envMinutes: number | undefined
-  let turnId: string | undefined
+  let mainTurn: MainTurn | undefined
   let openSince = 0
   let tick: { cancel: () => void } | undefined
 
@@ -84,18 +38,18 @@ export const register: Register = on => {
     tick = undefined
     if (e.isInteractive) {
       envMinutes = envMinutesFrom(await $.env.get('DIALOG_TIMEOUT_MINUTES'))
-      setting = sessionSetting(await $.store.get(SETTING), envMinutes)
+      setting = sessionSetting(await $.store.get(SETTINGS_KEY), envMinutes)
       $.ui.status(statusFor(setting))
       tick = $.clock.every(TICK_MS, async () => {
-        if (turnId === undefined) return
-        setting = sessionSetting(await $.store.get(SETTING), envMinutes)
+        if (mainTurn === undefined) return
+        setting = sessionSetting(await $.store.get(SETTINGS_KEY), envMinutes)
         if (setting.isOff) return
         const { refusal } = await $.prompt.fill({ text: '', mode: 'append' })
         const seen = observe(openSince, refusal === 'dialog', await $.clock.now(), setting.minutes * 60_000)
         openSince = seen.openSince
-        if (!seen.isOverdue) return
-        const id = turnId
-        turnId = undefined
+        if (!seen.isOverdue || mainTurn === undefined) return
+        const id = mainTurn.turnId
+        mainTurn = undefined
         openSince = 0
         try {
           await $.turn.abort({ turnId: id })
@@ -119,10 +73,11 @@ export const register: Register = on => {
   })
 
   on('command.run', { command: COMMAND }, async ($, e) => {
-    const { setting: stored, text } = dialogTimeoutCommand(e.args, settingFrom(await $.store.get(SETTING)), envMinutes)
+    const action = dialogTimeoutCommand(e.args)
+    const { setting: stored, text } = applyCommand(settingsFrom(await $.store.get(SETTINGS_KEY)), action, envMinutes)
     setting = sessionSetting(stored, envMinutes)
     $.ui.status(statusFor(setting))
-    await $.store.set(SETTING, { ...stored })
+    if (action.kind !== 'status' && action.kind !== 'usage') await $.store.set(SETTINGS_KEY, { ...stored })
     return { text }
   })
 
@@ -132,21 +87,21 @@ export const register: Register = on => {
   })
 
   on('turn.start', async ($, e, next) => {
-    turnId = e.turnId
+    if (e.agentId) return next(e)
+    mainTurn = mainTurnStarted(mainTurn, e)
     openSince = 0
     return next(e)
   })
 
   on('turn.complete', async ($, e, next) => {
-    if (!e.agentId && e.turnId === turnId) {
-      turnId = undefined
-      openSince = 0
-    }
+    const running = mainTurn
+    mainTurn = mainTurnEnded(mainTurn, e)
+    if (running !== undefined && mainTurn === undefined) openSince = 0
     return next(e)
   })
 
   on('session.end', async ($, e, next) => {
-    turnId = undefined
+    mainTurn = undefined
     openSince = 0
     return next(e)
   })

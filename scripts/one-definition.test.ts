@@ -1,6 +1,7 @@
 // The shapes every plugin shares live once, in shared/: no plugin's own hooks file appends to the
-// firing log, resolves the state dir, or defines the event predicates, the call pool or the
-// model-call retry again.
+// firing log, resolves the state dir, or defines the event predicates, the call pool, the
+// model-call retry, the stored-settings reader or the slash-command parser again, and every turn
+// tracker goes through the shared main-turn reducers.
 //   node --test scripts/*.test.ts
 import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -32,13 +33,26 @@ const SHARED_ONLY: { what: string; re: RegExp }[] = [
   { what: 'the session-log path', re: /function\s+sessionLogPath/ },
   { what: 'the call pool', re: /(?:function|const|let)\s+pool\b/ },
   { what: 'the model-call retry', re: /(?:function|const|let)\s+(?:retryDelayS|isPermanent|tooManyFailed)\b|(?:PERMANENT_ERRORS|RETRY_DELAYS_S)\s*[:=]/ },
+  { what: 'a stored-settings reader built by hand (readSettings in shared/settings.ts)', re: /=== 'object' && \w+ !== null \? \w+ : \{\}|\(\w+ \?\? \{\}\) as/ },
+  { what: 'a slash-command parser built by hand (parseCommand in shared/settings.ts)', re: /\bargs\.trim\(\)/ },
 ]
 
-test('the firing-log append, the state dir, the event predicates, the pool and the retry are defined only in shared/', () => {
+test('the firing-log append, the state dir, the event predicates, the pool, the retry, the settings reader and the command parser are defined only in shared/', () => {
   const files = ownHooksFiles()
   assert.ok(files.some(f => f.path.endsWith(join('stop-judge', 'hooks', 'register.ts'))))
   const hits = files.flatMap(f => SHARED_ONLY.filter(s => s.re.test(f.text)).map(s => `${f.path}: ${s.what}`))
   assert.deepEqual(hits, [])
+})
+
+test('every hooks file that handles turn.start tracks the main turn through shared/events.ts', () => {
+  const trackers = ownHooksFiles().filter(f => /on\('turn\.start'/.test(f.text))
+  assert.ok(trackers.some(f => f.path.endsWith(join('dialog-timeout', 'hooks', 'register.ts'))))
+  const missing = trackers.flatMap(f =>
+    ['mainTurnStarted', 'mainTurnEnded']
+      .filter(name => !new RegExp(`import \\{[^}]*\\b${name}\\b[^}]*\\} from '\\./shared/events\\.ts'`).test(f.text))
+      .map(name => `${f.path}: ${name}`),
+  )
+  assert.deepEqual(missing, [])
 })
 
 test('the derive loop is its own hooks file, entered only through startDerive', () => {
