@@ -41,7 +41,7 @@ A `- [ ]` Todo line and any Decisions line nothing replaces never move. The arch
 ## Skills
 
 - `/session-log:handoff`: writes a thin handoff doc for a fresh session, to `~/.claude/stopstopping/handoffs/<session-id>-<slug>-handoff.md` unless your instructions name a folder for documents.
-- `/session-log:finish-session`: closes a session with every leftover done or on the open list, handing off only what is open.
+- `/session-log:finish-session`: closes a session with every leftover done or on the open list, handing off only what is open. With `cache-keepalive` installed, it also turns that plugin's pings off for the session.
 
 ## Log
 

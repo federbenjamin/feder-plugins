@@ -28,6 +28,7 @@ Idle compaction summarizes a conversation of 200K tokens or more about 54 minute
 - **Capped per model.** At most 12 pings in a row on Opus and Fable, 6 on Sonnet, Haiku and any other model.
 - **Ends on a handoff.** The last ping asks the agent to write a handoff while the cache is still warm, so a fresh session can pick up from it. It runs your session-closing skill when one is installed, else your handoff skill.
 - **Stops when pinging cannot help.** Your own prompt resets the count. Two pings in a row that find the cache already cold stop the pings until you are back, and so does a change of the logged-in account, since the cache belongs to the account. A ping that gets no response (an API error, or you interrupt it) is not sent again, and the status line says so. After a compaction it waits for the next request, which writes the new conversation's cache. `/keepalive off` stops them for the conversation until `/keepalive on`.
+- **The agent can turn it off too.** The plugin gives the agent a `keepalive_off` tool, which does what `/keepalive off` does. The `session-log` plugin's `finish-session` skill calls it as it closes a session.
 
 ## How it works
 
@@ -43,7 +44,7 @@ Every firing appends one line to `~/.claude/stopstopping/logs/cache-keepalive.lo
 <utc> <outcome> session=<id> ms=<n> reason=<text>
 ```
 
-Outcomes: `bump` (a ping went out; the reason is `n/cap`), `done` (the cap was reached, the cache is left to expire), `stopped-cold` (pings found the cache cold twice in a row), `stopped-account` (the logged-in account changed), `no-response` (a ping got no response), and `turn-id-mismatch` (a main turn completed under another id than the running one's, which stays tracked as running, so no ping goes out meanwhile; the reason names both ids).
+Outcomes: `bump` (a ping went out; the reason is `n/cap`), `done` (the cap was reached, the cache is left to expire), `stopped-cold` (pings found the cache cold twice in a row), `stopped-account` (the logged-in account changed), `no-response` (a ping got no response), and `turn-id-mismatch` (a main turn completed under another id than the running one's, which stays tracked as running, so no ping goes out meanwhile; the reason names both ids), and `off` (the agent called `keepalive_off`).
 
 Read it back:
 

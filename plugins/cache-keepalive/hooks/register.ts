@@ -48,6 +48,7 @@ export const HEADROOM_MS = 15_000 // the latest a bump may go: request latency b
 export const TICK_MS = 30_000
 export const COLD_LIMIT = 2
 export const COMMAND = 'keepalive'
+export const OFF_TOOL = 'keepalive_off'
 const PLUGIN = 'cache-keepalive'
 const TIMING = { plugin: 'cache-keepalive', key: 'timing' } as const
 export const AUTH_STATUS = ['claude', 'auth', 'status', '--json'] as const
@@ -210,6 +211,16 @@ export const register: Register = on => {
         argumentHint: '[off|on]',
         immediate: true,
       })
+      // The agent's way to `/keepalive off`, for a skill that closes the session.
+      try {
+        await $.tool.register({
+          name: OFF_TOOL,
+          description:
+            "Turns off the prompt-cache keepalive pings for this conversation, as the person's /keepalive off does; they resume with /keepalive on. Call it when the session is finished and nothing more should be pinged.",
+        })
+      } catch (err) {
+        $.ui.toast(`${OFF_TOOL} not registered: ${err instanceof Error ? err.message : String(err)}`)
+      }
     }
     return next(e)
   })
@@ -220,6 +231,15 @@ export const register: Register = on => {
     $.ui.status(isOff ? 'keepalive off' : undefined)
     await save($, writes, live)
     return { text }
+  })
+
+  on('tool.call', { tool: `mcp__${PLUGIN}__${OFF_TOOL}` }, async ($, e) => {
+    const { isOff, text } = keepaliveReply(t.isOff, keepaliveCommand('off'))
+    t.isOff = isOff
+    $.ui.status('keepalive off')
+    await record($, PLUGIN, 'off', 'turned off by the agent')
+    await save($, writes, live)
+    return { result: text }
   })
 
   on('prompt.submit', async ($, e, next) => {

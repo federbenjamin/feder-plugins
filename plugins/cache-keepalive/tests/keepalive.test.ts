@@ -1,5 +1,5 @@
 import { expect, test } from 'claude-code/testing'
-import { accountOf, bumpText, capFor, COLD_LIMIT, followsFirstRequest, HEADROOM_MS, isAccountChanged, isConversationReplaced, isDue, LEAD_MS, TICK_MS, wasCold } from '../hooks/register'
+import { accountOf, bumpText, capFor, COLD_LIMIT, followsFirstRequest, HEADROOM_MS, isAccountChanged, isConversationReplaced, isDue, LEAD_MS, OFF_TOOL, TICK_MS, wasCold } from '../hooks/register'
 import { keepaliveCommand, keepaliveReply } from '../hooks/settings'
 import { COLD, HOUR, mainTurn, run, SUMMARY, T0, typed, WARM, world } from './world'
 
@@ -159,6 +159,22 @@ test('/keepalive off stops bumps through a typed prompt; /keepalive on brings th
   expect(submitted).toEqual([])
   await $.command.run(run('on'))
   expect(statuses.at(-1)).toBe(undefined)
+  await mainTurn($, 't2')
+  await clock.advance(HOUR - LEAD_MS)
+  expect(submitted).toEqual([bumpText(1, 12)])
+})
+
+test('the keepalive_off tool turns the pings off like /keepalive off, and logs it', async ($, on) => {
+  const { clock, submitted, statuses, logged } = world(on)
+  await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
+  await mainTurn($, 't1')
+  const { result } = await $.tool.call({ tool: `mcp__cache-keepalive__${OFF_TOOL}`, tool_use_id: 'toolu_1' })
+  expect(result).toBe(keepaliveReply(false, keepaliveCommand('off')).text)
+  expect(statuses.at(-1)).toBe('keepalive off')
+  expect(logged.map(l => l.stdin.split(' ')[1])).toEqual(['off'])
+  await clock.advance(HOUR)
+  expect(submitted).toEqual([])
+  await $.command.run(run('on'))
   await mainTurn($, 't2')
   await clock.advance(HOUR - LEAD_MS)
   expect(submitted).toEqual([bumpText(1, 12)])
