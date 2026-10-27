@@ -24,12 +24,12 @@ test('a tick with no dialog restarts the count', async () => {
 test('/dialog-timeout takes minutes, off and on, and reports the setting for anything else', async () => {
   expect(dialogTimeoutCommand(' 10 ')).toEqual({ kind: 'minutes', minutes: 10 })
   expect(dialogTimeoutCommand('')).toEqual({ kind: 'status' })
-  expect(dialogTimeoutCommand('soon')).toEqual({ kind: 'usage' })
+  expect(dialogTimeoutCommand('soon')).toEqual({ kind: 'status' })
   expect(command(' 10 ', on30).setting).toEqual({ minutes: 10, isOff: false })
   expect(command('OFF', on30).setting).toEqual({ minutes: 30, isOff: true })
   expect(command('on', { minutes: 10, isOff: true }).setting).toEqual({ minutes: 10, isOff: false })
   expect(command('5', { minutes: 10, isOff: true }).setting).toEqual({ minutes: 5, isOff: false })
-  for (const bad of ['', '0', '-3', '1.5', 'soon', '10 20']) expect(command(bad, on30).setting).toBe(on30)
+  for (const bad of ['', '0', '-3', '1.5', 'soon', '10 20']) expect(command(bad, on30).setting).toBeUndefined()
   expect(command('', { minutes: 10, isOff: true }).text).toBe('dialog-timeout is off (10 min when on); /dialog-timeout <minutes>, off, or on')
   expect(command('soon', { minutes: 10, isOff: true }).text).toBe('dialog-timeout is off (10 min when on); /dialog-timeout <minutes>, off, or on')
 })
@@ -142,7 +142,7 @@ function hooked(opts: { isAbortRefused?: boolean } = {}) {
     handlers.set(event, (typeof a === 'function' ? a : b) as (...args: unknown[]) => Promise<unknown>)
   }) as unknown as On
   register(fakeOn, {} as PluginOptions)
-  const clock = { now: T0, tick: undefined as (() => Promise<void>) | undefined }
+  const clock = { now: T0, tick: undefined as (() => Promise<void>) | undefined, onNow: undefined as (() => Promise<unknown>) | undefined }
   const logged: string[] = []
   const aborted: string[] = []
   const stored: [string, unknown][] = []
@@ -162,7 +162,11 @@ function hooked(opts: { isAbortRefused?: boolean } = {}) {
       },
     },
     clock: {
-      now: async () => clock.now,
+      now: async () => {
+        const at = clock.now
+        await clock.onNow?.()
+        return at
+      },
       every: (_ms: number, cb: () => Promise<void>) => ((clock.tick = cb), { cancel: () => {} }),
     },
     process: {
@@ -199,6 +203,26 @@ test("the overdue abort ends the main turn, not a subagent's that started after 
   await overdue(h, { isSubagentStarted: true })
   expect(h.aborted).toEqual(['t1'])
   expect(h.logged).toEqual([`1970-01-01T00:46:40Z afk session=sess-1 ms=0 reason=dialog open ${DEFAULT_MINUTES} min, sent /afk\n`])
+})
+
+test("a poll that observed one turn never aborts the turn that replaced it while the clock was read, nor carries its dialog age over", async () => {
+  const h = hooked()
+  await h.fire('session.start', { isInteractive: true })
+  await h.fire('turn.start', { turnId: 't1' })
+  await h.clock.tick!()
+  h.clock.now = T0 + TIMEOUT
+  h.clock.onNow = async () => {
+    h.clock.onNow = undefined
+    await h.fire('turn.start', { turnId: 't2' })
+  }
+  await h.clock.tick!()
+  expect(h.aborted).toEqual([])
+  expect(h.logged).toEqual([])
+  await h.clock.tick!()
+  expect(h.aborted).toEqual([])
+  h.clock.now = T0 + 2 * TIMEOUT
+  await h.clock.tick!()
+  expect(h.aborted).toEqual(['t2'])
 })
 
 test('a turn that could not be ended logs afk-failed once', async () => {

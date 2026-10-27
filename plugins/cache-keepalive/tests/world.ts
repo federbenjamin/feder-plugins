@@ -1,7 +1,7 @@
 import { mock } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 import type { On, TurnStepChunk, TurnStopReason } from 'claude-code'
-import { AUTH_STATUS, COMMAND } from '../hooks/register'
+import { AUTH_STATUS, COMMAND } from '../hooks/keepalive'
 
 export const HOUR = 60 * 60_000
 export const T0 = 1_000_000

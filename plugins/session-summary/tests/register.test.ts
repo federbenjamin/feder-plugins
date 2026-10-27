@@ -42,6 +42,7 @@ function world(on: On, options: { capture?: string; settings?: Record<string, un
     isAbortIgnored: false, // a reply already on its way when the call is aborted
     messagesHoldMs: 0,
     messagesError: '',
+    completeHoldMs: 0, // holds the next turn.complete that long before it returns
     writeHoldMs: 0, // holds the next $.state write that long before it lands
     requests: [] as ModelCompleteRequest[],
     commands: [] as string[],
@@ -108,7 +109,12 @@ function world(on: On, options: { capture?: string; settings?: Record<string, un
   on('session.start', async (_$, e) => ({ cwd: e.cwd }))
   on('session.end', async (_$, e) => ({ sessionId: e.sessionId }))
   on('turn.start', async (_$, e) => ({ turnId: e.turnId }))
-  on('turn.complete', async (_$, e) => ({ text: e.answer }))
+  on('turn.complete', async (_$, e) => {
+    const hold = w.completeHoldMs
+    w.completeHoldMs = 0
+    if (hold > 0) await clock.sleep(hold)
+    return { text: e.answer }
+  })
   on('prompt.submit', async (_$, e) => ({ text: e.text }))
   on('turn.step', async function* (_$, e) {
     return { turnId: e.turnId, index: e.index, answer: 'ok', toolUses: [], stopReason: 'end_turn' as const, usage: null }
@@ -271,6 +277,26 @@ test("a main turn that completes under another id than the running one's logs tu
   await complete($)
   await w.clock.settle()
   expect(logLines(w)).toEqual(['2026-10-23T12:00:00Z turn-id-mismatch session=synthetic-session ms=0 reason=running=t1 completed=t2'])
+})
+
+test("a stale completion that resumes after the replacement turn earned its summary leaves that turn's summary state alone and makes no ended call", async ($, on) => {
+  const w = world(on)
+  await start($)
+  await turnStart($)
+  await w.clock.advance(90_000)
+  w.completeHoldMs = 100_000
+  const stale = complete($)
+  await $.turn.start({ text: 'and now the tests', turnId: 't2' })
+  await w.clock.advance(90_000)
+  expect(statuses(w)).toEqual(['running', 'running'])
+  await w.clock.advance(10_000)
+  await stale
+  await w.clock.settle()
+  expect(statuses(w)).toEqual(['running', 'running'])
+  expect(outcomes(w)).toEqual(['summary', 'summary', 'turn-id-mismatch'])
+  await $.turn.complete({ turnId: 't2', reason: 'answer', answer: 'ok', durationMs: 1, isAborted: false })
+  await w.clock.settle()
+  expect(statuses(w)).toEqual(['running', 'running', 'ended'])
 })
 
 test('switched off, a running turn makes no call', async ($, on) => {

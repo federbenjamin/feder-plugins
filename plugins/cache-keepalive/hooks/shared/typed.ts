@@ -4,7 +4,7 @@
 export type TranscriptRow = Record<string, unknown>
 
 // Message texts the sibling plugins send as the user. scripts/sync-shared.ts asserts the
-// keepalive and afk texts appear in their plugin's hooks/register.ts; the judge builds its nudge
+// keepalive and afk texts appear in their plugin's hooks; the judge builds its nudge
 // prefix from `nudge`.
 export const SIBLING_TEXTS = {
   keepalivePing: 'keepalive ping',
