@@ -30,8 +30,8 @@ const SHARED_ONLY: { what: string; re: RegExp }[] = [
   { what: 'a clip helper', re: /function\s+clip\b/ },
   { what: 'actionSummary', re: /function\s+actionSummary/ },
   { what: 'the session-log path', re: /function\s+sessionLogPath/ },
-  { what: 'the call pool', re: /function\s+pool\b/ },
-  { what: 'the model-call retry', re: /function\s+(retryDelayS|isPermanent|tooManyFailed)\b|PERMANENT_ERRORS\s*[:=]/ },
+  { what: 'the call pool', re: /(?:function|const|let)\s+pool\b/ },
+  { what: 'the model-call retry', re: /(?:function|const|let)\s+(?:retryDelayS|isPermanent|tooManyFailed)\b|(?:PERMANENT_ERRORS|RETRY_DELAYS_S)\s*[:=]/ },
 ]
 
 test('the firing-log append, the state dir, the event predicates, the pool and the retry are defined only in shared/', () => {
