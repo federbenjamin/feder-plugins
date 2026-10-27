@@ -43,7 +43,7 @@ Every firing appends one line to `~/.claude/stopstopping/logs/cache-keepalive.lo
 <utc> <outcome> session=<id> ms=<n> reason=<text>
 ```
 
-Outcomes: `bump` (a ping went out; the reason is `n/cap`), `done` (the cap was reached, the cache is left to expire), `stopped-cold` (pings found the cache cold twice in a row), `stopped-account` (the logged-in account changed), and `no-response` (a ping got no response).
+Outcomes: `bump` (a ping went out; the reason is `n/cap`), `done` (the cap was reached, the cache is left to expire), `stopped-cold` (pings found the cache cold twice in a row), `stopped-account` (the logged-in account changed), `no-response` (a ping got no response), and `turn-id-mismatch` (a main turn completed under another id than the running one's, which stays tracked as running, so no ping goes out meanwhile; the reason names both ids).
 
 Read it back:
 
