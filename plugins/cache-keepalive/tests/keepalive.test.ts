@@ -1,5 +1,6 @@
 import { expect, test } from 'claude-code/testing'
-import { accountOf, bumpText, capFor, COLD_LIMIT, followsFirstRequest, HEADROOM_MS, isAccountChanged, isConversationReplaced, isDue, keepaliveCommand, keepaliveReply, LEAD_MS, TICK_MS, wasCold } from '../hooks/register'
+import { accountOf, bumpText, capFor, COLD_LIMIT, followsFirstRequest, HEADROOM_MS, isAccountChanged, isConversationReplaced, isDue, LEAD_MS, TICK_MS, wasCold } from '../hooks/register'
+import { keepaliveCommand, keepaliveReply } from '../hooks/settings'
 import { COLD, HOUR, mainTurn, run, SUMMARY, T0, typed, WARM, world } from './world'
 
 const base = { lastSend: T0, bumpedFor: 0, isStopped: false, isOff: false, ttl: HOUR, isBusy: false }
@@ -41,7 +42,8 @@ test('/keepalive takes off and on, and reports the state for anything else', asy
   expect(keepaliveReply(false, keepaliveCommand(' OFF ')).isOff).toBe(true)
   expect(keepaliveReply(true, keepaliveCommand('on')).isOff).toBe(false)
   expect(keepaliveReply(true, keepaliveCommand(''))).toEqual({ isOff: true, text: 'keepalive is off; /keepalive off or /keepalive on' })
-  expect(keepaliveCommand('off now')).toEqual({ kind: 'usage' })
+  expect(keepaliveCommand('off now')).toEqual({ kind: 'status' })
+  expect(keepaliveCommand('later')).toEqual({ kind: 'status' })
   expect(keepaliveReply(false, keepaliveCommand('off now'))).toEqual({ isOff: false, text: 'keepalive is on; /keepalive off or /keepalive on' })
 })
 

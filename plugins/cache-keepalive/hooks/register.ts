@@ -3,8 +3,7 @@ import type { KeepaliveTiming } from '../types'
 import { isConversationReplaced, mainTurnEnded, mainTurnStarted, PERSON_ORIGINS } from './shared/events.ts'
 import type { MainTurn } from './shared/events.ts'
 import { record } from './shared/record.ts'
-import { parseCommand } from './shared/settings.ts'
-import type { Grammar } from './shared/settings.ts'
+import { keepaliveCommand, keepaliveReply } from './settings.ts'
 
 export { isConversationReplaced }
 
@@ -65,33 +64,6 @@ export function bumpText(n: number, cap: number): string {
         'Close the session now, so a fresh session can pick up from it: run a session-closing ' +
         'skill with the Skill tool if one is installed, else a handoff skill, else write a ' +
         'handoff yourself. Do nothing else.'
-}
-
-export type Action = { kind: 'status' } | { kind: 'off' } | { kind: 'on' } | { kind: 'usage' }
-
-const GRAMMAR: Grammar<Action> = {
-  empty: { kind: 'status' },
-  words: { off: { kind: 'off' }, on: { kind: 'on' } },
-  valued: {},
-  usage: { kind: 'usage' },
-}
-
-// `/keepalive off|on`.
-export function keepaliveCommand(args: string): Action {
-  return parseCommand(args, GRAMMAR)
-}
-
-// The off flag after the action, and the line the command prints.
-export function keepaliveReply(isOff: boolean, action: Action): { isOff: boolean; text: string } {
-  switch (action.kind) {
-    case 'off':
-      return { isOff: true, text: 'keepalive off: no pings in this conversation until /keepalive on' }
-    case 'on':
-      return { isOff: false, text: 'keepalive on: pings resume from your next request' }
-    case 'status':
-    case 'usage':
-      return { isOff, text: `keepalive is ${isOff ? 'off' : 'on'}; /keepalive off or /keepalive on` }
-  }
 }
 
 // Whether a bump is due: idle, not stopped or off, and the last main request's cache inside the
