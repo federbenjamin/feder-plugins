@@ -1,7 +1,10 @@
 import type { EngineInterface, Register } from 'claude-code'
 import type { KeepaliveTiming } from '../types'
-import { isConversationReplaced, PERSON_ORIGINS } from './shared/events.ts'
+import { isConversationReplaced, mainTurnEnded, mainTurnStarted, PERSON_ORIGINS } from './shared/events.ts'
+import type { MainTurn } from './shared/events.ts'
 import { record } from './shared/record.ts'
+import { parseCommand } from './shared/settings.ts'
+import type { Grammar } from './shared/settings.ts'
 
 export { isConversationReplaced }
 
@@ -64,12 +67,31 @@ export function bumpText(n: number, cap: number): string {
         'handoff yourself. Do nothing else.'
 }
 
-// `/keepalive off|on`: the off flag after the args, and the line the command prints.
-export function keepaliveCommand(args: string, isOff: boolean): { isOff: boolean; text: string } {
-  const arg = args.trim().toLowerCase()
-  if (arg === 'off') return { isOff: true, text: 'keepalive off: no pings in this conversation until /keepalive on' }
-  if (arg === 'on') return { isOff: false, text: 'keepalive on: pings resume from your next request' }
-  return { isOff, text: `keepalive is ${isOff ? 'off' : 'on'}; /keepalive off or /keepalive on` }
+export type Action = { kind: 'status' } | { kind: 'off' } | { kind: 'on' } | { kind: 'usage' }
+
+const GRAMMAR: Grammar<Action> = {
+  empty: { kind: 'status' },
+  words: { off: { kind: 'off' }, on: { kind: 'on' } },
+  valued: {},
+  usage: { kind: 'usage' },
+}
+
+// `/keepalive off|on`.
+export function keepaliveCommand(args: string): Action {
+  return parseCommand(args, GRAMMAR)
+}
+
+// The off flag after the action, and the line the command prints.
+export function keepaliveReply(isOff: boolean, action: Action): { isOff: boolean; text: string } {
+  switch (action.kind) {
+    case 'off':
+      return { isOff: true, text: 'keepalive off: no pings in this conversation until /keepalive on' }
+    case 'on':
+      return { isOff: false, text: 'keepalive on: pings resume from your next request' }
+    case 'status':
+    case 'usage':
+      return { isOff, text: `keepalive is ${isOff ? 'off' : 'on'}; /keepalive off or /keepalive on` }
+  }
 }
 
 // Whether a bump is due: idle, not stopped or off, and the last main request's cache inside the
@@ -152,7 +174,7 @@ export const register: Register = on => {
   let t = fresh()
   const live = () => t
   const writes: Writes = { issued: 0, newestLanded: 0 }
-  let isBusy = false
+  let mainTurn: MainTurn | undefined
   let isBumpPending = false // a bump was submitted and its turn has not started
   let isBumpTurn = false // the running main turn is a bump
   let tick: { cancel: () => void } | undefined
@@ -175,7 +197,7 @@ export const register: Register = on => {
       tick = $.clock.every(TICK_MS, async () => {
         const polledAt = await $.clock.now()
         // Polled only while a bump could still come: idle, not stopped or off, cache not expired.
-        if (!isBusy && !t.isStopped && !t.isOff && t.lastSend > 0 && polledAt < t.lastSend + ttl) {
+        if (mainTurn === undefined && !t.isStopped && !t.isOff && t.lastSend > 0 && polledAt < t.lastSend + ttl) {
           const epochAtRead = epoch
           const account = await currentAccount($)
           if (epoch !== epochAtRead) return
@@ -188,7 +210,7 @@ export const register: Register = on => {
           }
         }
         const now = await $.clock.now()
-        if (!isDue({ ...t, now, ttl, isBusy })) return
+        if (!isDue({ ...t, now, ttl, isBusy: mainTurn !== undefined })) return
         t.bumpedFor = t.lastSend
         const cap = capFor(t.model)
         if (t.bumps >= cap) {
@@ -221,7 +243,7 @@ export const register: Register = on => {
   })
 
   on('command.run', { command: COMMAND }, async ($, e) => {
-    const { isOff, text } = keepaliveCommand(e.args, t.isOff)
+    const { isOff, text } = keepaliveReply(t.isOff, keepaliveCommand(e.args))
     t.isOff = isOff
     $.ui.status(isOff ? 'keepalive off' : undefined)
     await save($, writes, live)
@@ -244,7 +266,7 @@ export const register: Register = on => {
   on('turn.start', async ($, e, next) => {
     if (e.agentId) return next(e)
     epoch++
-    isBusy = true
+    mainTurn = mainTurnStarted(mainTurn, e)
     isBumpTurn = isBumpPending
     isBumpPending = false
     // Any main turn that is not a bump is the person's: the bump count leaves the status line.
@@ -281,7 +303,7 @@ export const register: Register = on => {
 
   on('turn.complete', async ($, e, next) => {
     if (!e.agentId) {
-      isBusy = false
+      mainTurn = mainTurnEnded(mainTurn, e)
       if (isBumpTurn && t.lastSend > 0 && t.lastSend === t.bumpedFor) {
         $.ui.status('keepalive: ping got no response, cache left to expire')
         await record($, PLUGIN, 'no-response', 'ping got no response')
@@ -316,7 +338,7 @@ export const register: Register = on => {
   // so its timing must not carry over.
   on('session.end', async ($, e, next) => {
     t = fresh()
-    isBusy = false
+    mainTurn = undefined
     isBumpPending = false
     isBumpTurn = false
     $.ui.status(undefined)

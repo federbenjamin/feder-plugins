@@ -227,7 +227,8 @@ test('setup argument parsing starts the interview bare, takes schedule or remove
   expect(parseSetupArgs('   ')).toEqual({ kind: 'interview' })
   expect(parseSetupArgs('schedule')).toEqual({ kind: 'schedule' })
   expect(parseSetupArgs(' remove ')).toEqual({ kind: 'remove' })
-  for (const args of ['scan', 'scan 3', 'goals', 'schedule now', 'remove now', 'Schedule', 'run']) {
+  expect(parseSetupArgs('Schedule')).toEqual({ kind: 'schedule' })
+  for (const args of ['scan', 'scan 3', 'goals', 'schedule now', 'remove now', 'run']) {
     expect(parseSetupArgs(args)).toEqual({ kind: 'usage' })
   }
 })

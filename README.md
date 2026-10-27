@@ -60,7 +60,7 @@ Checks, from the repo root:
 bash scripts/check.sh
 ```
 
-`tsc` needs the engine's types, which an interactive `claude --plugin-dir plugins/<name>` load writes to `plugins/<name>/.claude-plugin/types/`; without them `check.sh` skips `tsc` and says so. Files under `hooks/shared/` and `tools/eval/hooks/judge/`, and the eval's two sample `.jsonl` fixtures, are generated: edit the source and run `node scripts/sync-shared.ts`. `node --test scripts/*.test.ts` runs the tests of the sync check, of the session-log directive script, of the stop-judge session-start hook, and of the one-definition check (the firing-log append, the state dir, the call pool and the model-call retry live only in `shared/`). morning-report's Python tests run with `python3 -m unittest discover -s plugins/morning-report/scripts`; `check.sh` runs them too.
+`tsc` needs the engine's types, which an interactive `claude --plugin-dir plugins/<name>` load writes to `plugins/<name>/.claude-plugin/types/`; without them `check.sh` skips `tsc` and says so. Files under `hooks/shared/` and `tools/eval/hooks/judge/`, and the eval's two sample `.jsonl` fixtures, are generated: edit the source and run `node scripts/sync-shared.ts`. `node --test scripts/*.test.ts` runs the tests of the sync check, of the session-log directive script, of the stop-judge session-start hook, and of the one-definition check (the firing-log append, the state dir, the call pool, the model-call retry, the stored-settings reader and slash-command grammar, and the main-turn tracker live only in `shared/`). morning-report's Python tests run with `python3 -m unittest discover -s plugins/morning-report/scripts`; `check.sh` runs them too.
 
 ## License
 

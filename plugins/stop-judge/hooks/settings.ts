@@ -1,4 +1,6 @@
 import { OUTCOMES } from './judge.ts'
+import { isFlag, parseCommand, readSettings } from './shared/settings.ts'
+import type { Grammar } from './shared/settings.ts'
 
 // The /stop-judge command's pure side: the stored settings, the grammar, the status line.
 
@@ -23,24 +25,24 @@ export const USAGE = '/stop-judge [off|on|context off|context on|derive [all]]'
 // Printed in the judge's outcome order; any other outcome follows alphabetically.
 const OUTCOME_ORDER: readonly string[] = OUTCOMES
 
+const DEFAULTS: Settings = Object.freeze({ isOff: false, isContextOff: false })
+
 export function settingsFrom(value: unknown): Settings {
-  const v = (typeof value === 'object' && value !== null ? value : {}) as Partial<Settings>
-  return { isOff: v.isOff === true, isContextOff: v.isContextOff === true }
+  return readSettings(value, DEFAULTS, { isOff: isFlag, isContextOff: isFlag })
+}
+
+const GRAMMAR: Grammar<Action> = {
+  empty: { kind: 'status' },
+  words: { off: { kind: 'off' }, on: { kind: 'on' }, derive: { kind: 'derive', all: false } },
+  valued: {
+    context: v => (v === 'off' ? { kind: 'context-off' } : v === 'on' ? { kind: 'context-on' } : undefined),
+    derive: v => (v === 'all' ? { kind: 'derive', all: true } : undefined),
+  },
+  usage: { kind: 'usage' },
 }
 
 export function stopJudgeCommand(args: string): Action {
-  const words = args.trim().toLowerCase().split(/\s+/).filter(Boolean)
-  const [head, rest, extra] = words
-  if (head === undefined) return { kind: 'status' }
-  if (extra !== undefined) return { kind: 'usage' }
-  if (rest === undefined) {
-    if (head === 'off' || head === 'on') return { kind: head }
-    if (head === 'derive') return { kind: 'derive', all: false }
-  } else {
-    if (head === 'context' && (rest === 'off' || rest === 'on')) return { kind: rest === 'off' ? 'context-off' : 'context-on' }
-    if (head === 'derive' && rest === 'all') return { kind: 'derive', all: true }
-  }
-  return { kind: 'usage' }
+  return parseCommand(args, GRAMMAR)
 }
 
 const rank = (outcome: string): number => {
