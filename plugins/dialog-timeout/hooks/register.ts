@@ -42,17 +42,20 @@ export const register: Register = on => {
       $.ui.status(statusFor(setting))
       tick = $.clock.every(TICK_MS, async () => {
         if (mainTurn === undefined) return
+        const observed = mainTurn.turnId
         setting = sessionSetting(await $.store.get(SETTINGS_KEY), envMinutes)
         if (setting.isOff) return
         const { refusal } = await $.prompt.fill({ text: '', mode: 'append' })
-        const seen = observe(openSince, refusal === 'dialog', await $.clock.now(), setting.minutes * 60_000)
+        const now = await $.clock.now()
+        // A turn that replaced the observed one during the awaits above owns openSince now.
+        if (mainTurn?.turnId !== observed) return
+        const seen = observe(openSince, refusal === 'dialog', now, setting.minutes * 60_000)
         openSince = seen.openSince
-        if (!seen.isOverdue || mainTurn === undefined) return
-        const id = mainTurn.turnId
+        if (!seen.isOverdue) return
         mainTurn = undefined
         openSince = 0
         try {
-          await $.turn.abort({ turnId: id })
+          await $.turn.abort({ turnId: observed })
           await $.prompt.submit({ text: AFK_TEXT, asUser: true })
           $.ui.status(`dialog-timeout: dialog open ${setting.minutes} min, sent /afk`)
           await record($, COMMAND, 'afk', `dialog open ${setting.minutes} min, sent /afk`)

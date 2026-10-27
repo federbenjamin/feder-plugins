@@ -296,7 +296,11 @@ export const register: Register = on => {
   on('turn.complete', async ($, e, next) => {
     if (!e.agentId) {
       mainTurn = mainTurnEnded(mainTurn, e)
-      if (mainTurn !== undefined) await record($, PLUGIN, 'turn-id-mismatch', `running=${mainTurn.turnId} completed=${e.turnId}`)
+      if (mainTurn !== undefined) {
+        // Another turn is running: its bump bookkeeping is not this completion's to touch.
+        await record($, PLUGIN, 'turn-id-mismatch', `running=${mainTurn.turnId} completed=${e.turnId}`)
+        return next(e)
+      }
       if (isBumpTurn && t.lastSend > 0 && t.lastSend === t.bumpedFor) {
         $.ui.status('keepalive: ping got no response, cache left to expire')
         await record($, PLUGIN, 'no-response', 'ping got no response')

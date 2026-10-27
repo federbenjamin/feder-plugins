@@ -69,6 +69,25 @@ test("a main turn that completes under another id than the running one's logs tu
   expect(outcomes(logged)).toEqual(['turn-id-mismatch'])
 })
 
+test("a stale completion leaves the running bump turn's bookkeeping alone: its own cold usage is still counted", async ($, on) => {
+  const { clock, submitted, statuses } = world(on)
+  await start($)
+  await mainTurn($, 't0')
+  await clock.advance(TICK_MS)
+  await mainTurn($, 't1')
+  await clock.advance(HOUR - LEAD_MS)
+  expect(submitted).toHaveLength(1)
+  await $.turn.start({ text: submitted[0]!, turnId: 'b1' })
+  const before = statuses.length
+  await $.turn.complete({ turnId: 't1', reason: 'answer', answer: 'ok', durationMs: 1, isAborted: false, usage: { input_tokens: 2, output_tokens: 1, model: 'claude-opus-5-5', ...COLD } })
+  expect(statuses.slice(before)).toEqual([])
+  for await (const _ of $.turn.step({ turnId: 'b1', index: 0, model: 'claude-opus-5-5', messageCount: 1 })) {
+    // drain
+  }
+  await $.turn.complete({ turnId: 'b1', reason: 'answer', answer: 'ok', durationMs: 1, isAborted: false, usage: { input_tokens: 2, output_tokens: 1, model: 'claude-opus-5-5', ...COLD } })
+  expect(statuses.at(-1)).toBe('keepalive: cache was cold, rebuilt; pings go on')
+})
+
 test('a ping that got no response logs no-response once', async ($, on) => {
   const { clock, logged, step } = world(on)
   await start($)
