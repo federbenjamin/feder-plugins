@@ -1,5 +1,5 @@
 import { expect, test } from 'claude-code/testing'
-import { accountChangedText, bumpText, LEAD_MS, TICK_MS } from '../hooks/register'
+import { accountChangedText, bumpText, LEAD_MS, TICK_MS } from '../hooks/keepalive'
 import type { On } from 'claude-code'
 import type { KeepaliveTiming } from '../types'
 import { HOUR, mainTurn, SUMMARY, T0, typed, world } from './world'

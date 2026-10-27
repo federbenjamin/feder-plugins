@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
-import { capFor, COLD_LIMIT, LEAD_MS, TICK_MS } from '../hooks/register'
+import { capFor, COLD_LIMIT, LEAD_MS, TICK_MS } from '../hooks/keepalive'
 import { COLD, HOUR, mainTurn, WARM, world } from './world'
 
 // Each outcome the README lists, driven through the hooks, lands in the log once, at its firing.

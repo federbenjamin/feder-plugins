@@ -1,5 +1,6 @@
 import { expect, test } from 'claude-code/testing'
-import { accountOf, bumpText, capFor, COLD_LIMIT, followsFirstRequest, HEADROOM_MS, isAccountChanged, isConversationReplaced, isDue, LEAD_MS, OFF_TOOL, TICK_MS, wasCold } from '../hooks/register'
+import { isConversationReplaced } from '../hooks/register'
+import { accountOf, bumpText, capFor, COLD_LIMIT, followsFirstRequest, HEADROOM_MS, isAccountChanged, isDue, LEAD_MS, OFF_TOOL, TICK_MS, wasCold } from '../hooks/keepalive'
 import { keepaliveCommand, keepaliveReply } from '../hooks/settings'
 import { COLD, HOUR, mainTurn, run, SUMMARY, T0, typed, WARM, world } from './world'
 

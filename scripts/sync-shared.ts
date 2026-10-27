@@ -44,8 +44,8 @@ export function generated(): { path: string; text: string; source: string }[] {
 // the shell hook that prints it.
 export function literalChecks(): { literal: string; file: string }[] {
   return [
-    { literal: SIBLING_TEXTS.keepalivePing, file: 'plugins/cache-keepalive/hooks/register.ts' },
-    { literal: SIBLING_TEXTS.keepaliveLast, file: 'plugins/cache-keepalive/hooks/register.ts' },
+    { literal: SIBLING_TEXTS.keepalivePing, file: 'plugins/cache-keepalive/hooks/keepalive.ts' },
+    { literal: SIBLING_TEXTS.keepaliveLast, file: 'plugins/cache-keepalive/hooks/keepalive.ts' },
     { literal: SIBLING_TEXTS.afk, file: 'plugins/dialog-timeout/hooks/register.ts' },
     { literal: directiveText('${LOG}', '${TPL}'), file: 'plugins/session-log/scripts/directive.sh' },
   ]
