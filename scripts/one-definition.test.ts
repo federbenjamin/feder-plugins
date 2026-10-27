@@ -29,6 +29,7 @@ const SHARED_ONLY: { what: string; re: RegExp }[] = [
   { what: 'the person origins', re: /PERSON_ORIGINS\s*[:=]/ },
   { what: 'a usage-to-dollars function', re: /function\s+usageUsd|USD_PER_MTOK/ },
   { what: 'a clip helper', re: /function\s+clip\b/ },
+  { what: 'isRecord', re: /(?:function|const)\s+isRecord\b/ },
   { what: 'actionSummary', re: /function\s+actionSummary/ },
   { what: 'the session-log path', re: /function\s+sessionLogPath/ },
   { what: 'the call pool', re: /(?:function|const|let)\s+pool\b/ },
