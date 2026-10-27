@@ -97,6 +97,8 @@ export const register: Register = on => {
     const running = mainTurn
     mainTurn = mainTurnEnded(mainTurn, e)
     if (running !== undefined && mainTurn === undefined) openSince = 0
+    // A main complete under another id leaves the tick polling a turn that may be over: log it.
+    if (!e.agentId && mainTurn !== undefined) await record($, COMMAND, 'turn-id-mismatch', `running=${mainTurn.turnId} completed=${e.turnId}`)
     return next(e)
   })
 

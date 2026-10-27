@@ -83,6 +83,7 @@ A call the timer did not start ends its line with its trigger: `manual` for `/se
 | `log-missing` | Source `session-log` with no log file for the session; that call read `messages` |
 | `api-error` | The call failed; the reason names why |
 | `aborted` | The call was cut: its 20-second limit, or the session ended |
+| `turn-id-mismatch` | A main turn completed under another id than the running one's, which stays running; the reason names both ids; no call |
 
 Read it back:
 
@@ -93,7 +94,7 @@ awk '{print $2}' ~/.claude/stopstopping/logs/session-summary.log | sort | uniq -
 Calls, tokens and dollars per source and variant:
 
 ```
-awk '$2 !~ /^(skip|log-missing)/ { split($5,s,"="); split($6,v,"="); split($7,i,"="); split($8,o,"="); split($9,c,"="); split($10,u,"="); k=s[3]" "v[2]; n[k]++; tin[k]+=i[2]; tout[k]+=o[2]; tc[k]+=c[2]; usd[k]+=u[2] } END { for (k in n) printf "%s: %d calls, in %d, out %d, cached %d, $%.4f\n", k, n[k], tin[k], tout[k], tc[k], usd[k] }' ~/.claude/stopstopping/logs/session-summary.log
+awk '$2 !~ /^(skip|log-missing|turn-id-mismatch)/ { split($5,s,"="); split($6,v,"="); split($7,i,"="); split($8,o,"="); split($9,c,"="); split($10,u,"="); k=s[3]" "v[2]; n[k]++; tin[k]+=i[2]; tout[k]+=o[2]; tc[k]+=c[2]; usd[k]+=u[2] } END { for (k in n) printf "%s: %d calls, in %d, out %d, cached %d, $%.4f\n", k, n[k], tin[k], tout[k], tc[k], usd[k] }' ~/.claude/stopstopping/logs/session-summary.log
 ```
 
 ## Capture

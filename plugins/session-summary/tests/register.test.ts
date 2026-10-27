@@ -261,6 +261,18 @@ test('a keepalive bump turn and a subagent turn arm nothing', async ($, on) => {
   expect(w.requests).toEqual([])
 })
 
+test("a main turn that completes under another id than the running one's logs turn-id-mismatch; a subagent's, its own or an idle complete logs nothing", async ($, on) => {
+  const w = world(on)
+  await start($)
+  await turnStart($)
+  await $.turn.complete({ turnId: 'a1', agentId: 'agent-1', reason: 'answer', answer: 'ok', durationMs: 1, isAborted: false })
+  await $.turn.complete({ turnId: 't2', reason: 'answer', answer: 'ok', durationMs: 1, isAborted: false })
+  await complete($)
+  await complete($)
+  await w.clock.settle()
+  expect(logLines(w)).toEqual(['2026-10-23T12:00:00Z turn-id-mismatch session=synthetic-session ms=0 reason=running=t1 completed=t2'])
+})
+
 test('switched off, a running turn makes no call', async ($, on) => {
   const w = world(on, { settings: { isOff: true } })
   await start($)
