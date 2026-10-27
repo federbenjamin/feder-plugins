@@ -744,3 +744,12 @@ for (const printExit of [0, 125]) {
     expect(ran(seen, 'rm')).toBe(0)
   })
 }
+
+test('the setup command and the scan tool each log one firing line with their outcome', OPTIONS, async ($, on) => {
+  const clock = mock.clock(on, { now: Date.now() })
+  const seen = world(on, { extract: extractOf([small('a')]) })
+  expect(await setup($, 'bogus words')).toBe(SETUP_USAGE)
+  expect(await scan($)).toBe(SCAN_PATH)
+  await clock.settle()
+  expect(seen.log.map(l => l.split(' ')[1])).toEqual(['setup-usage', 'scan'])
+})
