@@ -76,11 +76,11 @@ export const register: Register = on => {
   })
 
   on('command.run', { command: COMMAND }, async ($, e) => {
-    const action = dialogTimeoutCommand(e.args)
-    const { setting: stored, text } = applyCommand(settingsFrom(await $.store.get(SETTINGS_KEY)), action, envMinutes)
-    setting = sessionSetting(stored, envMinutes)
+    const current = settingsFrom(await $.store.get(SETTINGS_KEY))
+    const { setting: changed, text } = applyCommand(current, dialogTimeoutCommand(e.args), envMinutes)
+    setting = sessionSetting(changed ?? current, envMinutes)
     $.ui.status(statusFor(setting))
-    if (action.kind !== 'status' && action.kind !== 'usage') await $.store.set(SETTINGS_KEY, { ...stored })
+    if (changed) await $.store.set(SETTINGS_KEY, { ...changed })
     return { text }
   })
 

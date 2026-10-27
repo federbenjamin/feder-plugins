@@ -31,7 +31,7 @@ export function sessionSetting(stored: unknown, envMinutes: number | undefined):
   return envMinutes === undefined ? s : { ...s, minutes: envMinutes }
 }
 
-export type Action = { kind: 'status' } | { kind: 'off' } | { kind: 'on' } | { kind: 'minutes'; minutes: number } | { kind: 'usage' }
+export type Action = { kind: 'status' } | { kind: 'off' } | { kind: 'on' } | { kind: 'minutes'; minutes: number }
 
 const GRAMMAR: Grammar<Action> = {
   empty: { kind: 'status' },
@@ -41,7 +41,7 @@ const GRAMMAR: Grammar<Action> = {
     const minutes = positiveInteger(word)
     return minutes === undefined ? undefined : { kind: 'minutes', minutes }
   },
-  usage: { kind: 'usage' },
+  usage: { kind: 'status' },
 }
 
 // `/dialog-timeout <minutes>|off|on`.
@@ -49,15 +49,15 @@ export function dialogTimeoutCommand(args: string): Action {
   return parseCommand(args, GRAMMAR)
 }
 
-// The stored setting after the action, and the line the command prints, which names the
-// environment's minutes when they are what this session runs on.
-export function applyCommand(s: Settings, action: Action, envMinutes?: number): { setting: Settings; text: string } {
+// The setting to store after the action (none for a report), and the line the command prints,
+// which names the environment's minutes when they are what this session runs on.
+export function applyCommand(s: Settings, action: Action, envMinutes?: number): { setting?: Settings; text: string } {
   const { setting, text } = applied(s, action)
-  const note = envMinutes !== undefined && !setting.isOff ? ` (this session: ${envMinutes} min, from DIALOG_TIMEOUT_MINUTES)` : ''
+  const note = envMinutes !== undefined && !(setting ?? s).isOff ? ` (this session: ${envMinutes} min, from DIALOG_TIMEOUT_MINUTES)` : ''
   return { setting, text: text + note }
 }
 
-function applied(s: Settings, action: Action): { setting: Settings; text: string } {
+function applied(s: Settings, action: Action): { setting?: Settings; text: string } {
   switch (action.kind) {
     case 'off':
       return { setting: { ...s, isOff: true }, text: 'dialog-timeout off: open dialogs wait for you, in every session' }
@@ -66,10 +66,9 @@ function applied(s: Settings, action: Action): { setting: Settings; text: string
       const minutes = action.kind === 'on' ? s.minutes : action.minutes
       return { setting: { minutes, isOff: false }, text: `dialog-timeout ${minutes} min: a dialog left open that long ends the turn with /afk` }
     }
-    case 'status':
-    case 'usage': {
+    case 'status': {
       const state = s.isOff ? `off (${s.minutes} min when on)` : `${s.minutes} min`
-      return { setting: s, text: `dialog-timeout is ${state}; /dialog-timeout <minutes>, off, or on` }
+      return { text: `dialog-timeout is ${state}; /dialog-timeout <minutes>, off, or on` }
     }
   }
 }
