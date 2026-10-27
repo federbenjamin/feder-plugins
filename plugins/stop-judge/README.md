@@ -3,17 +3,17 @@
 <p align="center"><strong>Nudges a Claude Code agent that stopped early to ask something it could have decided itself</strong></p>
 
 <p align="center">
-  <a href="LICENSE"><img src="https://img.shields.io/github/license/federbenjamin/stopstopping" alt="License"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/federbenjamin/feder-plugins" alt="License"></a>
 </p>
 
 A [Claude Code](https://docs.anthropic.com/en/docs/claude-code) plugin for people who want the agent to keep working. When a turn ends, a small model (haiku) reads the messages that framed the turn and the agent's final message, and decides whether the agent was right to hand control back. When it was not (it ended on "want me to run the tests?", or on a step it could have taken), the plugin sends the agent a short reminder as if you had typed it, and the agent carries on.
 
 ## Install
 
-Needs Claude Code. This is one part of the [stopstopping](../../README.md) marketplace: install `stopstopping`, which installs this plugin under its own name as a dependency, or this plugin alone; installing both changes nothing.
+Needs Claude Code. This is one part of the [feder-plugins](../../README.md) marketplace: install `stopstopping`, which installs this plugin under its own name as a dependency, or this plugin alone; installing both changes nothing.
 
 ```
-claude plugin install stop-judge --marketplace federbenjamin/stopstopping
+claude plugin install stop-judge --marketplace federbenjamin/feder-plugins
 ```
 
 It starts in the next session.

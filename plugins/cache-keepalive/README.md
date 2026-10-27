@@ -6,10 +6,10 @@ Claude Code caches the conversation's prompt for an hour (five minutes on some p
 
 ## Install
 
-Needs Claude Code; tested on 2.1.295. This is one part of the [stopstopping](../../README.md) marketplace: install `stopstopping`, which installs this plugin under its own name as a dependency, or this plugin alone; installing both changes nothing.
+Needs Claude Code; tested on 2.1.295. This is one part of the [feder-plugins](../../README.md) marketplace: install `stopstopping`, which installs this plugin under its own name as a dependency, or this plugin alone; installing both changes nothing.
 
 ```
-claude plugin install cache-keepalive --marketplace federbenjamin/stopstopping
+claude plugin install cache-keepalive --marketplace federbenjamin/feder-plugins
 ```
 
 It starts in the next interactive session.
@@ -57,7 +57,7 @@ The settings live in the engine's store under this plugin's name, so they carry 
 
 ## Contributing
 
-Report a problem or ask a question in [Issues](https://github.com/federbenjamin/stopstopping/issues). Pull requests are welcome.
+Report a problem or ask a question in [Issues](https://github.com/federbenjamin/feder-plugins/issues). Pull requests are welcome.
 
 Run the plugin from a checkout with `claude --plugin-dir plugins/cache-keepalive`, which also writes the engine types `tsc -p` reads. Checks, from the repo root:
 

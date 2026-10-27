@@ -2,3 +2,4 @@
 plugins/*/.claude-plugin/types/
 tools/eval/.claude-plugin/types/
 tools/eval/out/
+__pycache__/

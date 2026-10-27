@@ -10,10 +10,10 @@ Installs four plugins that keep an agent working instead of stopping to ask. Thi
 ## Install
 
 ```
-claude plugin marketplace add federbenjamin/stopstopping
-claude plugin install stopstopping@stopstopping
+claude plugin marketplace add federbenjamin/feder-plugins
+claude plugin install stopstopping@feder-plugins
 ```
 
-Or install a single part by its name: `claude plugin install stop-judge@stopstopping`. A part keeps its own plugin name and settings whether installed alone or through this plugin, and installing a part beside this plugin changes nothing.
+Or install a single part by its name: `claude plugin install stop-judge@feder-plugins`. A part keeps its own plugin name and settings whether installed alone or through this plugin, and installing a part beside this plugin changes nothing.
 
 See the [repository README](../../README.md) for the files the parts write and their logs.

@@ -1,6 +1,6 @@
 {
-  "name": "stopstopping",
-  "description": "Five plugins that keep a Claude Code agent working instead of stopping to ask, four of them also through one bundle",
+  "name": "feder-plugins",
+  "description": "Claude Code plugins by federbenjamin: mods that keep an agent working instead of stopping to ask, and a nightly status of your streams of work",
   "owner": { "name": "federbenjamin" },
   "plugins": [
     {
@@ -31,6 +31,12 @@
       "name": "session-summary",
       "source": "./plugins/session-summary",
       "description": "A band above the prompt that says what this session is about, what it is doing now, and which files to open; /session-summary",
+      "category": "productivity"
+    },
+    {
+      "name": "morning-report",
+      "source": "./plugins/morning-report",
+      "description": "A nightly status of your Claude Code streams, for you and your agents, plus a running catalog of what is going well and what is not; /morning-setup",
       "category": "productivity"
     },
     {
