@@ -6,10 +6,10 @@ A [Claude Code](https://docs.anthropic.com/en/docs/claude-code) plugin that give
 
 ## Install
 
-This is one part of the [stopstopping](../../README.md) marketplace: install `stopstopping`, which installs this plugin under its own name as a dependency, or this plugin alone; installing both changes nothing.
+This is one part of the [feder-plugins](../../README.md) marketplace: install `stopstopping`, which installs this plugin under its own name as a dependency, or this plugin alone; installing both changes nothing.
 
 ```
-claude plugin install session-log --marketplace federbenjamin/stopstopping
+claude plugin install session-log --marketplace federbenjamin/feder-plugins
 ```
 
 ## How it works

@@ -226,42 +226,6 @@ export function synthesisInput(lines: readonly ReaderLine[], currentFile: string
   return `## Current file\n\n${current}\n\n## Reader findings, one JSON line each\n\n${findings}\n`
 }
 
-// from federbenjamin/morning-report hooks/pipeline.ts
-export type CallFailure = { reason: string; status?: number | null; error?: string }
-
-// Errors no wait will clear: retrying only repeats them, so the run stops at the first one.
-const PERMANENT_ERRORS: ReadonlySet<string> = new Set([
-  'authentication_failed',
-  'oauth_org_not_allowed',
-  'account_on_hold',
-  'verification_required',
-  'billing_error',
-  'cloud_credential_error',
-  'invalid_request',
-  'model_not_found',
-])
-
-export const RETRY_DELAYS_S = [30, 60, 120, 240] as const
-
-export function isPermanent(f: CallFailure): boolean {
-  return f.error !== undefined && PERMANENT_ERRORS.has(f.error)
-}
-
-// Seconds to wait before retry number `attempt` (0-based), or undefined to give up. The derive
-// readers (derive-run.ts completeWithRetry) ask once, for attempt 0, and only after a non-permanent
-// api-error: one retry, never for a timed-out call.
-export function retryDelayS(f: CallFailure, attempt: number): number | undefined {
-  if (isPermanent(f)) return undefined
-  if (f.reason === 'aborted') return attempt === 0 ? RETRY_DELAYS_S[0] : undefined
-  return RETRY_DELAYS_S[attempt]
-}
-
-// The report is still worth writing when most sessions were summarized.
-export function tooManyFailed(total: number, failed: number): boolean {
-  return total > 0 && failed * 2 > total
-}
-// end of the morning-report copy
-
 // A model reply without the code fence it may come wrapped in. The synthesis copies a quote's
 // inner `"` from the JSON findings as `\"`; it is written as `'`, as the file writes every inner quote.
 export function contentOfReply(text: string): string {

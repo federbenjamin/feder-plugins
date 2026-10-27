@@ -3,17 +3,17 @@
 <p align="center"><strong>Ends a Claude Code turn left waiting on a permission prompt or question for 30 minutes, and tells the agent you are away</strong></p>
 
 <p align="center">
-  <a href="LICENSE"><img src="https://img.shields.io/github/license/federbenjamin/stopstopping" alt="License"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/federbenjamin/feder-plugins" alt="License"></a>
 </p>
 
 A [Claude Code](https://docs.anthropic.com/en/docs/claude-code) plugin for people who leave the agent working while they step away. When the agent stops on a permission prompt or a question and nobody answers, the session sits there for hours. This plugin waits 30 minutes, ends that turn, and sends the agent `automessage: user is /afk`. The `afk` skill that comes with it then has the agent carry on without you instead of waiting.
 
 ## Install
 
-Needs Claude Code; tested on 2.1.295. This is one part of the [stopstopping](../../README.md) marketplace: install `stopstopping`, which installs this plugin under its own name as a dependency, or this plugin alone; installing both changes nothing.
+Needs Claude Code; tested on 2.1.295. This is one part of the [feder-plugins](../../README.md) marketplace: install `stopstopping`, which installs this plugin under its own name as a dependency, or this plugin alone; installing both changes nothing.
 
 ```
-claude plugin install dialog-timeout --marketplace federbenjamin/stopstopping
+claude plugin install dialog-timeout --marketplace federbenjamin/feder-plugins
 ```
 
 It starts in the next interactive session, with a 30-minute timeout.
@@ -77,7 +77,7 @@ The settings live in the engine's store under this plugin's name, so they carry 
 
 ## Contributing
 
-Report a problem or ask a question in [Issues](https://github.com/federbenjamin/stopstopping/issues). Pull requests are welcome.
+Report a problem or ask a question in [Issues](https://github.com/federbenjamin/feder-plugins/issues). Pull requests are welcome.
 
 Run the plugin from a checkout with `claude --plugin-dir plugins/dialog-timeout`, which also writes the engine types `tsc -p` reads. Checks, from the repo root:
 

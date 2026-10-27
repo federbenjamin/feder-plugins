@@ -12,10 +12,10 @@ Experimental: it is not part of the `stopstopping` bundle.
 
 ## Install
 
-Needs Claude Code. This plugin is listed in the [stopstopping](../../README.md) marketplace:
+Needs Claude Code. This plugin is listed in the [feder-plugins](../../README.md) marketplace:
 
 ```
-claude plugin install session-summary --marketplace federbenjamin/stopstopping
+claude plugin install session-summary --marketplace federbenjamin/feder-plugins
 ```
 
 It starts in the next session. To run it in every session without installing it, start Claude Code with `CLAUDE_CODE_PLUGIN_DIRS=<repo>/plugins/session-summary` in its environment, `<repo>` being your clone of this repository.

@@ -13,7 +13,7 @@ import { SIBLING_TEXTS } from '../shared/typed.ts'
 import { GRADES, RECORDS } from '../tools/eval/fixtures/samples.ts'
 
 const ROOT = join(import.meta.dirname, '..')
-const PARTS = ['dialog-timeout', 'cache-keepalive', 'stop-judge', 'session-log', 'session-summary'] as const
+const PARTS = ['dialog-timeout', 'cache-keepalive', 'stop-judge', 'session-log', 'session-summary', 'morning-report'] as const
 
 export type Job = {
   name: string
