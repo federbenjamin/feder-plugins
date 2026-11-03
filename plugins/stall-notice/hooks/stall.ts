@@ -1,7 +1,7 @@
 // The decisions behind the stall notice: which calls are timed, which are due a notice, and what
 // the notice says.
 
-export const STALL_MS = 15 * 60_000
+export const STALL_MS = 5 * 60_000
 export const TICK_MS = 30_000
 // A gap this long between ticks means the machine slept, and no tool ran through it.
 export const SLEEP_GAP_MS = 5 * TICK_MS

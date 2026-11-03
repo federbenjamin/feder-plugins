@@ -16,8 +16,8 @@ It starts in the next interactive session.
 
 ## What it does
 
-- **Times every subagent tool call.** It measures from the call's start to its result, and adds no work to the call.
-- **Sends one notice per stuck call.** At 15 minutes it sends a prompt to the main session naming the subagent and the tool. The prompt starts a turn once the session is idle, so a hung foreground subagent, which keeps the session busy, gets no notice until that ends.
+- **Times every subagent tool call.** It measures from the call's start to its result. Its 30-second timer runs only while a subagent is in a turn, so it does no work when no subagent is running.
+- **Sends one notice per stuck call.** At 5 minutes it sends a prompt to the main session naming the subagent and the tool. The prompt starts a turn once the session is idle, so a hung foreground subagent, which keeps the session busy, gets no notice until that ends.
 - **Skips calls that are not stalls.** A subagent idle between turns has no running call, so it is never flagged. A nested Agent call is not timed, because it runs as long as its agent does. Time the machine spent asleep does not count.
 - **Leaves the decision to the agent.** It stops nothing. The notice asks the session to check the subagent's work and stop it if it is stuck.
 
