@@ -98,7 +98,8 @@ async function refreshDocuments($: EngineInterface, state: State, given?: readon
       const messages = given ?? (await $.session.messages())
       const cwd = await $.session.cwd()
       const now = await $.clock.now()
-      await writeDocuments($, docs => (isCurrent() ? mergeDocuments(docs, messages, cwd, now) : docs))
+      const home = (await $.env.get('HOME')) ?? ''
+      await writeDocuments($, docs => (isCurrent() ? mergeDocuments(docs, messages, cwd, now, home) : docs))
     }
     if ((await settingsOf($)).linksBase !== '') await syncShares($, isCurrent)
   } catch {

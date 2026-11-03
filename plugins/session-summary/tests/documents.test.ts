@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 import type { Doc } from '../types'
-import { filesScrollbar, absolutePath, capturedDocuments, clampOffset, fileRow, filesHeader, isDocumentPath, isOverFiles, mergeDocuments, shownDocuments } from '../hooks/documents.ts'
+import { pointedDocuments, mergeDocuments as mergeForPointing, filesScrollbar, absolutePath, capturedDocuments, clampOffset, fileRow, filesHeader, isDocumentPath, isOverFiles, mergeDocuments, shownDocuments } from '../hooks/documents.ts'
 import { estimatedRows, paneHeight } from '../hooks/summary.ts'
 
 const CWD = '/repo'
@@ -26,17 +26,18 @@ test('a Write or Edit of a document joins, newest first; of another type it does
   expect(paths(list)).toEqual(['/repo/d.ts', '/repo/c.txt', '/repo/a.md'])
 })
 
-test('only a Write, Edit or send moves a listed file up: a Read, a command, or text naming it does not', () => {
+test('a Write, Edit, send or an agent message pointing to it moves a listed file up: a Read, a command, or the person naming it does not', () => {
   const list = [wrote('/repo/a.md'), wrote('/repo/b.md')]
   const naming = [
     assistant({ tool: 'Read', input: { file_path: '/repo/a.md' } }),
     assistant({ tool: 'Bash', input: { command: 'cat /repo/a.md' } }),
-    { role: 'assistant', text: 'See /repo/a.md and a.md.', toolUses: [] },
+    { role: 'assistant', text: 'See a.md.', toolUses: [] },
     { role: 'user', text: '/repo/a.md', toolUses: [] },
   ]
   expect(paths(merge([], [...list, ...naming]))).toEqual(['/repo/b.md', '/repo/a.md'])
   expect(paths(merge([], [...list, wrote('/repo/a.md', 'Edit')]))).toEqual(['/repo/a.md', '/repo/b.md'])
   expect(paths(merge([], [...list, sent('/repo/a.md')]))).toEqual(['/repo/a.md', '/repo/b.md'])
+  expect(paths(merge([], [...list, { role: 'assistant', text: 'See /repo/a.md.', toolUses: [] }]))).toEqual(['/repo/a.md', '/repo/b.md'])
 })
 
 test('a listed file of another type moves up on a Write or Edit, though that alone would not have listed it', () => {
@@ -129,4 +130,19 @@ test('the scrollbar shows where the window sits, and is absent when every file f
   expect(filesScrollbar(2, 5)).toEqual(['│', '█', '█'])
   expect(filesScrollbar(0, 12)).toEqual(['█', '│', '│'])
   expect(filesScrollbar(9, 12)).toEqual(['│', '│', '█'])
+})
+
+test('a document named by full path in a message is pointed to; a relative name, another type, and the session log are not', () => {
+  const text = 'The report is in `~/docs/report-2.md`. See /tmp/a/plan.md. Also README.md, /repo/src/a.ts, ~/x/.y/stopstopping/session-logs/s.md and a/b/c.md.'
+  expect(pointedDocuments(text, '/home/me')).toEqual(['/home/me/docs/report-2.md', '/tmp/a/plan.md'])
+  expect(pointedDocuments('See ~/docs/report.md', '')).toEqual([])
+})
+
+test('a pointed document joins the list on an assistant message, newest first, and a person naming one does not add it', () => {
+  const messages = [
+    { role: 'user' as const, text: 'look at /tmp/mine.md', toolUses: [] },
+    { role: 'assistant' as const, text: 'Written to ~/docs/one.md', toolUses: [] },
+    { role: 'assistant' as const, text: 'And /tmp/two.md', toolUses: [] },
+  ]
+  expect(mergeForPointing([], messages, '/repo', 5, '/home/me').map(d => d.path)).toEqual(['/tmp/two.md', '/home/me/docs/one.md'])
 })
