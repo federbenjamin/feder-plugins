@@ -248,17 +248,42 @@ export function seedFromCapture(text: string): Summary | null {
   }
 }
 
-// The pane's rows: the title, LAST PROMPT, SO FAR and NOW, then the recent files, then how fresh
-// the texts are. No rows before the first summary. The source and variant stay in
-// `/session-summary show`.
-export function paneLines(summary: Summary, now: number): { label: string; text: string; dim: boolean; bold?: true }[] {
-  if (summary.at === 0 && summary.soFar === '' && summary.now === '') return []
-  return [
-    ...(summary.title !== '' ? [{ label: '', text: summary.title, dim: false, bold: true as const }] : []),
-    ...(summary.lastPrompt !== '' ? [{ label: 'LAST PROMPT:', text: summary.lastPrompt, dim: false }] : []),
-    { label: 'SO FAR:', text: summary.soFar || '(none yet)', dim: false },
-    { label: 'NOW:', text: summary.now || '(none yet)', dim: false },
-    ...(summary.files.length > 0 ? [{ label: 'RECENT FILES:', text: summary.files.join(', '), dim: true }] : []),
-    { label: '', text: `updated ${Math.floor((now - summary.at) / 60_000)} min ago`, dim: true },
-  ]
+// What the pane draws, newest first: where the session is now, how it got there, what was asked.
+// Null before the first summary. The source and variant stay in `/session-summary show`.
+export type PaneView = {
+  title: string
+  isRunning: boolean
+  age: string
+  now: string
+  soFar: string
+  asked: string
+  files: { label: string; href: string }[]
+}
+
+export function ageText(ms: number): string {
+  const minutes = Math.floor(ms / 60_000)
+  if (minutes < 1) return 'just now'
+  if (minutes < 60) return `${minutes}m ago`
+  return `${Math.floor(minutes / 60)}h ago`
+}
+
+// A path inside the session's directory reads relative to it; any other keeps its last two segments.
+export function fileLink(path: string, cwd: string): { label: string; href: string } {
+  const root = cwd.endsWith('/') ? cwd : `${cwd}/`
+  const absolute = path.startsWith('/') ? path : `${root}${path}`
+  const label = absolute.startsWith(root) ? absolute.slice(root.length) : `…/${absolute.split('/').slice(-2).join('/')}`
+  return { label, href: `file://${absolute.split('/').map(encodeURIComponent).join('/')}` }
+}
+
+export function paneView(summary: Summary, now: number, cwd: string): PaneView | null {
+  if (summary.at === 0 && summary.soFar === '' && summary.now === '') return null
+  return {
+    title: summary.title,
+    isRunning: summary.status === 'running',
+    age: ageText(now - summary.at),
+    now: summary.now || '(none yet)',
+    soFar: summary.soFar || '(none yet)',
+    asked: summary.lastPrompt,
+    files: summary.files.map(f => fileLink(f, cwd)),
+  }
 }

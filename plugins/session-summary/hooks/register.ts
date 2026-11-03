@@ -275,6 +275,7 @@ export const register: Register = (on, options) => {
       await seed($)
       tick = $.clock.every(TICK_MS, () => {
         void onTick($, state)
+        $.ui.invalidate('ui.render') // the pane's age
       })
       void openPane($)
     }

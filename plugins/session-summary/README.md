@@ -35,7 +35,7 @@ It starts in the next session. To run it in every session without installing it,
 
 ## The pane
 
-The pane opens when an interactive session starts, on a darker background than the transcript: the title in bold, then `LAST PROMPT:`, `SO FAR:` and `NOW:` with each label above its text, then `RECENT FILES:` when there are any, then when the texts were last updated. The input source and prompt variant are not drawn; `/session-summary show` prints them. It reads `No summary yet.` until the session's first summary.
+The pane opens when an interactive session starts, on a darker background than the transcript, newest first: the title in bold over a rule; `● NOW` (green while a turn runs, `○` once it ended) with the age of the texts, at full brightness; then, dimmer and indented, `SO FAR`, `YOU ASKED` and `FILES`. Files show one per line, relative to the session's directory, and open on a click where the terminal supports it. The age refreshes every 30 seconds. The input source and prompt variant are not drawn; `/session-summary show` prints them. It reads `No summary yet.` until the session's first summary.
 
 Claude Code decides where a pane goes. In the fullscreen layout (`"tui": "fullscreen"`) it docks on the right of the transcript from 110 columns. Below that, and on the main-screen layout, it sits above the prompt. A pane opened at session start waits undrawn on a terminal under 144 columns; `/session-summary` opens it at any width. The same command brings it back after you close it.
 

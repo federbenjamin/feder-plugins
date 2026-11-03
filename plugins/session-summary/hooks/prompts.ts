@@ -12,11 +12,11 @@ const TASK = `TASK: first decide whether the person has moved this session to a 
 "new" is any different outcome the person asked for that the previous TITLE does not cover, even a small one, and even when it touches the same code. A question the person asks in passing, answered without starting work, is not a new task.
 Answer "new" when there is no previous TITLE, or when the previous TITLE is marked provisional and does not fit the work.`
 
-const TITLE = 'TITLE: the outcome the current task is after, as a noun phrase of ten words or fewer, like "Session summary band for Claude Code". No status or stage words like planning, designing, building, or testing. When TASK is "same", keep the previous TITLE word for word. When TASK is "new", name the new task from the person\'s request; keep no words of the previous TITLE that do not fit it.'
+const TITLE = 'TITLE: the outcome the current task is after, as a short name of three to five words that fits on one line, like "Session summary pane look". No status or stage words like planning, designing, building, or testing. When TASK is "same", keep the previous TITLE word for word. When TASK is "new", name the new task from the person\'s request; keep no words of the previous TITLE that do not fit it.'
 
-const LAST_PROMPT = 'LAST PROMPT: one sentence that sums up the text under "Newest prompt" in the message, like "You asked for play and pause to control the Stemmix buffer." Keep the person\'s own numbers and names. When it only approves or tells the agent to go on, say what it approved.'
+const LAST_PROMPT = 'LAST PROMPT: eight words or fewer that sum up the text under "Newest prompt" in the message, starting with the verb, like "Make play and pause control the Stemmix buffer." The screen already labels it as what the person asked, so do not write "You asked". Keep the person\'s own numbers and names. When it only approves or tells the agent to go on, say what it approved.'
 
-const SO_FAR = 'SO FAR: one or two sentences on where the current task stands: what the agent found, decided, or finished, and what is still open. LAST PROMPT already says what the person asked, so do not repeat the request.'
+const SO_FAR = 'SO FAR: one or two sentences on where the current task stands: what the agent found, decided, or finished, and what is still open. LAST PROMPT already says what the person asked, so do not repeat the request. Until the agent has found or finished something, write only "Nothing yet."'
 const SO_FAR_NEW = 'When TASK is "new", write it fresh for the new task; earlier work gets at most one short clause at the start, like "After shipping the band fix, ...".'
 const SO_FAR_END = 'Do not list steps.'
 
@@ -26,9 +26,9 @@ const REST = [
   [
     'Write every text in Simplified Technical English (ASD-STE100), for a person who reads it in two seconds:',
     '- Each sentence has 25 words or fewer and gives one fact.',
-    '- Use the active voice and name who acts, like "the agent" or "you".',
+    '- Use the active voice. The agent is the default actor, so leave it out and start with the verb, like "Found the cause." or "Waits for your answer." Name the actor only when it is not the agent.',
     '- Use only simple tenses: simple present, simple past, simple future. Do not use "has done", "is doing", or other helping-verb forms.',
-    '- Keep the articles, subjects, and verbs. Do not write in headline style.',
+    '- Keep the articles and verbs. Do not write in headline style.',
     '- Use common words with one meaning each. Say what a thing does instead of using a name from the activity that the person would not know. Do not use phrasal verbs like "set up" or "carry out". Do not use semicolons.',
     '- Put no more than three nouns in a row.',
     '- Use one name for one thing in all five texts.',

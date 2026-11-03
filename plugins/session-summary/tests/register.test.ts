@@ -5,7 +5,7 @@ import type { Summary } from '../types'
 import { PLUGIN } from '../hooks/config'
 import { VARIANTS } from '../hooks/prompts'
 import { sessionLogPath } from '../hooks/shared/firing'
-import { paneLines, capturePath } from '../hooks/summary'
+import { ageText, capturePath, fileLink, paneView } from '../hooks/summary'
 
 const T0 = Date.parse('2026-10-23T12:00:00Z')
 const DIR = '/tmp/state'
@@ -13,6 +13,8 @@ const ID = 'synthetic-session'
 const CAPTURE = capturePath(DIR, ID)
 const LOG = `${DIR}/logs/${PLUGIN}.log`
 const PLAN = 'notes/plan.md'
+// A Text holding a Link reads back as the link's address, then its label.
+const LINKED_PLAN = `file:///tmp/project/${PLAN}${PLAN}`
 
 const USAGE = { input_tokens: 1200, output_tokens: 80, cache_read_input_tokens: 300, cache_creation_input_tokens: 0 }
 const ZERO = { input_tokens: 0, output_tokens: 0, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 }
@@ -65,6 +67,7 @@ function world(on: On, options: { capture?: string; settings?: Record<string, un
     return { value: { exitCode: 0, stdout: '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
   })
   on('session.id', async () => ({ value: ID }))
+  on('session.cwd', async () => ({ value: '/tmp/project' }))
   on('session.messages', async () => {
     const hold = w.messagesHoldMs
     w.messagesHoldMs = 0
@@ -140,7 +143,7 @@ const captures = (w: World) =>
 const statuses = (w: World) => w.requests.map(r => /^Status: (\w+)/.exec(String(r.prompt))?.[1])
 const paneTexts = async ($: Engine) => {
   const ui = await $.ui.mount({ plugin: PLUGIN, surface: 'terminal', component: 'Pane', requestId: PLUGIN, props: PANE })
-  const texts = (await ui.findAll({ type: 'Text' })).map(t => t.text)
+  const texts = (await ui.findAll({ type: 'Text' })).map(t => t.text).filter(t => !/^─+$/.test(t))
   await ui.unmount()
   return texts
 }
@@ -158,19 +161,20 @@ const summary = (changes: Partial<Summary> = {}): Summary => ({
   ...changes,
 })
 
-test('the pane labels SO FAR and NOW, lists recent files under their own label, and ends with freshness', async () => {
-  expect(paneLines(summary(), T0)).toEqual([
-    { label: '', text: 'Summary plugin', dim: false, bold: true },
-    { label: 'SO FAR:', text: 'Build the summary plugin', dim: false },
-    { label: 'NOW:', text: 'Pin its lifecycle contract', dim: false },
-    { label: 'RECENT FILES:', text: 'plugins/session-summary/hooks/register.ts', dim: true },
-    { label: '', text: 'updated 2 min ago', dim: true },
+test('the pane view carries the status, the age and repo-relative files, and is null before the first summary', async () => {
+  const view = paneView(summary({ files: ['/repo/hooks/a b.ts', '/other/deep/dir/c.md'] }), T0, '/repo')
+  expect(view).toMatchObject({ title: 'Summary plugin', isRunning: true, age: '2m ago', now: 'Pin its lifecycle contract' })
+  expect(view!.files).toEqual([
+    { label: 'hooks/a b.ts', href: 'file:///repo/hooks/a%20b.ts' },
+    { label: '…/dir/c.md', href: 'file:///other/deep/dir/c.md' },
   ])
-  expect(paneLines(summary({ files: [] }), T0).map(l => l.label)).toEqual(['', 'SO FAR:', 'NOW:', ''])
+  expect(paneView(summary({ status: 'ended' }), T0, '/repo')!.isRunning).toBe(false)
+  expect(paneView(summary({ soFar: '', now: '', files: [], at: 0 }), T0, '/repo')).toBe(null)
 })
 
-test('an empty summary draws no pane rows', async () => {
-  expect(paneLines(summary({ soFar: '', now: '', files: [], at: 0 }), T0)).toEqual([])
+test('the age reads just now, then minutes, then hours', async () => {
+  expect([ageText(59_000), ageText(60_000), ageText(3_599_000), ageText(3_600_000)]).toEqual(['just now', '1m ago', '59m ago', '1h ago'])
+  expect(fileLink('notes/plan.md', '/repo/').label).toBe('notes/plan.md')
 })
 
 test('a non-interactive session registers /session-summary and makes no call', async ($, on) => {
@@ -199,7 +203,7 @@ test('an interactive session restores its synthetic capture into the pane', asyn
   await start($)
   expect(w.reads).toEqual([CAPTURE])
   expect(w.commands).toEqual([PLUGIN])
-  expect(await paneTexts($)).toEqual(['SO FAR:', 'Earlier work', 'NOW:', 'Resume it', 'RECENT FILES:', PLAN, 'updated 2 min ago'])
+  expect(await paneTexts($)).toEqual(['● NOW', '2m ago', 'Resume it', 'SO FAR', 'Earlier work', 'FILES', LINKED_PLAN])
 })
 
 test('a main turn gets its first summary 90 s in: one request, one firing line, one capture line, the pane filled', async ($, on) => {
@@ -219,7 +223,7 @@ test('a main turn gets its first summary 90 s in: one request, one firing line, 
   expect(captures(w)).toEqual([
     expect.objectContaining({ status: 'running', source: 'messages', variant: 'edit', task: null, outcome: 'summary', soFar: 'Building the summary plugin.', now: 'Writing its plan.', files: [PLAN], candidates: [PLAN] }),
   ])
-  expect(await paneTexts($)).toEqual(['Summary plugin', 'LAST PROMPT:', 'You asked for the plugin.', 'SO FAR:', 'Building the summary plugin.', 'NOW:', 'Writing its plan.', 'RECENT FILES:', PLAN, 'updated 0 min ago'])
+  expect(await paneTexts($)).toEqual(['Summary plugin', '● NOW', 'just now', 'Writing its plan.', 'SO FAR', 'Building the summary plugin.', 'YOU ASKED', 'You asked for the plugin.', 'FILES', LINKED_PLAN])
 })
 
 test('a running turn is summarized again 600 s later, and once more with status ended when it completes', async ($, on) => {
@@ -372,7 +376,7 @@ test('the ended call of a turn, starting after the next turn started, leaves tha
   await turnStart($, 'STOP JUDGE — open the PR yourself.')
   await w.clock.advance(5_000)
   expect(statuses(w)).toEqual(['running', 'ended'])
-  expect((await paneTexts($)).slice(0, 7)).toEqual(['Summary plugin', 'LAST PROMPT:', 'You asked for the plugin.', 'SO FAR:', 'Turn A done.', 'NOW:', 'Waiting on the person.'])
+  expect((await paneTexts($)).slice(0, 7)).toEqual(['Summary plugin', '○ NOW', 'just now', 'Waiting on the person.', 'SO FAR', 'Turn A done.', 'YOU ASKED'])
   w.messages.push(wrote('notes/report.md'))
   await w.clock.advance(75_000)
   expect(statuses(w)).toEqual(['running', 'ended'])
@@ -497,7 +501,7 @@ test('a turn whose predecessor\'s running call is still in flight at its firstSe
   await w.clock.advance(10_000)
   expect(statuses(w)).toEqual(['running', 'ended', 'running'])
   expect(outcomes(w)).toEqual(['summary', 'summary', 'summary'])
-  expect((await paneTexts($)).slice(0, 7)).toEqual(['Summary plugin', 'LAST PROMPT:', 'You asked for the plugin.', 'SO FAR:', 'Opening the PR.', 'NOW:', 'Pushing the branch.'])
+  expect((await paneTexts($)).slice(0, 7)).toEqual(['Summary plugin', '● NOW', 'just now', 'Pushing the branch.', 'SO FAR', 'Opening the PR.', 'YOU ASKED'])
 })
 
 test('a running call waiting behind the turn before\'s call is dropped when its own turn ends meanwhile, and that turn gets its ended call', async ($, on) => {
@@ -749,7 +753,7 @@ test('session.end aborts the call in flight and empties the pane', async ($, on)
   await start($)
   await turnStart($)
   await w.clock.advance(90_000)
-  expect((await paneTexts($))[4]).toBe('Building the summary plugin.')
+  expect((await paneTexts($))[5]).toBe('Building the summary plugin.')
 
   w.messages.push(wrote('notes/report.md'))
   w.replies.push(answer('Too late.', 'Too late.'))
