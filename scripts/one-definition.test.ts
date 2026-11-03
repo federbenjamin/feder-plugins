@@ -9,7 +9,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
 const REPO = join(import.meta.dirname, '..')
-const PLUGINS = ['dialog-timeout', 'cache-keepalive', 'stop-judge', 'session-log', 'session-summary', 'morning-report']
+const PLUGINS = ['dialog-timeout', 'cache-keepalive', 'stop-judge', 'session-log', 'session-summary', 'morning-report', 'stall-notice']
 
 // Each plugin's own hooks files: hooks/*.ts and *.tsx, not the generated hooks/shared/ copies.
 function ownHooksFiles(): { path: string; text: string }[] {

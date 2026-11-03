@@ -1,6 +1,6 @@
 # feder-plugins
 
-Claude Code plugins by federbenjamin, in one marketplace: the mods that keep an agent working instead of stopping to ask, and the nightly status. Seven plugins: dialog-timeout, cache-keepalive, stop-judge, session-log, session-summary (experimental, not in the bundle), morning-report (the nightly status and patterns catalog, not in the bundle), and the bundle `stopstopping` (a dependency-only plugin: no code, no copies).
+Claude Code plugins by federbenjamin, in one marketplace: the mods that keep an agent working instead of stopping to ask, and the nightly status. Eight plugins: dialog-timeout, cache-keepalive, stop-judge, session-log, session-summary (experimental, not in the bundle), morning-report (the nightly status and patterns catalog, not in the bundle), stall-notice (a notice on a hung subagent tool call, not in the bundle), and the bundle `stopstopping` (a dependency-only plugin: no code, no copies).
 
 <!-- >>> git-workflow (generated block; do not edit by hand) -->
 ## Git workflow
