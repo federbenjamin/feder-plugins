@@ -7,7 +7,7 @@ import { clip, toolInputHead } from './shared/text.ts'
 import { isRecord, isTypedText, SIBLING_TEXTS } from './shared/typed.ts'
 
 // The summary's pure side: when a tick calls, what the call reads, what it asks, how the reply
-// is read, the capture line and the band's rows.
+// is read, the capture line and the pane's rows.
 
 const EMPTY: Summary = { title: '', lastPrompt: '', soFar: '', now: '', files: [], at: 0, status: 'running', source: 'messages', variant: DEFAULT_VARIANT }
 export const EMPTY_SUMMARY: Summary = Object.freeze(EMPTY)
@@ -220,7 +220,7 @@ export function captureLine(c: Capture): string {
   return `${JSON.stringify(c)}\n`
 }
 
-// The texts the session's last call left, so a resumed session's band continues them.
+// The texts the session's last call left, so a resumed session's pane continues them.
 export function seedFromCapture(text: string): Summary | null {
   const last = text
     .split('\n')
@@ -248,12 +248,10 @@ export function seedFromCapture(text: string): Summary | null {
   }
 }
 
-// The band's rows: the title, LAST PROMPT, SO FAR and NOW with their texts starting in one column, then the recent files,
-// then how fresh the texts are. No rows before the first summary, so the band takes no space
-// until there is something to say. The source and variant stay in `/session-summary show`.
-export const BAND_LABEL_WIDTH = 'LAST PROMPT:'.length
-
-export function bandLines(summary: Summary, now: number): { label: string; text: string; dim: boolean; bold?: true }[] {
+// The pane's rows: the title, LAST PROMPT, SO FAR and NOW, then the recent files, then how fresh
+// the texts are. No rows before the first summary. The source and variant stay in
+// `/session-summary show`.
+export function paneLines(summary: Summary, now: number): { label: string; text: string; dim: boolean; bold?: true }[] {
   if (summary.at === 0 && summary.soFar === '' && summary.now === '') return []
   return [
     ...(summary.title !== '' ? [{ label: '', text: summary.title, dim: false, bold: true as const }] : []),

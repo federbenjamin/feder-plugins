@@ -1,8 +1,8 @@
 # session-summary
 
-<p align="center"><strong>A band above the prompt that says what this Claude Code session is about, what it is doing now, and which files to open</strong></p>
+<p align="center"><strong>A pane beside the chat that says what this Claude Code session is about, what it is doing now, and which files to open</strong></p>
 
-A [Claude Code](https://docs.anthropic.com/en/docs/claude-code) plugin for people who keep many sessions open at once. Switching into one should not mean re-reading its transcript: a band at the bottom of the screen keeps three short texts for it.
+A [Claude Code](https://docs.anthropic.com/en/docs/claude-code) plugin for people who keep many sessions open at once. Switching into one should not mean re-reading its transcript: a pane on the right of the screen keeps three short texts for it.
 
 - **So far**: one or two sentences on the session since it began, edited as it goes rather than rewritten.
 - **Now**: one sentence on the most recent task.
@@ -25,17 +25,19 @@ It starts in the next session. To run it in every session without installing it,
 - **A haiku call writes the texts.** It reads a tail window of the session's recent activity (16,000 characters, oldest first) and the previous texts, and answers a TASK verdict and five labelled texts, written in Simplified Technical English (ASD-STE100): sentences of 25 words or fewer, one fact each, active voice, simple tenses, plain words. Tool results are left out; each tool call is one line (`→ Bash: <command>`, `→ Edit: <file>`). A prompt you send while a turn runs reaches the agent inside that turn but is missing from the messages Claude Code hands the plugin, so the plugin keeps it when you press Enter and puts it back in the window as your line, where it arrived.
 - **Last prompt.** The plugin finds your newest typed prompt in the whole session and sends it apart from the window; LAST PROMPT sums it up in one sentence. While that prompt is unchanged, LAST PROMPT stays as it was written. SO FAR says where the task stands and does not repeat the request.
 - **Task switches.** Each reply opens with `TASK: same` or `TASK: new`: whether you moved the session to a different outcome than the previous title names. Steps, fixes, reviews, approvals and follow-ups are `same`; a question asked in passing is not a new task. On `same` the title holds word for word and SO FAR is edited; on `new` the title names the new task and SO FAR is written fresh for it, with at most one clause about earlier work. The capture records each verdict.
-- **First prompt.** When a main turn starts while the band is empty (a new session, or after `/clear`), one call runs at the turn's first model step, so the band fills within seconds. Its title is marked provisional in the next call's request, which may replace it once the activity shows the work; after that the title holds as usual. A resumed session whose band is restored from its capture makes no such call.
+- **First prompt.** When a main turn starts while the pane is empty (a new session, or after `/clear`), one call runs at the turn's first model step, so the pane fills within seconds. Its title is marked provisional in the next call's request, which may replace it once the activity shows the work; after that the title holds as usual. A resumed session whose pane is restored from its capture makes no such call.
 - **Cadence.** 90 seconds after a main turn starts, every 10 minutes while it runs, and once more when it ends and hands back to you (status `ended`). A turn that ends before the first 90 seconds makes no call. A call reading the same window as the last summary in the same turn is skipped, and the window is checked again 10 minutes later (a turn's first call is never skipped); a failed call is retried at the same 10 minutes. A turn whose first call comes due while the turn before's call is still running gets it as soon as that call lands, one call at a time.
 - **Main turns only.** A turn starts the clock whatever started it: your prompt, a stop-judge nudge, a task notification. Subagent turns and cache-keepalive's ping turns are ignored.
-- **Title**: the thing the session is building, fixing, or deciding, in ten words or fewer, at the top of the band, with no stage words such as planning or testing. The model keeps it word for word until the person moves the session to different work; a new step or side task is not a change.
+- **Title**: the thing the session is building, fixing, or deciding, in ten words or fewer, at the top of the pane, with no stage words such as planning or testing. The model keeps it word for word until the person moves the session to different work; a new step or side task is not a change.
 - **Files** come from the `Write` and `Edit` calls and `SendUserFile` files in the session's messages (Claude Code hands the plugin its newest 4096), newest by their last mention in any tool call, up to 8, plus the files already shown. A file sent to you is marked as such and comes first while it is current. The model judges every shown file again on each call and drops it once it is stale (a plan finished or replaced, a report superseded, a draft shipped); a path it names that is not on the list is dropped. Files made only through shell commands are not seen.
 - **Interactive sessions only.** A `claude -p` run makes no call and writes nothing; the command still answers there.
-- **Resume.** A resumed session's band starts from the texts its last call left (the capture file below). A `/clear` empties the band.
+- **Resume.** A resumed session's pane starts from the texts its last call left (the capture file below). A `/clear` empties the pane.
 
-## The band
+## The pane
 
-The texts sit in the band directly above the prompt, at the bottom of the screen, in every layout and at any width, under a thin line and on a darker background than the transcript: the title in bold, then `LAST PROMPT:`, `SO FAR:` and `NOW:` with their texts starting in one column, then `RECENT FILES:` when there are any, then when the texts were last updated. The input source and prompt variant are not drawn; `/session-summary show` prints them. The band stays empty until the session's first summary. Claude Code's `[-]` mark at its right end collapses it.
+The pane opens when an interactive session starts, on a darker background than the transcript: the title in bold, then `LAST PROMPT:`, `SO FAR:` and `NOW:` with each label above its text, then `RECENT FILES:` when there are any, then when the texts were last updated. The input source and prompt variant are not drawn; `/session-summary show` prints them. It reads `No summary yet.` until the session's first summary.
+
+Claude Code decides where a pane goes. In the fullscreen layout (`"tui": "fullscreen"`) it docks on the right of the transcript from 110 columns. Below that, and on the main-screen layout, it sits above the prompt. A pane opened at session start waits undrawn on a terminal under 144 columns; `/session-summary` opens it at any width. The same command brings it back after you close it.
 
 ## Experiment switches
 
@@ -49,7 +51,7 @@ Three switches, read at every call, so they change a running session:
 
 | Command | Effect |
 | --- | --- |
-| `/session-summary` | Print the three texts, the same as `show` |
+| `/session-summary` | Open the pane |
 | `/session-summary off` / `on` | Stop or resume summary calls, in every session |
 | `/session-summary first <seconds>` | The first call this long after a main turn starts (default 90) |
 | `/session-summary every <seconds>` | Later calls this long after the last one (default 600) |
@@ -75,9 +77,9 @@ A call the timer did not start ends its line with its trigger: `manual` for `/se
 
 | Outcome | Meaning |
 | --- | --- |
-| `summary` | The reply carried all three lines; the band has them |
+| `summary` | The reply carried all three lines; the pane has them |
 | `parse-partial` | Some of the five lines came back; the missing ones kept their previous text |
-| `parse-failed` | No line came back; the band is unchanged |
+| `parse-failed` | No line came back; the pane is unchanged |
 | `skip-same` | The window was the same as the last summary's in this turn; no call |
 | `skip-inflight` | A call was due while one of the same turn was still running or waiting for the turn before's, or the turn ended while its call waited; no call |
 | `log-missing` | Source `session-log` with no log file for the session; that call read `messages` |
