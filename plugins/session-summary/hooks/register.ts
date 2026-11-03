@@ -35,6 +35,7 @@ type State = {
   controller: AbortController | undefined
   calls: Calls
   epoch: number // bumped at session.start and session.end, so a call that outlived its conversation writes nothing
+  isPromptPending: boolean // the person sent a prompt: the next main model step summarizes it, however short the turn
   isFirstPending: boolean // a main turn started on an empty pane: its first model step makes the first-prompt call
   isTitleProvisional: boolean // the pane's title came from the first-prompt call, written before any work
   summarizedPrompt: string // the newest prompt the pane's LAST PROMPT sums up; '' until a call takes one
@@ -73,6 +74,7 @@ function reset(state: State): void {
   state.claimedTurn = undefined
   state.controller = undefined
   state.calls = noCalls()
+  state.isPromptPending = false
   state.isFirstPending = false
   state.isTitleProvisional = false
   state.summarizedPrompt = ''
@@ -283,6 +285,7 @@ export const register: Register = (on, options) => {
     controller: undefined,
     calls: noCalls(),
     epoch: 0,
+    isPromptPending: false,
     isFirstPending: false,
     isTitleProvisional: false,
     summarizedPrompt: '',
@@ -335,6 +338,7 @@ export const register: Register = (on, options) => {
   // A prompt the person sends while a main turn runs reaches the model inside that turn, but not
   // $.session.messages(): keep it, with where it arrived, so the window shows it as theirs.
   on('prompt.submit', async ($, e, next) => {
+    if (!e.isMeta && !e.command && PERSON_ORIGINS.has(e.origin.kind)) state.isPromptPending = true
     if (e.turnId !== undefined && !e.isMeta && !e.command && PERSON_ORIGINS.has(e.origin.kind) && state.mainTurn !== undefined) {
       const after = (await $.session.messages()).length
       state.queued = [...state.queued, { text: e.text, after }].slice(-QUEUED_MAX)
@@ -345,10 +349,12 @@ export const register: Register = (on, options) => {
   // The first-prompt call: at the first model step the transcript holds the prompt. Its title is
   // provisional, so the turn's call at firstSeconds may replace it; the turn earns its ended call.
   on('turn.step', async function* ($, e, next) {
-    if (!e.agentId && state.isFirstPending) {
+    if (!e.agentId && (state.isFirstPending || state.isPromptPending)) {
+      const trigger = state.isFirstPending ? 'first' : 'prompt'
       state.isFirstPending = false
+      state.isPromptPending = false
       state.isTurnSummarized = true
-      void summarize($, state, 'running', 'first')
+      void summarize($, state, 'running', trigger)
     }
     const result = yield* next(e)
     if (!e.agentId) state.isListStale = true
