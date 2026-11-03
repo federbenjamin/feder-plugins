@@ -4,8 +4,7 @@ import { dueCalls, isTimed, noticeText, sleptMs, TICK_MS } from './stall.ts'
 import type { RunningCall } from './stall.ts'
 
 // Times each subagent tool call from its start to its result. A call still running at STALL_MS
-// gets one prompt to the main session, which starts a turn as soon as that session is idle, and
-// one toast, which reaches the person when a foreground subagent holds the main session busy.
+// gets one prompt to the main session, which starts a turn as soon as that session is idle.
 // Calls are held only here, so a plugin reload stops timing the calls then running.
 
 const PLUGIN = 'stall-notice'
@@ -32,8 +31,6 @@ export const register: Register = on => {
         const running = new Set((await $.agent.list()).filter(a => a.status === 'running').map(a => a.id))
         const stalled = due.filter(c => running.has(c.agentId))
         if (stalled.length === 0) return
-
-        $.ui.toast(`${stalled.length} subagent tool call${stalled.length === 1 ? '' : 's'} may be hung`)
         try {
           const sent = await $.prompt.submit({ text: noticeText(stalled, now) })
           if (sent.drop !== undefined) {
