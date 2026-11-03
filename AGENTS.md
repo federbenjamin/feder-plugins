@@ -13,6 +13,7 @@ Claude Code plugins by federbenjamin, in one marketplace: the mods that keep an 
 - 2026-10-20: public and installable; the maintainer is the only known user. Retires at the first report from another user.
 - 2026-10-20: reads the user's own Claude Code transcripts on their machine only, on an explicit /stop-judge derive; writes under ~/.claude/stopstopping/. The only data that leaves is the model calls the judge (the transcript tail, to haiku), derive (typed turns) and session-summary (a tail window of the session's messages or its session-log file, to haiku, on a timer, in interactive sessions) make through Claude Code's own model connection. Does not retire: a fact of the product.
 - 2026-10-26: morning-report reads the user's own transcripts of the last run's window each night (or on /morning-run), and sends them to `summaryModel` and the summaries to `reportModel` through Claude Code's own model connection; it writes only inside its `dataDir`, plus its firing log. Never commit a status, a summary, a transcript, or an extract to this repo. Does not retire: a fact of the product.
+- 2026-11-03: session-summary's `links on` (off by default, macOS) serves listed files read-only to the person's own tailnet: any device there holding a link can read that one file for 7 days from its last touch. Nothing reaches the internet. Does not retire: a fact of the product.
 
 ## Conventions
 

@@ -26,7 +26,6 @@ import {
   SETUP_ARGUMENT_HINT,
   SETUP_DAYS,
   SETUP_USAGE,
-  stderrHead,
   summaryOutcome,
   windowFor,
   windowForRun,
@@ -34,6 +33,7 @@ import {
   type Summary,
   type UsageByModel,
 } from '../hooks/pipeline.ts'
+import { stderrHead } from '../hooks/shared/text.ts'
 
 const HOUR = 3600_000
 

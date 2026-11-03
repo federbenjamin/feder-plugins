@@ -14,18 +14,18 @@ export type CallOutcome = 'summary' | 'parse-partial' | 'parse-failed' | 'api-er
 // signal or timeout is `aborted`, any other unanswered one an `api-error` naming why.
 export type ReplyResult = { outcome: CallOutcome; failure: string; task: TaskVerdict; texts: Previous; isTaken: boolean }
 
-export function replyResult(reply: ModelCompleteResult, previous: Previous, candidates: readonly string[]): ReplyResult {
+export function replyResult(reply: ModelCompleteResult, previous: Previous): ReplyResult {
   if (!reply.isAnswered) {
     if (reply.reason === 'aborted') return { outcome: 'aborted', failure: '', task: null, texts: previous, isTaken: false }
     const failure = `${reply.reason} ${reply.reason === 'api-error' ? reply.error : ''}`.trimEnd()
     return { outcome: 'api-error', failure, task: null, texts: previous, isTaken: false }
   }
-  const parsed = parseReply(reply.text, previous, candidates)
+  const parsed = parseReply(reply.text, previous)
   return {
     outcome: parsed.outcome,
     failure: '',
     task: parsed.outcome === 'parse-failed' ? null : parseTask(reply.text),
-    texts: { title: parsed.title, lastPrompt: parsed.lastPrompt, soFar: parsed.soFar, now: parsed.now, files: parsed.files },
+    texts: { title: parsed.title, lastPrompt: parsed.lastPrompt, soFar: parsed.soFar, now: parsed.now },
     isTaken: parsed.outcome !== 'parse-failed',
   }
 }
@@ -42,8 +42,8 @@ export function addCall(calls: Calls, usage: ModelUsage, usd: number): Calls {
 
 // Every firing line's reason leads with these six fields in this order, zeros where no call was
 // made: the README's read-back splits the line by position. A call the timer did not start adds
-// its trigger after them: `manual` (/session-summary now) or `first` (the session's first prompt).
-export type Trigger = 'timer' | 'manual' | 'first'
+// its trigger after them: `manual` (/session-summary now), `first` (the session's first prompt) or `prompt` (a later one).
+export type Trigger = 'timer' | 'manual' | 'first' | 'prompt'
 
 export function firingReason(r: { source: Source; variant: string; usage?: ModelUsage; usd?: number; failure?: string; trigger?: Trigger }): string {
   const u = r.usage

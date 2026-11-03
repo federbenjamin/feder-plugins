@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Every gate for the repo, from the repo root: per plugin test, tsc and validate (the bundle is a
-# dependency list with no code: validate only), morning-report's Python tests, then the marketplace,
+# dependency list with no code: validate only), the Python tests, then the marketplace,
 # the generated copies, the script tests, and the public-repo grep. Exits non-zero on the first failure.
 set -eu
 cd "$(dirname "$0")/.."
@@ -19,6 +19,9 @@ done
 
 echo "== plugins/morning-report python (extract, the plist, the prompt contracts)"
 python3 -m unittest discover -s plugins/morning-report/scripts -q
+
+echo "== plugins/session-summary python (the file server against the shares file hooks/links.ts writes)"
+python3 -m unittest discover -s plugins/session-summary/scripts -q
 
 echo "== plugins/stopstopping"
 claude plugin validate plugins/stopstopping --strict

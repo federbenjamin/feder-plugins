@@ -6,15 +6,22 @@ export type Summary = {
   lastPrompt: string // the person's newest typed prompt, summed up in one sentence
   soFar: string
   now: string
-  files: string[]
   at: number // when the texts were last written, ms; 0 before the first summary
   status: SummaryStatus
   source: Source
   variant: string
 }
 
+// One file on the documents list.
+export type Doc = {
+  path: string // absolute
+  touchedAt: number // ms, when a Write, Edit or SendUserFile last named it
+  touches: number // how many the messages held at the last merge: a higher count is a new touch
+  share?: { token: string; expiresAt: number } // its live entry in the shares file, while links are on
+}
+
 declare module 'claude-code' {
   interface PluginState {
-    'session-summary': { summary: Shaped<Summary> }
+    'session-summary': { summary: Shaped<Summary>; documents: Shaped<Doc[]>; filesOffset: number }
   }
 }

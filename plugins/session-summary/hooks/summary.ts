@@ -1,6 +1,7 @@
 import type { ModelUsage, SessionMessage } from 'claude-code'
-import type { Source, Summary, SummaryStatus } from '../types'
-import { FILES_MAX, TOOL_LINE_CHARS } from './config.ts'
+import type { Doc, Source, Summary, SummaryStatus } from '../types'
+import { FILES_ROWS, TOOL_LINE_CHARS } from './config.ts'
+import { documentsFrom } from './documents.ts'
 import { DEFAULT_VARIANT, isVariant, VARIANTS } from './prompts.ts'
 import { isSource } from './settings.ts'
 import { clip, toolInputHead } from './shared/text.ts'
@@ -9,7 +10,7 @@ import { isRecord, isTypedText, SIBLING_TEXTS } from './shared/typed.ts'
 // The summary's pure side: when a tick calls, what the call reads, what it asks, how the reply
 // is read, the capture line and the pane's rows.
 
-const EMPTY: Summary = { title: '', lastPrompt: '', soFar: '', now: '', files: [], at: 0, status: 'running', source: 'messages', variant: DEFAULT_VARIANT }
+const EMPTY: Summary = { title: '', lastPrompt: '', soFar: '', now: '', at: 0, status: 'running', source: 'messages', variant: DEFAULT_VARIANT }
 export const EMPTY_SUMMARY: Summary = Object.freeze(EMPTY)
 
 // A call is due while a main turn runs: the first `firstSeconds` after the turn started, then
@@ -91,53 +92,10 @@ export function formatLog(text: string, windowChars: number): string {
   return cut === -1 ? tail : tail.slice(cut + 1)
 }
 
-function moveToEnd(list: string[], path: string): void {
-  const i = list.indexOf(path)
-  if (i !== -1) list.splice(i, 1)
-  list.push(path)
-}
+export type Previous = Pick<Summary, 'title' | 'lastPrompt' | 'soFar' | 'now'>
 
-// The paths a person might open: what the session wrote or sent, newest by their last mention
-// in any tool input.
-export function fileCandidates(messages: readonly SessionMessage[], limit: number): string[] {
-  const uses = messages.flatMap(m => m.toolUses).map(u => ({ tool: u.tool, input: isRecord(u.input) ? u.input : {} }))
-  const list: string[] = []
-  for (const { tool, input } of uses) {
-    if (tool === 'Write' || tool === 'Edit') {
-      if (typeof input.file_path === 'string' && input.file_path !== '') moveToEnd(list, input.file_path)
-    } else if (tool === 'SendUserFile' && Array.isArray(input.files)) {
-      for (const f of input.files) if (typeof f === 'string' && f !== '') moveToEnd(list, f)
-    }
-  }
-  for (const { input } of uses) {
-    const text = JSON.stringify(input)
-    for (const path of list.filter(p => text.includes(p))) moveToEnd(list, path)
-  }
-  return limit > 0 ? list.slice(-limit) : []
-}
-
-// The files the session sent to the person: the likeliest ones for them to open.
-export function sentFiles(messages: readonly SessionMessage[]): string[] {
-  const sent = new Set<string>()
-  for (const u of messages.flatMap(m => m.toolUses)) {
-    if (u.tool !== 'SendUserFile' || !isRecord(u.input) || !Array.isArray(u.input.files)) continue
-    for (const f of u.input.files) if (typeof f === 'string' && f !== '') sent.add(f)
-  }
-  return [...sent]
-}
-
-// What FILES may name: this window's candidates, and the files already shown, so a file stays
-// while it is still relevant and leaves only when the model drops it.
-export function allowedFiles(candidates: readonly string[], previous: readonly string[]): string[] {
-  return [...new Set([...previous, ...candidates])]
-}
-
-export type Previous = Pick<Summary, 'title' | 'lastPrompt' | 'soFar' | 'now' | 'files'>
-
-export function buildRequest(r: { variant: string; source: Source; previous: Previous; newestPrompt: string; input: string; candidates: readonly string[]; sent: readonly string[]; status: SummaryStatus; isTitleProvisional: boolean }): { system: string; prompt: string } {
+export function buildRequest(r: { variant: string; source: Source; previous: Previous; newestPrompt: string; input: string; status: SummaryStatus; isTitleProvisional: boolean }): { system: string; prompt: string } {
   const system = VARIANTS[r.variant] ?? VARIANTS[DEFAULT_VARIANT]!
-  const allowed = allowedFiles(r.candidates, r.previous.files)
-  const candidates = allowed.length > 0 ? allowed.map(p => `- ${p}${r.sent.includes(p) ? ' (sent to the person)' : ''}`).join('\n') : '(none)'
   const header = r.source === 'session-log' ? "The session's own log (tail):" : 'Recent activity (oldest first, may start mid-way):'
   const prompt = [
     `Status: ${r.status}`,
@@ -146,9 +104,7 @@ export function buildRequest(r: { variant: string; source: Source; previous: Pre
       `Previous LAST PROMPT: ${r.previous.lastPrompt || '(none yet)'}`,
       `Previous SO FAR: ${r.previous.soFar || '(none yet)'}`,
       `Previous NOW: ${r.previous.now || '(none yet)'}`,
-      `Previous FILES: ${r.previous.files.join(', ') || 'none'}`,
     ].join('\n'),
-    `Candidate files (newest last):\n${candidates}`,
     `Newest prompt:\n${r.newestPrompt || '(none yet)'}`,
     `${header}\n${r.input}`,
   ].join('\n\n')
@@ -164,7 +120,7 @@ export function parseTask(text: string): TaskVerdict {
   return verdict === 'same' || verdict === 'new' ? verdict : null
 }
 
-export type Parsed = { title: string; lastPrompt: string; soFar: string; now: string; files: string[]; outcome: 'summary' | 'parse-partial' | 'parse-failed' }
+export type Parsed = { title: string; lastPrompt: string; soFar: string; now: string; outcome: 'summary' | 'parse-partial' | 'parse-failed' }
 
 // A label's value is the rest of its own line; a label with nothing after it counts as absent.
 const lineValue = (text: string, re: RegExp): string | undefined => re.exec(text)?.[1]?.trim()
@@ -174,20 +130,14 @@ const textValue = (text: string, re: RegExp): string | undefined => {
   return value !== undefined && /^\(?none yet\)?\.?$/i.test(value) ? '' : value
 }
 
-export function parseReply(text: string, previous: Previous, candidates: readonly string[]): Parsed {
+export function parseReply(text: string, previous: Previous): Parsed {
   const title = textValue(text, /^TITLE:[^\S\r\n]*(\S.*)$/m)
   const lastPrompt = textValue(text, /^LAST PROMPT:[^\S\r\n]*(\S.*)$/m)
   const soFar = textValue(text, /^SO FAR:[^\S\r\n]*(\S.*)$/m)
   const now = textValue(text, /^NOW:[^\S\r\n]*(\S.*)$/m)
-  const filesText = lineValue(text, /^FILES:[^\S\r\n]*(\S.*)$/m)
-  const found = [title, lastPrompt, soFar, now, filesText].filter(v => v !== undefined).length
-  if (found === 0) return { title: previous.title, lastPrompt: previous.lastPrompt, soFar: previous.soFar, now: previous.now, files: [...previous.files], outcome: 'parse-failed' }
-  const allowed = allowedFiles(candidates, previous.files)
-  let files: string[]
-  if (filesText === undefined) files = [...previous.files]
-  else if (filesText.toLowerCase() === 'none') files = []
-  else files = [...new Set(filesText.split(',').map(p => p.trim()))].filter(p => allowed.includes(p)).slice(0, FILES_MAX)
-  return { title: title ?? previous.title, lastPrompt: lastPrompt ?? previous.lastPrompt, soFar: soFar ?? previous.soFar, now: now ?? previous.now, files, outcome: found === 5 ? 'summary' : 'parse-partial' }
+  const found = [title, lastPrompt, soFar, now].filter(v => v !== undefined).length
+  if (found === 0) return { title: previous.title, lastPrompt: previous.lastPrompt, soFar: previous.soFar, now: previous.now, outcome: 'parse-failed' }
+  return { title: title ?? previous.title, lastPrompt: lastPrompt ?? previous.lastPrompt, soFar: soFar ?? previous.soFar, now: now ?? previous.now, outcome: found === 4 ? 'summary' : 'parse-partial' }
 }
 
 export function capturePath(dir: string, sessionId: string): string {
@@ -203,13 +153,12 @@ export type Capture = {
   task: TaskVerdict
   input: string
   inputChars: number
-  candidates: string[]
   newestPrompt: string
   title: string
   lastPrompt: string
   soFar: string
   now: string
-  files: string[]
+  files: Doc[] // the documents list as it stood, without its shares: a capture holds no token
   outcome: string
   ms: number
   usage: ModelUsage
@@ -220,8 +169,8 @@ export function captureLine(c: Capture): string {
   return `${JSON.stringify(c)}\n`
 }
 
-// The texts the session's last call left, so a resumed session's pane continues them.
-export function seedFromCapture(text: string): Summary | null {
+// The session's last capture line, or null when it cannot seed anything.
+function lastCapture(text: string): Record<string, unknown> | null {
   const last = text
     .split('\n')
     .filter(l => l.trim() !== '')
@@ -233,32 +182,80 @@ export function seedFromCapture(text: string): Summary | null {
   } catch {
     return null
   }
-  if (!isRecord(c) || typeof c.soFar !== 'string' || typeof c.now !== 'string') return null
+  return isRecord(c) && typeof c.soFar === 'string' && typeof c.now === 'string' ? c : null
+}
+
+const captureAt = (c: Record<string, unknown>): number => {
   const at = typeof c.at === 'string' ? Date.parse(c.at) : NaN
+  return Number.isNaN(at) ? 0 : at
+}
+
+// The texts the session's last call left, so a resumed session's pane continues them.
+export function seedFromCapture(text: string): Summary | null {
+  const c = lastCapture(text)
+  if (c === null) return null
   return {
     title: typeof c.title === 'string' ? c.title : '',
     lastPrompt: typeof c.lastPrompt === 'string' ? c.lastPrompt : '',
-    soFar: c.soFar,
-    now: c.now,
-    files: Array.isArray(c.files) ? c.files.filter((f): f is string => typeof f === 'string') : [],
-    at: Number.isNaN(at) ? 0 : at,
+    soFar: c.soFar as string,
+    now: c.now as string,
+    at: captureAt(c),
     status: c.status === 'running' || c.status === 'ended' ? c.status : EMPTY_SUMMARY.status,
     source: isSource(c.source) ? c.source : EMPTY_SUMMARY.source,
     variant: typeof c.variant === 'string' && isVariant(c.variant) ? c.variant : EMPTY_SUMMARY.variant,
   }
 }
 
-// The pane's rows: the title, LAST PROMPT, SO FAR and NOW, then the recent files, then how fresh
-// the texts are. No rows before the first summary. The source and variant stay in
-// `/session-summary show`.
-export function paneLines(summary: Summary, now: number): { label: string; text: string; dim: boolean; bold?: true }[] {
-  if (summary.at === 0 && summary.soFar === '' && summary.now === '') return []
-  return [
-    ...(summary.title !== '' ? [{ label: '', text: summary.title, dim: false, bold: true as const }] : []),
-    ...(summary.lastPrompt !== '' ? [{ label: 'LAST PROMPT:', text: summary.lastPrompt, dim: false }] : []),
-    { label: 'SO FAR:', text: summary.soFar || '(none yet)', dim: false },
-    { label: 'NOW:', text: summary.now || '(none yet)', dim: false },
-    ...(summary.files.length > 0 ? [{ label: 'RECENT FILES:', text: summary.files.join(', '), dim: true }] : []),
-    { label: '', text: `updated ${Math.floor((now - summary.at) / 60_000)} min ago`, dim: true },
-  ]
+// The documents list the session's last call left.
+export function seedDocuments(text: string): Doc[] {
+  const c = lastCapture(text)
+  return c === null ? [] : documentsFrom(c.files, captureAt(c))
+}
+
+// What the pane draws, newest first: where the session is now, how it got there, what was asked.
+// Null before the first summary. The source and variant stay in `/session-summary show`.
+export type PaneView = {
+  title: string
+  isRunning: boolean
+  age: string
+  now: string
+  soFar: string
+  asked: string
+}
+
+export function ageText(ms: number): string {
+  const minutes = Math.floor(ms / 60_000)
+  if (minutes < 1) return 'just now'
+  if (minutes < 60) return `${minutes}m ago`
+  return `${Math.floor(minutes / 60)}h ago`
+}
+
+export function paneView(summary: Summary, now: number): PaneView | null {
+  if (summary.at === 0 && summary.soFar === '' && summary.now === '') return null
+  return {
+    title: summary.title,
+    isRunning: summary.status === 'running',
+    age: ageText(now - summary.at),
+    now: summary.now || '(none yet)',
+    soFar: summary.soFar || '(none yet)',
+    asked: summary.lastPrompt,
+  }
+}
+
+const wrappedRows = (text: string, columns: number): number => Math.ceil((text.length * 1.15) / Math.max(1, columns)) || 1
+
+// About how many rows the pane's tree takes, wrapped words included: a guess on the high side.
+export function estimatedRows(view: PaneView | null, columns: number, fileCount: number): number {
+  const files = fileCount === 0 ? 0 : 2 + Math.min(fileCount, FILES_ROWS)
+  if (view === null) return 1 + files
+  const section = (text: string) => (text === '' ? 0 : 2 + wrappedRows(text, columns - 2))
+  return (view.title === '' ? 0 : 3) + 1 + wrappedRows(view.now, columns) + section(view.soFar) + section(view.asked) + files
+}
+
+// A dock has its whole height to pin FILES to the bottom of. An inline frame fits its tree, so the
+// tree takes only what it needs, and is held to the room only when it would outgrow it: the engine
+// would scroll a taller one, FILES with it.
+export function paneHeight(r: { placement: 'dock' | 'inline'; bodyRows: number; estimated: number }): number | undefined {
+  if (r.placement === 'dock') return r.bodyRows
+  return r.estimated > r.bodyRows ? r.bodyRows : undefined
 }

@@ -1,6 +1,6 @@
-import type { EngineInterface, ProcessRunResult } from 'claude-code'
+import type { EngineInterface } from 'claude-code'
 import { complete, extractWindow, readProfile, readPrompt, REPORT_MAX_TOKENS, REPORT_TIMEOUT_MS, SHORT_PROCESS_TIMEOUT_MS, summarizeSessions, type Config } from './io.ts'
-import { isMacOS, jobPluginCheck, launchdNames, MANUAL_RUN_TEXT, renderPlist } from './launchd.ts'
+import { jobPluginCheck, launchdNames, MANUAL_RUN_TEXT, renderPlist } from './launchd.ts'
 import {
   batchSessions,
   consentLine,
@@ -16,24 +16,17 @@ import {
   scanPrompt,
   SETUP_NO_PROFILE,
   SETUP_USAGE,
-  stderrHead,
   SUMMARY_NO_PROFILE,
   type Extracted,
   type UsageByModel,
 } from './pipeline.ts'
+import { isMacOS } from './shared/launchd.ts'
+import { loadJob, readLine, unloadJob } from './shared/launchd-run.ts'
+import { stderrHead } from './shared/text.ts'
 
 // /morning-setup: the interview and the scan it may call, and the launchd schedule and its removal.
 
-// What `launchctl print` exits with when the domain holds no such service.
-const LAUNCHCTL_NO_SERVICE = 113
-
 let scanRunning = false
-
-// The trimmed stdout, or '' when the command failed, so a caller checks one value.
-async function readLine($: EngineInterface, argv: string[]): Promise<string> {
-  const r = await $.process.run(argv)
-  return r.exitCode === 0 ? r.stdout.trim() : ''
-}
 
 // A command.run hook can't submit (the submit would wait on the turn the hook holds), so a
 // timer submits once the command has returned.
@@ -138,10 +131,6 @@ export async function runSetupScan($: EngineInterface, cfg: Config, days: number
   }
 }
 
-async function launchctl($: EngineInterface, ...args: string[]): Promise<ProcessRunResult> {
-  return $.process.run(['launchctl', ...args], { timeoutMs: SHORT_PROCESS_TIMEOUT_MS })
-}
-
 async function mustRun($: EngineInterface, argv: string[]): Promise<void> {
   const r = await $.process.run(argv)
   if (r.exitCode !== 0) throw new Error(`${argv.join(' ')} failed: ${stderrHead(r.stderr)}`)
@@ -175,11 +164,8 @@ async function runSchedule($: EngineInterface, cfg: Config): Promise<{ text: str
   }
   const names = launchdNames(cfg.home, uid)
   await mustRun($, ['mkdir', '-p', names.logDir])
-  await $.fs.write(names.plist, renderPlist({ claudePath, home: cfg.home, path, uid, hour: cfg.reportHour, pluginName: $.plugin.name }))
-  // bootstrap refuses a service that is already loaded; not loaded is the common case.
-  await launchctl($, 'bootout', names.target)
-  const boot = await launchctl($, 'bootstrap', names.domain, names.plist)
-  if (boot.exitCode !== 0) return { text: `launchctl bootstrap failed: ${stderrHead(boot.stderr)}` }
+  const failure = await loadJob($, names, renderPlist({ claudePath, home: cfg.home, path, uid, hour: cfg.reportHour, pluginName: $.plugin.name }))
+  if (failure !== '') return { text: failure }
   return {
     text: `scheduled: ${names.label} runs claude -p /morning-run at ${twoDigits(cfg.reportHour)}:00 and hourly until ${twoDigits(cfg.reportHour + REPORT_FIRES - 1)}:00 (${names.plist}; log ${names.log}). /morning-setup remove undoes it.`,
   }
@@ -197,13 +183,11 @@ async function runRemove($: EngineInterface, cfg: Config): Promise<{ text: strin
   const uid = await readLine($, ['id', '-u'])
   if (!uid) return cannot('remove', '`id -u` failed or printed nothing')
   const names = launchdNames(cfg.home, uid)
-  const bootout = await launchctl($, 'bootout', names.target)
-  if (bootout.exitCode !== 0 && (await launchctl($, 'print', names.target)).exitCode !== LAUNCHCTL_NO_SERVICE) {
-    return { text: `launchctl bootout failed: ${stderrHead(bootout.stderr)}; nothing removed` }
-  }
+  const { failure, wasLoaded } = await unloadJob($, names)
+  if (failure !== '') return { text: `${failure}; nothing removed` }
   if (hasPlist) await mustRun($, ['rm', '-f', names.plist])
   await mustRun($, ['rm', '-rf', names.logDir])
-  if (!hasPlist && bootout.exitCode !== 0) {
+  if (!hasPlist && !wasLoaded) {
     return { text: `nothing installed: no ${plist}; removed the leftover log folder ${logDir}` }
   }
   return {

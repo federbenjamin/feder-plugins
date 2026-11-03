@@ -5,7 +5,8 @@ import type { Summary } from '../types'
 import { PLUGIN } from '../hooks/config'
 import { VARIANTS } from '../hooks/prompts'
 import { sessionLogPath } from '../hooks/shared/firing'
-import { paneLines, capturePath } from '../hooks/summary'
+import { fileHref, fileLabel } from '../hooks/documents'
+import { ageText, capturePath, paneView } from '../hooks/summary'
 
 const T0 = Date.parse('2026-10-23T12:00:00Z')
 const DIR = '/tmp/state'
@@ -13,10 +14,12 @@ const ID = 'synthetic-session'
 const CAPTURE = capturePath(DIR, ID)
 const LOG = `${DIR}/logs/${PLUGIN}.log`
 const PLAN = 'notes/plan.md'
+// A Text holding a Link reads back as the link's address, then its label.
+const LINKED_PLAN = `file:///tmp/project/${PLAN}${PLAN}`
 
 const USAGE = { input_tokens: 1200, output_tokens: 80, cache_read_input_tokens: 300, cache_creation_input_tokens: 0 }
 const ZERO = { input_tokens: 0, output_tokens: 0, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 }
-const answer = (soFar: string, now: string, files = PLAN): ModelCompleteResult => ({ isAnswered: true, text: `TITLE: Summary plugin\nLAST PROMPT: You asked for the plugin.\nSO FAR: ${soFar}\nNOW: ${now}\nFILES: ${files}`, usage: USAGE })
+const answer = (soFar: string, now: string): ModelCompleteResult => ({ isAnswered: true, text: `TITLE: Summary plugin\nLAST PROMPT: You asked for the plugin.\nSO FAR: ${soFar}\nNOW: ${now}`, usage: USAGE })
 const ANSWER = answer('Building the summary plugin.', 'Writing its plan.')
 const FAILURES: { outcome: string; reply: ModelCompleteResult }[] = [
   { outcome: 'api-error', reply: { isAnswered: false, reason: 'api-error', status: 529, error: 'overloaded', usage: ZERO } },
@@ -43,7 +46,7 @@ function world(on: On, options: { capture?: string; settings?: Record<string, un
     messagesHoldMs: 0,
     messagesError: '',
     completeHoldMs: 0, // holds the next turn.complete that long before it returns
-    writeHoldMs: 0, // holds the next $.state write that long before it lands
+    writeHoldMs: 0, // holds the next write of the summary that long before it lands
     requests: [] as ModelCompleteRequest[],
     commands: [] as string[],
     opened: [] as string[],
@@ -65,6 +68,7 @@ function world(on: On, options: { capture?: string; settings?: Record<string, un
     return { value: { exitCode: 0, stdout: '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
   })
   on('session.id', async () => ({ value: ID }))
+  on('session.cwd', async () => ({ value: '/tmp/project' }))
   on('session.messages', async () => {
     const hold = w.messagesHoldMs
     w.messagesHoldMs = 0
@@ -90,6 +94,7 @@ function world(on: On, options: { capture?: string; settings?: Record<string, un
     return { value: w.replies.shift() ?? ANSWER }
   })
   on('state.set', async (_$, e, next) => {
+    if (e.key !== 'summary') return next(e)
     const hold = w.writeHoldMs
     w.writeHoldMs = 0
     if (hold > 0) await clock.sleep(hold)
@@ -140,7 +145,7 @@ const captures = (w: World) =>
 const statuses = (w: World) => w.requests.map(r => /^Status: (\w+)/.exec(String(r.prompt))?.[1])
 const paneTexts = async ($: Engine) => {
   const ui = await $.ui.mount({ plugin: PLUGIN, surface: 'terminal', component: 'Pane', requestId: PLUGIN, props: PANE })
-  const texts = (await ui.findAll({ type: 'Text' })).map(t => t.text)
+  const texts = (await ui.findAll({ type: 'Text' })).map(t => t.text).filter(t => !/^[─█│]+$/.test(t))
   await ui.unmount()
   return texts
 }
@@ -150,7 +155,6 @@ const summary = (changes: Partial<Summary> = {}): Summary => ({
   lastPrompt: '',
   soFar: 'Build the summary plugin',
   now: 'Pin its lifecycle contract',
-  files: ['plugins/session-summary/hooks/register.ts'],
   at: T0 - 2 * 60_000,
   status: 'running',
   source: 'messages',
@@ -158,19 +162,18 @@ const summary = (changes: Partial<Summary> = {}): Summary => ({
   ...changes,
 })
 
-test('the pane labels SO FAR and NOW, lists recent files under their own label, and ends with freshness', async () => {
-  expect(paneLines(summary(), T0)).toEqual([
-    { label: '', text: 'Summary plugin', dim: false, bold: true },
-    { label: 'SO FAR:', text: 'Build the summary plugin', dim: false },
-    { label: 'NOW:', text: 'Pin its lifecycle contract', dim: false },
-    { label: 'RECENT FILES:', text: 'plugins/session-summary/hooks/register.ts', dim: true },
-    { label: '', text: 'updated 2 min ago', dim: true },
-  ])
-  expect(paneLines(summary({ files: [] }), T0).map(l => l.label)).toEqual(['', 'SO FAR:', 'NOW:', ''])
+test('the pane view carries the status and the age, and is null before the first summary', async () => {
+  expect(paneView(summary(), T0)).toMatchObject({ title: 'Summary plugin', isRunning: true, age: '2m ago', now: 'Pin its lifecycle contract' })
+  expect(paneView(summary({ status: 'ended' }), T0)!.isRunning).toBe(false)
+  expect(paneView(summary({ soFar: '', now: '', at: 0 }), T0)).toBe(null)
 })
 
-test('an empty summary draws no pane rows', async () => {
-  expect(paneLines(summary({ soFar: '', now: '', files: [], at: 0 }), T0)).toEqual([])
+test('the age reads just now, then minutes, then hours', async () => {
+  expect([ageText(59_000), ageText(60_000), ageText(3_599_000), ageText(3_600_000)]).toEqual(['just now', '1m ago', '59m ago', '1h ago'])
+  expect(fileLabel('notes/plan.md', '/repo/')).toBe('notes/plan.md')
+  expect(fileLabel('/repo/hooks/a b.ts', '/repo')).toBe('hooks/a b.ts')
+  expect(fileLabel('/other/deep/dir/c.md', '/repo')).toBe('…/dir/c.md')
+  expect(fileHref('/repo/hooks/a b.ts')).toBe('file:///repo/hooks/a%20b.ts')
 })
 
 test('a non-interactive session registers /session-summary and makes no call', async ($, on) => {
@@ -199,7 +202,7 @@ test('an interactive session restores its synthetic capture into the pane', asyn
   await start($)
   expect(w.reads).toEqual([CAPTURE])
   expect(w.commands).toEqual([PLUGIN])
-  expect(await paneTexts($)).toEqual(['SO FAR:', 'Earlier work', 'NOW:', 'Resume it', 'RECENT FILES:', PLAN, 'updated 2 min ago'])
+  expect(await paneTexts($)).toEqual(['● NOW', '2m ago', 'Resume it', 'SO FAR', 'Earlier work', 'FILES', LINKED_PLAN])
 })
 
 test('a main turn gets its first summary 90 s in: one request, one firing line, one capture line, the pane filled', async ($, on) => {
@@ -213,13 +216,12 @@ test('a main turn gets its first summary 90 s in: one request, one firing line, 
   expect(w.requests).toHaveLength(1)
   expect(w.requests[0]).toMatchObject({ model: 'haiku', system: VARIANTS.edit, maxTokens: 300, effort: 'low', timeoutMs: 20_000 })
   expect(String(w.requests[0]!.prompt)).toContain('Status: running')
-  expect(String(w.requests[0]!.prompt)).toContain(`Candidate files (newest last):\n- ${PLAN}`)
   expect(logLines(w)).toHaveLength(1)
   expect(logLines(w)[0]).toMatch(/^\S+ summary session=synthetic-session ms=\d+ reason=source=messages variant=edit in=1200 out=80 cached=300 usd=\d+\.\d{4}$/)
   expect(captures(w)).toEqual([
-    expect.objectContaining({ status: 'running', source: 'messages', variant: 'edit', task: null, outcome: 'summary', soFar: 'Building the summary plugin.', now: 'Writing its plan.', files: [PLAN], candidates: [PLAN] }),
+    expect.objectContaining({ status: 'running', source: 'messages', variant: 'edit', task: null, outcome: 'summary', soFar: 'Building the summary plugin.', now: 'Writing its plan.', files: [{ path: `/tmp/project/${PLAN}`, touchedAt: T0 + 90_000, touches: 1 }] }),
   ])
-  expect(await paneTexts($)).toEqual(['Summary plugin', 'LAST PROMPT:', 'You asked for the plugin.', 'SO FAR:', 'Building the summary plugin.', 'NOW:', 'Writing its plan.', 'RECENT FILES:', PLAN, 'updated 0 min ago'])
+  expect(await paneTexts($)).toEqual(['Summary plugin', '● NOW', 'just now', 'Writing its plan.', 'SO FAR', 'Building the summary plugin.', 'YOU ASKED', 'You asked for the plugin.', 'FILES', LINKED_PLAN])
 })
 
 test('a running turn is summarized again 600 s later, and once more with status ended when it completes', async ($, on) => {
@@ -372,7 +374,7 @@ test('the ended call of a turn, starting after the next turn started, leaves tha
   await turnStart($, 'STOP JUDGE — open the PR yourself.')
   await w.clock.advance(5_000)
   expect(statuses(w)).toEqual(['running', 'ended'])
-  expect((await paneTexts($)).slice(0, 7)).toEqual(['Summary plugin', 'LAST PROMPT:', 'You asked for the plugin.', 'SO FAR:', 'Turn A done.', 'NOW:', 'Waiting on the person.'])
+  expect((await paneTexts($)).slice(0, 7)).toEqual(['Summary plugin', '○ NOW', 'just now', 'Waiting on the person.', 'SO FAR', 'Turn A done.', 'YOU ASKED'])
   w.messages.push(wrote('notes/report.md'))
   await w.clock.advance(75_000)
   expect(statuses(w)).toEqual(['running', 'ended'])
@@ -497,7 +499,7 @@ test('a turn whose predecessor\'s running call is still in flight at its firstSe
   await w.clock.advance(10_000)
   expect(statuses(w)).toEqual(['running', 'ended', 'running'])
   expect(outcomes(w)).toEqual(['summary', 'summary', 'summary'])
-  expect((await paneTexts($)).slice(0, 7)).toEqual(['Summary plugin', 'LAST PROMPT:', 'You asked for the plugin.', 'SO FAR:', 'Opening the PR.', 'NOW:', 'Pushing the branch.'])
+  expect((await paneTexts($)).slice(0, 7)).toEqual(['Summary plugin', '● NOW', 'just now', 'Pushing the branch.', 'SO FAR', 'Opening the PR.', 'YOU ASKED'])
 })
 
 test('a running call waiting behind the turn before\'s call is dropped when its own turn ends meanwhile, and that turn gets its ended call', async ($, on) => {
@@ -749,7 +751,7 @@ test('session.end aborts the call in flight and empties the pane', async ($, on)
   await start($)
   await turnStart($)
   await w.clock.advance(90_000)
-  expect((await paneTexts($))[4]).toBe('Building the summary plugin.')
+  expect((await paneTexts($))[5]).toBe('Building the summary plugin.')
 
   w.messages.push(wrote('notes/report.md'))
   w.replies.push(answer('Too late.', 'Too late.'))
@@ -779,6 +781,78 @@ test('a reply that lands after session.end writes nothing to the next conversati
   expect((await run($, 'show')).text).toContain('this session: 0 calls')
 })
 
+const sent = (...files: string[]): SessionMessage => ({ role: 'assistant', text: '', toolUses: [{ tool_use_id: `s-${files.join()}`, tool: 'SendUserFile', input: { files } }] })
+const fileTexts = (texts: string[]) => texts.slice(texts.findIndex(t => t.startsWith('FILES')))
+
+test('a file written mid-turn shows at the next tick, with no model call, before the first summary too', async ($, on) => {
+  const w = world(on, { settings: { isOff: true } })
+  w.messages = [user('write the plan')]
+  await start($)
+  await turnStart($)
+  await w.clock.advance(30_000)
+  expect(await paneTexts($)).toEqual(['No summary yet.'])
+
+  w.messages.push(wrote(PLAN))
+  await step($)
+  await w.clock.advance(30_000)
+  expect(w.requests).toEqual([])
+  expect(await paneTexts($)).toEqual(['No summary yet.', 'FILES', LINKED_PLAN])
+})
+
+test('the list follows a Write, Edit or send while switched off, and not a Read or text naming a listed file', async ($, on) => {
+  const w = world(on, { settings: { isOff: true } })
+  w.messages = [wrote('a.md'), wrote('b.md')]
+  await start($)
+  await turnStart($)
+  await step($)
+  await w.clock.advance(30_000)
+  expect((await run($, 'show')).text).toContain('Files: /tmp/project/b.md, /tmp/project/a.md\n')
+
+  w.messages.push({ role: 'assistant', text: 'See a.md', toolUses: [{ tool_use_id: 'r', tool: 'Read', input: { file_path: 'a.md' } }] })
+  await step($)
+  await w.clock.advance(30_000)
+  expect((await run($, 'show')).text).toContain('Files: /tmp/project/b.md, /tmp/project/a.md\n')
+
+  w.messages.push(sent('a.md'))
+  await step($)
+  await w.clock.advance(30_000)
+  expect((await run($, 'show')).text).toContain('Files: /tmp/project/a.md, /tmp/project/b.md\n')
+  expect(w.requests).toEqual([])
+})
+
+test('a call captures the list without its shares, a resume seeds it, and /clear empties it', async ($, on) => {
+  const w = world(on)
+  await start($)
+  await turnStart($)
+  await w.clock.advance(90_000)
+  const capture = w.files.get(CAPTURE)!
+  expect(JSON.parse(capture.trim()).files).toEqual([{ path: `/tmp/project/${PLAN}`, touchedAt: T0 + 90_000, touches: 1 }])
+
+  await $.session.end({ reason: 'clear', sessionId: ID, resume: { id: ID } })
+  await w.clock.settle()
+  expect(await paneTexts($)).toEqual(['No summary yet.'])
+  expect((await run($, 'show')).text).toContain('Files: none\n')
+
+  await start($)
+  expect(fileTexts(await paneTexts($))).toEqual(['FILES', LINKED_PLAN])
+})
+
+test('the section shows the newest three, and its header says where it stands only past three', async ($, on) => {
+  const w = world(on, { settings: { isOff: true } })
+  w.messages = ['one.md', 'two.md', 'three.md'].map(wrote)
+  await start($)
+  await turnStart($)
+  await step($)
+  await w.clock.advance(30_000)
+  const rows = (name: string) => `file:///tmp/project/${name}${name}`
+  expect(await paneTexts($)).toEqual(['No summary yet.', 'FILES', rows('three.md'), rows('two.md'), rows('one.md')])
+
+  w.messages.push(wrote('four.md'))
+  await step($)
+  await w.clock.advance(30_000)
+  expect(await paneTexts($)).toEqual(['No summary yet.', 'FILES 1–3 of 4', rows('four.md'), rows('three.md'), rows('two.md')])
+})
+
 test('switched off mid-turn, a summarized turn makes no ended call', async ($, on) => {
   const w = world(on)
   await start($)
@@ -789,4 +863,42 @@ test('switched off mid-turn, a summarized turn makes no ended call', async ($, o
   await w.clock.settle()
   expect(statuses(w)).toEqual(['running'])
   expect((await run($, 'show')).text).toContain('this session: 1 calls · in 1200 · out 80 · cached 300')
+})
+
+test('a prompt the person sends is summarized at the next model step, even in a turn under 90 s, and earns its ended call', async ($, on) => {
+  const w = world(on)
+  await start($)
+  await turnStart($)
+  await step($)
+  await w.clock.settle()
+  await complete($)
+  await w.clock.settle()
+  const before = w.requests.length
+  w.messages.push(user('a short question'))
+  await $.prompt.submit({ text: 'a short question', wait: false, origin: { kind: 'composer' } })
+  await turnStart($, 'a short question')
+  await step($, 'sub-1')
+  await w.clock.settle()
+  expect(w.requests).toHaveLength(before)
+  await step($)
+  await w.clock.settle()
+  expect(w.requests).toHaveLength(before + 1)
+  expect(logLines(w).at(-1)).toMatch(/ prompt$/)
+  await step($)
+  await w.clock.settle()
+  expect(w.requests).toHaveLength(before + 1)
+  await complete($)
+  await w.clock.settle()
+  expect(statuses(w).at(-1)).toBe('ended')
+  expect(w.requests).toHaveLength(before + 2)
+})
+
+test('a prompt from a plugin makes no prompt call', async ($, on) => {
+  const w = world(on, { capture: `${JSON.stringify({ at: '2026-10-23T11:58:00.000Z', title: 'T', soFar: 'S', now: 'N', files: [], status: 'running', source: 'messages', variant: 'edit' })}\n` })
+  await start($)
+  await $.prompt.submit({ text: 'keepalive ping. Reply only: ok', wait: false, origin: { kind: 'plugin', name: 'other' } } as never)
+  await turnStart($, 'keepalive ping. Reply only: ok')
+  await step($)
+  await w.clock.settle()
+  expect(w.requests).toEqual([])
 })
