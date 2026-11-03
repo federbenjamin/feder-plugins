@@ -2,7 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 import type { Doc, Summary } from '../types'
 import { DOCUMENTS_SHAPE, PANE_BACKGROUND, PANE_TITLE, PLUGIN, SETTINGS_KEY, SHAPE } from './config.ts'
-import { clampOffset, fileRow, filesHeader, isOverFiles, shownDocuments } from './documents.ts'
+import { filesScrollbar, clampOffset, fileRow, filesHeader, isOverFiles, shownDocuments } from './documents.ts'
 import { settingsFrom } from './settings.ts'
 import { EMPTY_SUMMARY, estimatedRows, paneHeight, paneView } from './summary.ts'
 
@@ -27,6 +27,7 @@ export const registerPane: Register = on => {
     const cwd = await $.session.cwd()
     const present = linksBase === '' ? shown.map(() => true) : await Promise.all(shown.map(d => $.fs.exists(d.path)))
     const rows = shown.map((doc, i) => fileRow(doc, { cwd, linksBase, now, isPresent: present[i]! }))
+    const bar = filesScrollbar(offset, docs.length)
     const section = (label: string, text: string) => (
       <Box flexDirection="column" paddingLeft={2} flexShrink={0}>
         <Text dimColor bold>{label}</Text>
@@ -62,13 +63,18 @@ export const registerPane: Register = on => {
         {rows.length > 0 && (
           <Box flexDirection="column" flexShrink={0} marginTop={1} paddingLeft={2}>
             <Text dimColor bold>{filesHeader(offset, docs.length)}</Text>
-            {rows.map(row =>
-              row.href === undefined ? (
-                <Text dimColor wrap="truncate-start">{row.label}</Text>
-              ) : (
-                <Text wrap="truncate-start"><Link href={row.href}>{row.label}</Link></Text>
-              ),
-            )}
+            {rows.map((row, i) => (
+              <Box flexDirection="row" columnGap={1}>
+                <Box flexGrow={1} flexShrink={1}>
+                  {row.href === undefined ? (
+                    <Text dimColor wrap="truncate-start">{row.label}</Text>
+                  ) : (
+                    <Text wrap="truncate-start"><Link href={row.href}>{row.label}</Link></Text>
+                  )}
+                </Box>
+                {bar[i] !== undefined && <Text dimColor={bar[i] === '│'}>{bar[i]}</Text>}
+              </Box>
+            ))}
           </Box>
         )}
       </Box>
@@ -80,7 +86,7 @@ export const registerPane: Register = on => {
   on('ui.scroll', { component: 'Pane', requestId: PLUGIN }, async ($, e, next) => {
     const total = (await read($, documentsAtom)).length
     if (!isOverFiles({ row: e.pointer?.row, contentRows: e.contentRows, bodyRows: e.bodyRows, total })) return next(e)
-    await update($, filesOffsetAtom, offset => clampOffset(offset + e.by, total))
+    await update($, filesOffsetAtom, offset => clampOffset(offset + Math.sign(e.by), total))
     return {}
   })
 }

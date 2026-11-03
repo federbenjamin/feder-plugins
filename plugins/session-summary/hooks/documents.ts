@@ -100,6 +100,14 @@ export function filesHeader(offset: number, total: number): string {
   return `FILES ${from + 1}–${from + FILES_ROWS} of ${total}`
 }
 
+// One mark per shown row, the thumb's position showing where the window sits; none when all fit.
+export function filesScrollbar(offset: number, total: number): string[] {
+  if (total <= FILES_ROWS) return []
+  const size = Math.max(1, Math.round((FILES_ROWS * FILES_ROWS) / total))
+  const start = Math.round((clampOffset(offset, total) / (total - FILES_ROWS)) * (FILES_ROWS - size))
+  return Array.from({ length: FILES_ROWS }, (_, i) => (i >= start && i < start + size ? '█' : '│'))
+}
+
 // Whether a wheel tick was over the section pinned to the bottom of what the body shows.
 export function isOverFiles(r: { row: number | undefined; contentRows: number; bodyRows: number; total: number }): boolean {
   if (r.row === undefined || r.total === 0) return false

@@ -145,7 +145,7 @@ const captures = (w: World) =>
 const statuses = (w: World) => w.requests.map(r => /^Status: (\w+)/.exec(String(r.prompt))?.[1])
 const paneTexts = async ($: Engine) => {
   const ui = await $.ui.mount({ plugin: PLUGIN, surface: 'terminal', component: 'Pane', requestId: PLUGIN, props: PANE })
-  const texts = (await ui.findAll({ type: 'Text' })).map(t => t.text).filter(t => !/^─+$/.test(t))
+  const texts = (await ui.findAll({ type: 'Text' })).map(t => t.text).filter(t => !/^[─█│]+$/.test(t))
   await ui.unmount()
   return texts
 }

@@ -316,7 +316,7 @@ test('a wheel tick over the section scrolls older files; one over the rest leave
   await w.clock.advance(30_000)
   const rows = async () => {
     const ui = await $.ui.mount({ plugin: PLUGIN, surface: 'terminal', component: 'Pane', requestId: PLUGIN, props: PANE })
-    const texts = (await ui.findAll({ type: 'Text' })).map(t => t.text).filter(t => !t.startsWith('file:') && t !== 'No summary yet.')
+    const texts = (await ui.findAll({ type: 'Text' })).map(t => t.text).filter(t => !/^[█│]$/.test(t) && !t.startsWith('file:') && t !== 'No summary yet.')
     await ui.unmount()
     return texts
   }
@@ -331,5 +331,5 @@ test('a wheel tick over the section scrolls older files; one over the rest leave
   await wheel(9, 39)
   expect(await rows()).toEqual(['FILES 3–5 of 5'])
   await wheel(-9, 36)
-  expect(await rows()).toEqual(['FILES 1–3 of 5'])
+  expect(await rows()).toEqual(['FILES 2–4 of 5'])
 })

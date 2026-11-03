@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 import type { Doc } from '../types'
-import { absolutePath, capturedDocuments, clampOffset, fileRow, filesHeader, isDocumentPath, isOverFiles, mergeDocuments, shownDocuments } from '../hooks/documents.ts'
+import { filesScrollbar, absolutePath, capturedDocuments, clampOffset, fileRow, filesHeader, isDocumentPath, isOverFiles, mergeDocuments, shownDocuments } from '../hooks/documents.ts'
 import { estimatedRows, paneHeight } from '../hooks/summary.ts'
 
 const CWD = '/repo'
@@ -121,4 +121,12 @@ test('with links on a row past expiry, gone, unshared or secret-looking has no l
   expect(row(shared('/repo/a.md'), { isPresent: false })).toEqual({ label: 'a.md' })
   expect(row(doc('/repo/a.md'))).toEqual({ label: 'a.md' })
   expect(row(shared('/repo/.env'))).toEqual({ label: '.env' })
+})
+
+test('the scrollbar shows where the window sits, and is absent when every file fits', () => {
+  expect(filesScrollbar(0, 3)).toEqual([])
+  expect(filesScrollbar(0, 5)).toEqual(['█', '█', '│'])
+  expect(filesScrollbar(2, 5)).toEqual(['│', '█', '█'])
+  expect(filesScrollbar(0, 12)).toEqual(['█', '│', '│'])
+  expect(filesScrollbar(9, 12)).toEqual(['│', '│', '█'])
 })
