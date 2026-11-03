@@ -3,8 +3,9 @@ export const PLUGIN = 'session-summary'
 export const SETTINGS_KEY = 'settings'
 // The atom's shape tag; bump it when Summary's fields change.
 export const SHAPE = 'summary-3'
-// The band's fill, set apart from the transcript above it.
-export const BAND_BACKGROUND = '#262b36'
+export const PANE_TITLE = 'Session summary'
+// The pane's fill, set apart from the transcript beside it.
+export const PANE_BACKGROUND = '#262b36'
 export const TICK_MS = 30_000
 export const FIRST_SECONDS = 90
 export const EVERY_SECONDS = 600
@@ -14,7 +15,7 @@ export const TOOL_LINE_CHARS = 300
 export const CANDIDATE_MAX = 8
 // Prompts the person sent mid-turn, kept to put back into the window (the engine's messages omit them).
 export const QUEUED_MAX = 20
-// The most paths the band shows: the prompt asks for one or two.
+// The most paths the pane shows: the prompt asks for one or two.
 export const FILES_MAX = 2
 // The judge's request has the same values; kept apart so tuning one never moves the other.
 export const SUMMARY_REQUEST = { model: 'haiku', maxTokens: 300, effort: 'low', timeoutMs: 20_000 } as const

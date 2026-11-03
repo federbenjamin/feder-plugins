@@ -18,6 +18,7 @@ export function settingsFrom(value: unknown): Settings {
 }
 
 export type Action =
+  | { kind: 'open' }
   | { kind: 'on' }
   | { kind: 'off' }
   | { kind: 'show' }
@@ -38,7 +39,7 @@ const seconds =
   }
 
 const GRAMMAR: Grammar<Action> = {
-  empty: { kind: 'show' },
+  empty: { kind: 'open' },
   words: { on: { kind: 'on' }, off: { kind: 'off' }, show: { kind: 'show' }, now: { kind: 'now' } },
   valued: {
     first: seconds('first'),
