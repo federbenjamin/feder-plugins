@@ -6,15 +6,17 @@ import type { Grammar } from './shared/settings.ts'
 
 // The /session-summary command's pure side: the stored settings, the grammar, the show text.
 
-export type Settings = { isOff: boolean; firstSeconds: number; everySeconds: number; source: Source; variant: string }
+// linksBase: the https base of file links, '' while /session-summary links is off.
+export type Settings = { isOff: boolean; firstSeconds: number; everySeconds: number; source: Source; variant: string; linksBase: string }
 
-export const DEFAULT_SETTINGS: Settings = Object.freeze({ isOff: false, firstSeconds: FIRST_SECONDS, everySeconds: EVERY_SECONDS, source: 'messages', variant: DEFAULT_VARIANT })
+export const DEFAULT_SETTINGS: Settings = Object.freeze({ isOff: false, firstSeconds: FIRST_SECONDS, everySeconds: EVERY_SECONDS, source: 'messages', variant: DEFAULT_VARIANT, linksBase: '' })
 
 export const isSource = isOneOf<Source>(['messages', 'session-log'])
 const isVariantName = (v: unknown): v is string => typeof v === 'string' && isVariant(v)
+const isText = (v: unknown): v is string => typeof v === 'string'
 
 export function settingsFrom(value: unknown): Settings {
-  return readSettings(value, DEFAULT_SETTINGS, { isOff: isFlag, firstSeconds: isPositiveInteger, everySeconds: isPositiveInteger, source: isSource, variant: isVariantName })
+  return readSettings(value, DEFAULT_SETTINGS, { isOff: isFlag, firstSeconds: isPositiveInteger, everySeconds: isPositiveInteger, source: isSource, variant: isVariantName, linksBase: isText })
 }
 
 export type Action =
@@ -23,13 +25,15 @@ export type Action =
   | { kind: 'off' }
   | { kind: 'show' }
   | { kind: 'now' }
+  | { kind: 'links-on' }
+  | { kind: 'links-off' }
   | { kind: 'usage' }
   | { kind: 'first'; seconds: number }
   | { kind: 'every'; seconds: number }
   | { kind: 'source'; source: Source }
   | { kind: 'variant'; variant: string }
 
-export const USAGE = '/session-summary [on|off|first <seconds>|every <seconds>|source messages|session-log|variant <name>|show|now]'
+export const USAGE = '/session-summary [on|off|first <seconds>|every <seconds>|source messages|session-log|variant <name>|links on|off|show|now]'
 
 const seconds =
   (kind: 'first' | 'every') =>
@@ -46,6 +50,7 @@ const GRAMMAR: Grammar<Action> = {
     every: seconds('every'),
     source: v => (isSource(v) ? { kind: 'source', source: v } : undefined),
     variant: v => (isVariant(v) ? { kind: 'variant', variant: v } : undefined),
+    links: v => (v === 'on' ? { kind: 'links-on' } : v === 'off' ? { kind: 'links-off' } : undefined),
   },
   usage: { kind: 'usage' },
 }
@@ -56,7 +61,7 @@ export function summaryCommand(args: string): Action {
 
 export type Calls = { count: number; input: number; output: number; cached: number; usd: number }
 
-export function showText(info: { summary: Summary; settings: Settings; calls: Calls; capturePath: string | null; now: number }): string {
+export function showText(info: { summary: Summary; documents: readonly string[]; settings: Settings; calls: Calls; capturePath: string | null; now: number }): string {
   const { summary: s, settings: t, calls: c } = info
   const updated = s.at === 0 ? 'never' : `${Math.floor((info.now - s.at) / 60_000)} min ago (${s.status})`
   return [
@@ -64,9 +69,10 @@ export function showText(info: { summary: Summary; settings: Settings; calls: Ca
     `Last prompt: ${s.lastPrompt || '(none yet)'}`,
     `So far: ${s.soFar || '(none yet)'}`,
     `Now: ${s.now || '(none yet)'}`,
-    `Files: ${s.files.join(', ') || 'none'}`,
+    `Files: ${info.documents.join(', ') || 'none'}`,
     `updated: ${updated}`,
     `settings: ${t.isOff ? 'off' : 'on'} · first ${t.firstSeconds}s · every ${t.everySeconds}s · source ${t.source} · variant ${t.variant}`,
+    `links: ${t.linksBase === '' ? 'off' : `on ${t.linksBase}`}`,
     `this session: ${c.count} calls · in ${c.input} · out ${c.output} · cached ${c.cached} · $${c.usd.toFixed(4)}`,
     `capture: ${info.capturePath ?? '(no state dir)'}`,
   ].join('\n')

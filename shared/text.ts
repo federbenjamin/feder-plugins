@@ -5,6 +5,13 @@ export function clip(text: string, n: number): string {
   return text.length <= n ? text : `${text.slice(0, Math.floor(n / 2))}\n…\n${text.slice(-Math.floor(n / 2))}`
 }
 
+const STDERR_HEAD_CHARS = 200
+
+// The head of a failed command's stderr, to quote in a line for the person.
+export function stderrHead(stderr: string): string {
+  return stderr.trim().slice(0, STDERR_HEAD_CHARS)
+}
+
 // The one-line head of a tool call's input: the first of these keys that is set.
 export function toolInputHead(input: unknown): string {
   if (!isRecord(input)) return ''
