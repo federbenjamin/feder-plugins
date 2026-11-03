@@ -1,6 +1,6 @@
 # feder-plugins
 
-Seven [Claude Code](https://docs.anthropic.com/en/docs/claude-code) plugins by federbenjamin, in one marketplace. Five keep an agent working instead of stopping to ask: one ends a turn left on an open dialog, one keeps the prompt cache warm while you are away, one nudges the agent on when it stops early, one keeps a session log, and one keeps a pane saying what the session is doing. One writes a nightly status of your streams of work, for you and your agents, plus a running catalog of what is going well and what is not. The seventh is a bundle that installs the first four.
+Eight [Claude Code](https://docs.anthropic.com/en/docs/claude-code) plugins by federbenjamin, in one marketplace. Five keep an agent working instead of stopping to ask: one ends a turn left on an open dialog, one keeps the prompt cache warm while you are away, one nudges the agent on when it stops early, one keeps a session log, and one keeps a pane saying what the session is doing. One writes a nightly status of your streams of work, for you and your agents, plus a running catalog of what is going well and what is not. One tells a session when a subagent may be hung. The eighth is a bundle that installs the first four.
 
 ## Install
 
@@ -8,7 +8,7 @@ Seven [Claude Code](https://docs.anthropic.com/en/docs/claude-code) plugins by f
 claude plugin install stopstopping --marketplace federbenjamin/feder-plugins
 ```
 
-Or one plugin: the same command with `dialog-timeout`, `cache-keepalive`, `stop-judge`, `session-log`, `session-summary`, or `morning-report` in place of `stopstopping`. The bundle is a dependency list, so installing it installs the first four under their own names, and installing one beside it changes nothing. `session-summary` (experimental) and `morning-report` are not in the bundle.
+Or one plugin: the same command with `dialog-timeout`, `cache-keepalive`, `stop-judge`, `session-log`, `session-summary`, `morning-report`, or `stall-notice` in place of `stopstopping`. The bundle is a dependency list, so installing it installs the first four under their own names, and installing one beside it changes nothing. `session-summary` (experimental), `morning-report` and `stall-notice` are not in the bundle.
 
 ## The plugins
 
@@ -18,6 +18,7 @@ Or one plugin: the same command with `dialog-timeout`, `cache-keepalive`, `stop-
 - **[session-log](plugins/session-log/README.md)** keeps one markdown log per session, pruned at compaction, and ships the handoff and finish-session skills.
 - **[session-summary](plugins/session-summary/README.md)** keeps a band above the prompt that says what the session is about, what it is doing now, and which files to open, written by a haiku call while a turn runs (`/session-summary`). Experimental; not in the bundle.
 - **[morning-report](plugins/morning-report/README.md)** writes `status.md` each night from your sessions, one block per stream (its repo, what landed, what is left, who it waits on), and `patterns.md`, a dated catalog of what went well and what did not against a list you set (`/morning-setup`). Not in the bundle; its files live in its own data folder.
+- **[stall-notice](plugins/stall-notice/README.md)** tells the session when a subagent's tool call has been running for 15 minutes. Not in the bundle.
 - **[stopstopping](plugins/stopstopping/README.md)** is a dependency list that installs the first four.
 
 ## Files
@@ -45,6 +46,7 @@ Every mechanism appends one line per firing to its log. Read one back with `awk 
 | session-log | `~/.claude/stopstopping/logs/session-log.log` |
 | session-summary | `~/.claude/stopstopping/logs/session-summary.log` |
 | morning-report | `~/.claude/stopstopping/logs/morning-report.log` |
+| stall-notice | `~/.claude/stopstopping/logs/stall-notice.log` |
 
 ## Settings
 
