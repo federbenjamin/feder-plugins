@@ -9,7 +9,11 @@ import { isRecord } from './shared/typed.ts'
 
 const EXTENSIONS: ReadonlySet<string> = new Set(DOCUMENT_EXTENSIONS)
 
+// The session's own log is an agent's memory, not a document for the person.
+const NOT_DOCUMENTS = /\/stopstopping\/session-logs\//
+
 export function isDocumentPath(path: string): boolean {
+  if (NOT_DOCUMENTS.test(path)) return false
   const name = path.split('/').at(-1) ?? ''
   const dot = name.lastIndexOf('.')
   return dot > 0 && EXTENSIONS.has(name.slice(dot + 1).toLowerCase())
@@ -32,6 +36,15 @@ function moveToFront(list: string[], path: string): void {
   list.unshift(path)
 }
 
+// The documents an agent's message points the person to, by a full path: a report often reaches
+// them this way whatever made it, a shell redirect included. A relative name is too often a mention.
+const POINTED_PATH = /(?<![\w.\/~-])(~?\/[\w.@+-]+(?:\/[\w.@+-]+)*)/g
+
+export function pointedDocuments(text: string, home: string): string[] {
+  const paths = [...text.matchAll(POINTED_PATH)].map(m => m[1]!.replace(/\.+$/, ''))
+  return paths.filter(isDocumentPath).flatMap(p => (!p.startsWith('~') ? [p] : home === '' ? [] : [`${home}${p.slice(1)}`]))
+}
+
 // The paths one tool use touches: a Write or Edit's file, a SendUserFile's files.
 function touchedBy(tool: string, input: unknown): string[] {
   if (!isRecord(input)) return []
@@ -44,7 +57,7 @@ function touchedBy(tool: string, input: unknown): string[] {
 // newest 4096 messages, so a path they no longer name keeps its place behind those they do, which
 // is its true order: its last touch came before them. Replaying the same messages changes nothing,
 // and a path's touch count going up is what says a touch is new, since messages carry no time.
-export function mergeDocuments(stored: readonly Doc[], messages: readonly SessionMessage[], cwd: string, now: number): Doc[] {
+export function mergeDocuments(stored: readonly Doc[], messages: readonly SessionMessage[], cwd: string, now: number, home = ''): Doc[] {
   const known = new Map<string, Doc>()
   for (const doc of stored) {
     const path = absolutePath(doc.path, cwd)
@@ -52,15 +65,21 @@ export function mergeDocuments(stored: readonly Doc[], messages: readonly Sessio
   }
   const order = [...known.keys()]
   const counts = new Map<string, number>()
-  for (const use of messages.flatMap(m => m.toolUses)) {
-    if (use.isError) continue
-    for (const raw of touchedBy(use.tool, use.input)) {
-      const path = absolutePath(raw, cwd)
-      // Only a Write or Edit of a file not on the list is held to the document types.
-      if (use.tool !== 'SendUserFile' && !order.includes(path) && !isDocumentPath(path)) continue
-      moveToFront(order, path)
-      counts.set(path, (counts.get(path) ?? 0) + 1)
+  const touch = (path: string) => {
+    moveToFront(order, path)
+    counts.set(path, (counts.get(path) ?? 0) + 1)
+  }
+  for (const message of messages) {
+    for (const use of message.toolUses) {
+      if (use.isError) continue
+      for (const raw of touchedBy(use.tool, use.input)) {
+        const path = absolutePath(raw, cwd)
+        // Only a Write or Edit of a file not on the list is held to the document types.
+        if (use.tool !== 'SendUserFile' && !order.includes(path) && !isDocumentPath(path)) continue
+        touch(path)
+      }
     }
+    if (message.role === 'assistant') for (const raw of pointedDocuments(message.text, home)) touch(absolutePath(raw, cwd))
   }
   return order.map(path => {
     const doc = known.get(path)
