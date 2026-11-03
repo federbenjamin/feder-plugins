@@ -22,6 +22,8 @@ export function world(on: On) {
     if (e.argv[0] === 'tee') logged.push(e.init?.stdin ?? '')
     return { value: { exitCode: 0, stdout: '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
   })
+  on('turn.start', async (_$, e) => ({ turnId: e.turnId }))
+  on('turn.complete', async (_$, e) => ({ text: e.answer }))
   on('session.start', async (_$, e) => ({ cwd: e.cwd }))
   on('session.end', async (_$, e) => ({ sessionId: e.sessionId }))
   on('agent.list', async () => {
@@ -41,6 +43,17 @@ export function world(on: On) {
   return { clock, logged, prompts, state, release: () => holds.splice(0).forEach(r => r()) }
 }
 
-export const start = ($: Engine, isInteractive = true) => $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive })
+export const session = ($: Engine, isInteractive = true) => $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive })
+
+export const agentTurn = ($: Engine, agentId: string) => $.turn.start({ text: 'go', turnId: `t-${agentId}`, agentId })
+
+export const agentDone = ($: Engine, agentId: string) => $.turn.complete({ turnId: `t-${agentId}`, agentId, reason: 'answer', answer: 'ok', durationMs: 1, isAborted: false })
+
+// A session with the subagents a1 and a2 in their turns, as a subagent's tool call always is.
+export async function start($: Engine, isInteractive = true) {
+  await session($, isInteractive)
+  await agentTurn($, 'a1')
+  await agentTurn($, 'a2')
+}
 
 export const running = (...ids: string[]): Agent[] => ids.map(id => ({ id, status: 'running' }))

@@ -42,7 +42,7 @@
     {
       "name": "stall-notice",
       "source": "./plugins/stall-notice",
-      "description": "Tells the session when a subagent's tool call has been running for 15 minutes, so a hung agent does not wait unnoticed",
+      "description": "Tells the session when a subagent's tool call has been running for 5 minutes, so a hung agent does not wait unnoticed",
       "category": "productivity"
     },
     {

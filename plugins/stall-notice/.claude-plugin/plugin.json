@@ -1,6 +1,6 @@
 {
   "name": "stall-notice",
-  "version": "0.1.1",
-  "description": "Tells the session when a subagent's tool call has been running for 15 minutes, so a hung agent does not wait unnoticed",
+  "version": "0.1.3",
+  "description": "Tells the session when a subagent's tool call has been running for 5 minutes, so a hung agent does not wait unnoticed",
   "author": { "name": "Benjamin Feder" }
 }

@@ -45,8 +45,11 @@ test('the firing-log append, the state dir, the event predicates, the pool, the 
   assert.deepEqual(hits, [])
 })
 
-test('every hooks file that handles turn.start tracks the main turn through shared/events.ts', () => {
-  const trackers = ownHooksFiles().filter(f => /on\('turn\.start'/.test(f.text))
+// A hook that opens by acting only under `e.agentId !== undefined` handles subagent turns, never the main one.
+const SUBAGENT_TURNS_ONLY = /on\('turn\.start',[^\n]*\n\s*if \([^\n]*e\.agentId !== undefined/
+
+test('every hooks file that handles the main turn at turn.start tracks it through shared/events.ts', () => {
+  const trackers = ownHooksFiles().filter(f => /on\('turn\.start'/.test(f.text) && !SUBAGENT_TURNS_ONLY.test(f.text))
   assert.ok(trackers.some(f => f.path.endsWith(join('dialog-timeout', 'hooks', 'register.ts'))))
   const missing = trackers.flatMap(f =>
     ['mainTurnStarted', 'mainTurnEnded']
