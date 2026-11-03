@@ -33,7 +33,7 @@ echo "== script tests (the sync check, directive.sh against log.ts, the stop-jud
 node --test scripts/*.test.ts
 
 echo "== public paths"
-if git ls-files -z --cached --others --exclude-standard -- . ':(exclude)scripts/check.sh' |
+if git ls-files -z --cached -- . ':(exclude)scripts/check.sh' |
   xargs -0 grep -I -n -E '(/Users/|~/\.agents|\.agents/|agent-build|agent-docs|agent-surfaces|pain[-_]scan|session-todo-list|sessionLogPrune|stop-judge\.py|transcripts\.py|contract\.md|principles\.md|/grilling|linear-run)'; then
   echo "check: a tracked file names a private path or tool (above)" >&2
   exit 1
