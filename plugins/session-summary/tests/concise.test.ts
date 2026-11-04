@@ -16,8 +16,7 @@ test('plainText removes bold and heading marks and leaves code spans and lists',
 import type { ModelCompleteResult, SessionMessage } from 'claude-code'
 import type { Concise } from '../types'
 import { CONCISE_MIN_ROWS } from '../hooks/config'
-import { cells, conciseResult, EMPTY_CONCISE, lastResponse, paneLayout, scrolledOffset, wrapRows } from '../hooks/concise'
-import { EMPTY_SUMMARY } from '../hooks/summary'
+import { cells, conciseResult, conciseView, EMPTY_CONCISE, lastResponse, scrolledOffset, wrapRows } from '../hooks/concise'
 
 const NOW = Date.parse('2026-10-23T12:00:00Z')
 const ZERO = { input_tokens: 0, output_tokens: 0, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 }
@@ -135,77 +134,66 @@ test('cells counts a wide character as two', () => {
   expect(cells('日本')).toBe(4)
 })
 
-const summary = EMPTY_SUMMARY
 const lines = (n: number) => Array.from({ length: n }, (_, i) => `line ${i + 1}`).join('\n')
 const concise = (changes: Partial<Concise> = {}): Concise => ({ status: 'ready', text: lines(30), at: NOW, offset: 0, ...changes })
-const layout = (c: Concise, bodyRows: number) => paneLayout({ summary, concise: c, now: NOW, columns: 60, bodyRows })
-// The empty summary draws one top row: "No summary yet."
-const TOP = [{ text: 'No summary yet.', dim: true }]
+// One row above the section ("No summary yet.") and no FILES, unless a test says otherwise.
+const view = (c: Concise, bodyRows: number, rows: { aboveRows?: number; fileRows?: number } = {}) => conciseView({ concise: c, now: NOW, columns: 60, bodyRows, aboveRows: rows.aboveRows ?? 1, fileRows: rows.fileRows ?? 0 })!
 
 test('an empty concise status adds no section', () => {
-  expect(paneLayout({ summary, concise: EMPTY_CONCISE, now: NOW, columns: 60, bodyRows: 20 })).toEqual({ rows: TOP, window: null })
+  expect(conciseView({ concise: EMPTY_CONCISE, now: NOW, columns: 60, bodyRows: 20, aboveRows: 1, fileRows: 0 })).toBeNull()
 })
 
-test('a section that fits is drawn whole under a label and age, with no window', () => {
-  const l = layout(concise({ text: 'alpha\nbeta', at: NOW - 3 * 60_000 }), 40)
-  expect(l.window).toBeNull()
-  expect(l.rows).toEqual([...TOP, { text: '' }, { text: 'SUMMARY OF LAST RESPONSE:', bold: true }, { text: 'from 3 min ago', dim: true }, { text: 'alpha' }, { text: 'beta' }])
+test('a section that fits is drawn whole with its age and no window', () => {
+  expect(view(concise({ text: 'alpha\nbeta', at: NOW - 3 * 60_000 }), 40)).toEqual({ age: '3m ago', rows: ['alpha', 'beta'], window: null })
 })
 
 test('a section exactly as tall as the room is not windowed', () => {
-  // bodyRows 20 - 1 top - 3 header = 16 rows of room
-  const l = layout(concise({ text: lines(16) }), 20)
-  expect(l.window).toBeNull()
-  expect(l.rows).toHaveLength(1 + 3 + 16)
+  // bodyRows 20 - 1 above - 3 header = 16 rows of room
+  const v = view(concise({ text: lines(16) }), 20)
+  expect(v.window).toBeNull()
+  expect(v.rows).toHaveLength(16)
 })
 
-test('an overlong section keeps every top row and shows exactly the room\'s rows, with the position in the age row', () => {
-  const l = layout(concise(), 20)
-  expect(l.window).toEqual({ rows: 16, maxOffset: 14 })
-  expect(l.rows.slice(0, 3)).toEqual([...TOP, { text: '' }, { text: 'SUMMARY OF LAST RESPONSE:', bold: true }])
-  expect(l.rows[3]).toEqual({ text: 'from 0 min ago · rows 1-16 of 30', dim: true })
-  expect(l.rows.slice(4).map(r => r.text)).toEqual(Array.from({ length: 16 }, (_, i) => `line ${i + 1}`))
-  expect(l.rows).toHaveLength(20)
+test('an overlong section shows exactly the room\'s rows, with the position in the age row', () => {
+  const v = view(concise(), 20)
+  expect(v.window).toEqual({ rows: 16, maxOffset: 14 })
+  expect(v.age).toBe('just now · rows 1-16 of 30')
+  expect(v.rows).toEqual(Array.from({ length: 16 }, (_, i) => `line ${i + 1}`))
 })
 
-test('scrolling the window moves the section rows and the position, never the top rows', () => {
-  const top = layout(concise(), 20).rows.slice(0, 3)
-  const l = layout(concise({ offset: 5 }), 20)
-  expect(l.rows.slice(0, 3)).toEqual(top)
-  expect(l.rows[3]!.text).toBe('from 0 min ago · rows 6-21 of 30')
-  expect(l.rows[4]!.text).toBe('line 6')
-  expect(l.rows.at(-1)!.text).toBe('line 21')
+test('scrolling the window moves the section rows and the position', () => {
+  const v = view(concise({ offset: 5 }), 20)
+  expect(v.age).toBe('just now · rows 6-21 of 30')
+  expect(v.rows[0]).toBe('line 6')
+  expect(v.rows.at(-1)).toBe('line 21')
 })
 
 test('an offset past the end clamps to the last full window, and a negative one to the first', () => {
-  const end = layout(concise({ offset: 999 }), 20)
-  expect(end.rows[3]!.text).toBe('from 0 min ago · rows 15-30 of 30')
-  expect(end.rows.at(-1)!.text).toBe('line 30')
-  expect(layout(concise({ offset: -4 }), 20).rows[3]!.text).toBe('from 0 min ago · rows 1-16 of 30')
+  const end = view(concise({ offset: 999 }), 20)
+  expect(end.age).toBe('just now · rows 15-30 of 30')
+  expect(end.rows.at(-1)).toBe('line 30')
+  expect(view(concise({ offset: -4 }), 20).age).toBe('just now · rows 1-16 of 30')
 })
 
-test('with fewer than CONCISE_MIN_ROWS of room there is no window and every row is drawn', () => {
-  const bodyRows = 1 + 3 + (CONCISE_MIN_ROWS - 1)
-  const l = layout(concise({ offset: 4 }), bodyRows)
-  expect(l.window).toBeNull()
-  expect(l.rows).toHaveLength(1 + 3 + 30)
-  expect(l.rows[3]!.text).toBe('from 0 min ago')
-  expect(l.rows[4]!.text).toBe('line 1')
+test('with little room left by the texts, the section still keeps CONCISE_MIN_ROWS', () => {
+  const v = view(concise(), 20, { aboveRows: 18 })
+  expect(v.window).toEqual({ rows: CONCISE_MIN_ROWS, maxOffset: 30 - CONCISE_MIN_ROWS })
+  expect(v.rows).toHaveLength(CONCISE_MIN_ROWS)
 })
 
-test('with exactly CONCISE_MIN_ROWS of room the section is windowed', () => {
-  const l = layout(concise(), 1 + 3 + CONCISE_MIN_ROWS)
-  expect(l.window).toEqual({ rows: CONCISE_MIN_ROWS, maxOffset: 30 - CONCISE_MIN_ROWS })
+test('FILES keeps its rows however short the pane: the section gives way, to one row at least', () => {
+  expect(view(concise(), 12, { aboveRows: 12, fileRows: 7 }).rows).toHaveLength(2)
+  expect(view(concise(), 6, { aboveRows: 12, fileRows: 7 }).rows).toHaveLength(1)
 })
 
 test('the age row says working or failed instead of an age', () => {
-  expect(layout(concise({ status: 'working', text: 'Shortening the last response.' }), 40).rows[3]!.text).toBe('working')
-  expect(layout(concise({ status: 'failed', text: 'The call failed.' }), 40).rows[3]!.text).toBe('failed')
+  expect(view(concise({ status: 'working', text: 'Shortening the last response.' }), 40).age).toBe('working')
+  expect(view(concise({ status: 'failed', text: 'The call failed.' }), 40).age).toBe('failed')
 })
 
-test('the age is whole minutes since the command last wrote, never negative', () => {
-  expect(layout(concise({ text: 'x', at: NOW - 125_000 }), 40).rows[3]!.text).toBe('from 2 min ago')
-  expect(layout(concise({ text: 'x', at: NOW + 60_000 }), 40).rows[3]!.text).toBe('from 0 min ago')
+test('the age counts from the command\'s last write and is never negative', () => {
+  expect(view(concise({ text: 'x', at: NOW - 125_000 }), 40).age).toBe('2m ago')
+  expect(view(concise({ text: 'x', at: NOW + 60_000 }), 40).age).toBe('just now')
 })
 
 const WINDOW = { rows: 16, maxOffset: 14 }

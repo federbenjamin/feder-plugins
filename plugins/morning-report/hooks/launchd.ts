@@ -1,25 +1,13 @@
+import { jobNames, plistText } from './shared/launchd.ts'
+import type { JobNames } from './shared/launchd.ts'
 import { REPORT_FIRES } from './pipeline.ts'
 
 // The nightly launchd job: its names, the plugin check it runs first, and its plist.
 
-export type LaunchdNames = { label: string; plist: string; logDir: string; log: string; domain: string; target: string }
-
 const LAUNCHD_LABEL = 'com.morning-report'
 
-export function launchdNames(home: string, uid: string): LaunchdNames {
-  const logDir = `${home}/Library/Logs/${LAUNCHD_LABEL}`
-  return {
-    label: LAUNCHD_LABEL,
-    plist: `${home}/Library/LaunchAgents/${LAUNCHD_LABEL}.plist`,
-    logDir,
-    log: `${logDir}/run.log`,
-    domain: `gui/${uid}`,
-    target: `gui/${uid}/${LAUNCHD_LABEL}`,
-  }
-}
-
-export function isMacOS(unameS: string): boolean {
-  return unameS.trim() === 'Darwin'
+export function launchdNames(home: string, uid: string): JobNames {
+  return jobNames(LAUNCHD_LABEL, home, uid)
 }
 
 export const MANUAL_RUN_TEXT =
@@ -29,10 +17,6 @@ export type PlistInput = { claudePath: string; home: string; path: string; uid: 
 
 function shellWord(word: string): string {
   return `'${word.replaceAll("'", `'\\''`)}'`
-}
-
-function xmlString(text: string): string {
-  return `<string>${text.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')}</string>`
 }
 
 // Reads `claude plugin list --json` on stdin and prints enabled, disabled or absent for the plugin
@@ -99,31 +83,11 @@ export function renderPlist({ claudePath, home, path, uid, hour, pluginName }: P
     { length: REPORT_FIRES },
     (_, i) => `    <dict><key>Hour</key><integer>${hour + i}</integer><key>Minute</key><integer>0</integer></dict>`,
   )
-  return [
-    '<?xml version="1.0" encoding="UTF-8"?>',
-    '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">',
-    '<plist version="1.0">',
-    '<dict>',
-    `  <key>Label</key>${xmlString(names.label)}`,
-    '  <key>ProgramArguments</key>',
-    '  <array>',
-    ...jobArgv(home, path, script).map(arg => `    ${xmlString(arg)}`),
-    '  </array>',
-    `  <key>WorkingDirectory</key>${xmlString(home)}`,
-    '  <key>StartCalendarInterval</key>',
-    '  <array>',
-    ...fires,
-    '  </array>',
-    '  <key>RunAtLoad</key><false/>',
-    `  <key>StandardInPath</key>${xmlString('/dev/null')}`,
-    `  <key>StandardOutPath</key>${xmlString(names.log)}`,
-    `  <key>StandardErrorPath</key>${xmlString(names.log)}`,
-    '  <key>EnvironmentVariables</key>',
-    '  <dict>',
-    ...jobEnv(home, path).map(([k, v]) => `    <key>${k}</key>${xmlString(v)}`),
-    '  </dict>',
-    '</dict>',
-    '</plist>',
-    '',
-  ].join('\n')
+  return plistText({
+    names,
+    argv: jobArgv(home, path, script),
+    home,
+    env: jobEnv(home, path),
+    trigger: ['  <key>StartCalendarInterval</key>', '  <array>', ...fires, '  </array>', '  <key>RunAtLoad</key><false/>'],
+  })
 }

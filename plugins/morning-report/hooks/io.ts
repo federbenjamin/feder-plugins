@@ -1,6 +1,7 @@
 import type { EngineInterface, PluginOptions } from 'claude-code'
 import { pool } from './shared/pool.ts'
 import { isPermanent, retryDelayS } from './shared/retry.ts'
+import { stderrHead } from './shared/text.ts'
 import {
   addUsage,
   batchSessions,
@@ -12,7 +13,6 @@ import {
   REPORT_HOUR,
   sessionBlock,
   SETUP_DAYS,
-  stderrHead,
   summaryOutcome,
   type Extracted,
   type PromptName,

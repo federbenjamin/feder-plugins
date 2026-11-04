@@ -1,6 +1,6 @@
 // Writes the generated copies (a plugin cannot import across its folder, and a symlink is refused
-// by the loader): shared/ into each plugin, the judge into tools/eval, and the eval's sample
-// fixtures from their one source.
+// by the loader): shared/ into each plugin, the judge into tools/eval, the Python tests' reader of
+// hooks/*.ts into session-summary, and the eval's sample fixtures from their one source.
 //   node scripts/sync-shared.ts           write every target
 //   node scripts/sync-shared.ts --check   write nothing; exit 1 on a drifted, missing or stale
 //                                         target, a missing source or plugin, or a sibling text
@@ -28,6 +28,7 @@ export const JOBS: readonly Job[] = [
   ...PARTS.map(p => ({ name: `shared -> ${p}`, from: 'shared', to: `plugins/${p}/hooks/shared`, plugin: `plugins/${p}`, owns: true })),
   { name: 'judge -> eval', from: 'plugins/stop-judge/hooks', to: 'tools/eval/hooks/judge', plugin: 'tools/eval', files: ['judge.ts', 'prompt.ts'], owns: true },
   { name: 'judge shared -> eval', from: 'plugins/stop-judge/hooks/shared', to: 'tools/eval/hooks/judge/shared', plugin: 'tools/eval' },
+  { name: 'hooks_ts -> session-summary', from: 'plugins/morning-report/scripts', to: 'plugins/session-summary/scripts', plugin: 'plugins/session-summary', files: ['hooks_ts.py'] },
 ]
 
 // Files written from a module's text, not copied: the eval's fixtures, whose source the tests import.

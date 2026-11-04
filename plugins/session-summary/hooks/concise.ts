@@ -1,11 +1,11 @@
 import type { ModelCompleteResult, SessionMessage } from 'claude-code'
-import type { Concise, Summary } from '../types'
-import { CONCISE_MIN_ROWS } from './config.ts'
+import type { Concise } from '../types'
+import { CONCISE_HEADER_ROWS, CONCISE_MIN_ROWS } from './config.ts'
 import { CONCISE_SYSTEM } from './prompts.ts'
-import { isBumpTurn, paneLines } from './summary.ts'
+import { ageText, isBumpTurn } from './summary.ts'
 
 // /summarize's pure side: which response it reads, what it asks, what a reply leaves in the pane,
-// and the pane's rows with its bottom section scrolling under the pinned texts.
+// and its section's rows, windowed so the section scrolls between the texts and FILES.
 
 export const EMPTY_CONCISE: Concise = Object.freeze({ status: 'empty', text: '', at: 0, offset: 0 })
 
@@ -100,53 +100,31 @@ export function wrapRows(text: string, columns: number): string[] {
   return rows
 }
 
-export type Row = { text: string; bold?: boolean; dim?: boolean }
-
-const BLANK: Row = { text: '' }
-
-// The existing texts as rows, one blank row between blocks.
-export function topRows(summary: Summary, now: number, columns: number): Row[] {
-  const lines = paneLines(summary, now)
-  if (lines.length === 0) return [{ text: 'No summary yet.', dim: true }]
-  return lines.flatMap((line, i) => [
-    ...(i > 0 ? [BLANK] : []),
-    ...(line.label !== '' ? wrapRows(line.label, columns).map(text => ({ text, bold: true, dim: line.dim })) : []),
-    ...wrapRows(line.text, columns).map(text => ({ text, bold: line.bold ?? false, dim: line.dim })),
-  ])
-}
-
-export function conciseAge(concise: Concise, now: number): string {
+function conciseAge(concise: Concise, now: number): string {
   if (concise.status === 'working') return 'working'
   if (concise.status === 'failed') return 'failed'
-  return `from ${Math.max(Math.floor((now - concise.at) / 60_000), 0)} min ago`
+  return ageText(now - concise.at)
 }
 
-// Where the rows go: `window` keeps the top in place and scrolls the section in `rows` rows; null
-// leaves every row drawn, for when the section fits, or when so little room is left under the top
-// that the whole pane scrolling (the engine's own) reads better.
-export type PaneLayout = { rows: Row[]; window: { rows: number; maxOffset: number } | null }
+// The section as drawn: `window` is set when it is taller than its room and scrolls. Null while empty.
+export type ConciseView = { age: string; rows: string[]; window: { rows: number; maxOffset: number } | null }
 
-const HEADER_ROWS = 3 // a blank row, the label, the age row
-
-export function paneLayout(p: { summary: Summary; concise: Concise; now: number; columns: number; bodyRows: number }): PaneLayout {
-  const top = topRows(p.summary, p.now, p.columns)
-  if (p.concise.status === 'empty') return { rows: top, window: null }
+// `aboveRows` is what the texts and FILES take, and `fileRows` what FILES alone takes. The section
+// gets what the texts leave, at least CONCISE_MIN_ROWS: past that the texts are cut from the bottom
+// to give it room, as the pane's tree cuts them for FILES. FILES always stays on screen.
+export function conciseView(p: { concise: Concise; now: number; columns: number; bodyRows: number; aboveRows: number; fileRows: number }): ConciseView | null {
+  if (p.concise.status === 'empty') return null
   const section = wrapRows(p.concise.text, p.columns)
-  const room = p.bodyRows - top.length - HEADER_ROWS
-  const isPinned = section.length > room && room >= CONCISE_MIN_ROWS
-  const maxOffset = isPinned ? section.length - room : 0
+  const wanted = Math.max(p.bodyRows - p.aboveRows - CONCISE_HEADER_ROWS, CONCISE_MIN_ROWS)
+  const room = Math.max(Math.min(wanted, p.bodyRows - p.fileRows - CONCISE_HEADER_ROWS), 1)
+  const age = conciseAge(p.concise, p.now)
+  if (section.length <= room) return { age, rows: section, window: null }
+  const maxOffset = section.length - room
   const offset = Math.min(Math.max(p.concise.offset, 0), maxOffset)
-  const shown = isPinned ? section.slice(offset, offset + room) : section
-  const place = isPinned ? ` · rows ${offset + 1}-${offset + room} of ${section.length}` : ''
   return {
-    rows: [
-      ...top,
-      BLANK,
-      { text: 'SUMMARY OF LAST RESPONSE:', bold: true },
-      { text: `${conciseAge(p.concise, p.now)}${place}`, dim: true },
-      ...shown.map(text => ({ text })),
-    ],
-    window: isPinned ? { rows: room, maxOffset } : null,
+    age: `${age} · rows ${offset + 1}-${offset + room} of ${section.length}`,
+    rows: section.slice(offset, offset + room),
+    window: { rows: room, maxOffset },
   }
 }
 

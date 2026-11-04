@@ -1,7 +1,7 @@
 import { expect, test } from 'claude-code/testing'
 import { DEFAULT_SETTINGS, settingsFrom, showText, summaryCommand, USAGE } from '../hooks/settings.ts'
 
-const defaults = { isOff: false, firstSeconds: 90, everySeconds: 600, source: 'messages' as const, variant: 'edit' }
+const defaults = { isOff: false, firstSeconds: 90, everySeconds: 600, source: 'messages' as const, variant: 'edit', linksBase: '' }
 
 test('missing or non-object stored settings use every documented default', () => {
   expect(DEFAULT_SETTINGS).toEqual(defaults)
@@ -15,8 +15,10 @@ test('a malformed stored field falls back without discarding its valid neighbour
     everySeconds: 600,
     source: 'session-log',
     variant: 'edit',
+    linksBase: '',
   })
-  expect(settingsFrom({ isOff: 'true', firstSeconds: 0, everySeconds: -1, source: 'other', variant: 'unknown' })).toEqual(defaults)
+  expect(settingsFrom({ isOff: 'true', firstSeconds: 0, everySeconds: -1, source: 'other', variant: 'unknown', linksBase: 7 })).toEqual(defaults)
+  expect(settingsFrom({ linksBase: 'https://host.example:1' }).linksBase).toBe('https://host.example:1')
 })
 
 test('each documented command selects exactly one action', () => {
@@ -31,19 +33,22 @@ test('each documented command selects exactly one action', () => {
   expect(summaryCommand('source messages')).toEqual({ kind: 'source', source: 'messages' })
   expect(summaryCommand('source session-log')).toEqual({ kind: 'source', source: 'session-log' })
   expect(summaryCommand('variant EDIT')).toEqual({ kind: 'variant', variant: 'edit' })
+  expect(summaryCommand('links on')).toEqual({ kind: 'links-on' })
+  expect(summaryCommand('LINKS OFF')).toEqual({ kind: 'links-off' })
 })
 
 test('partial, extended, and invalid commands reach usage instead of a nearby action', () => {
-  for (const args of ['on now', 'now please', 'first', 'first 0', 'first -1', 'first 1.5', 'every 3 later', 'source', 'source log', 'variant', 'variant missing', 'nonsense']) {
+  for (const args of ['on now', 'now please', 'first', 'first 0', 'first -1', 'first 1.5', 'every 3 later', 'source', 'source log', 'variant', 'variant missing', 'links', 'links maybe', 'nonsense']) {
     expect(summaryCommand(args)).toEqual({ kind: 'usage' })
   }
-  expect(USAGE).toBe('/session-summary [on|off|first <seconds>|every <seconds>|source messages|session-log|variant <name>|show|now]')
+  expect(USAGE).toBe('/session-summary [on|off|first <seconds>|every <seconds>|source messages|session-log|variant <name>|links on|off|show|now]')
 })
 
 test('a populated report preserves summary details, settings, usage, and capture location', () => {
   expect(showText({
-    summary: { title: 'Audit', lastPrompt: 'You asked for an audit.', soFar: 'audit complete', now: 'add tests', files: ['src/a.ts', 'src/b.ts'], at: 2_520_000, status: 'ended', source: 'session-log', variant: 'brief' },
-    settings: { isOff: true, firstSeconds: 45, everySeconds: 300, source: 'session-log', variant: 'brief' },
+    summary: { title: 'Audit', lastPrompt: 'You asked for an audit.', soFar: 'audit complete', now: 'add tests', at: 2_520_000, status: 'ended', source: 'session-log', variant: 'brief' },
+    documents: ['src/a.ts', 'src/b.ts'],
+    settings: { isOff: true, firstSeconds: 45, everySeconds: 300, source: 'session-log', variant: 'brief', linksBase: 'https://host.example:1' },
     calls: { count: 4, input: 12, output: 3, cached: 8, usd: 0.123456 },
     capturePath: '/state/session-summaries/s1.jsonl',
     now: 3_780_000,
@@ -55,6 +60,7 @@ test('a populated report preserves summary details, settings, usage, and capture
     'Files: src/a.ts, src/b.ts',
     'updated: 21 min ago (ended)',
     'settings: off · first 45s · every 300s · source session-log · variant brief',
+    'links: on https://host.example:1',
     'this session: 4 calls · in 12 · out 3 · cached 8 · $0.1235',
     'capture: /state/session-summaries/s1.jsonl',
   ].join('\n'))
@@ -62,7 +68,8 @@ test('a populated report preserves summary details, settings, usage, and capture
 
 test('a report without a summary or state directory makes each unavailable value explicit', () => {
   expect(showText({
-    summary: { title: '', lastPrompt: '', soFar: '', now: '', files: [], at: 0, status: 'running', source: 'messages', variant: 'edit' },
+    summary: { title: '', lastPrompt: '', soFar: '', now: '', at: 0, status: 'running', source: 'messages', variant: 'edit' },
+    documents: [],
     settings: defaults,
     calls: { count: 0, input: 0, output: 0, cached: 0, usd: 0 },
     capturePath: null,
@@ -75,6 +82,7 @@ test('a report without a summary or state directory makes each unavailable value
     'Files: none',
     'updated: never',
     'settings: on · first 90s · every 600s · source messages · variant edit',
+    'links: off',
     'this session: 0 calls · in 0 · out 0 · cached 0 · $0.0000',
     'capture: (no state dir)',
   ].join('\n'))

@@ -1,7 +1,7 @@
 import { expect, mock, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 import type { CommandSpec, ModelCompleteRequest, ModelCompleteResult, On, SessionMessage } from 'claude-code'
-import { CONCISE_COMMAND, PLUGIN, TICK_MS } from '../hooks/config'
+import { CONCISE_COMMAND, CONCISE_LABEL, PLUGIN, TICK_MS } from '../hooks/config'
 import { CONCISE_SYSTEM } from '../hooks/prompts'
 
 const T0 = Date.parse('2026-10-23T12:00:00Z')
@@ -53,6 +53,7 @@ function world(on: On) {
     return { value: { exitCode: 0, stdout: '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
   })
   on('session.id', async () => ({ value: ID }))
+  on('session.cwd', async () => ({ value: '/tmp/project' }))
   on('session.messages', async () => ({ value: [...w.messages] }))
   on('model.complete', async (_$, e, next) => {
     w.requests.push(e)
@@ -107,7 +108,7 @@ const paneTexts = async ($: Engine, scroll = PANE.scroll) => {
 // The harness hands a ui.scroll hook exactly what $.ui.scroll is given, so the engine's own fields are spelled out.
 const scroll = ($: Engine, by: number, bodyRows = PANE.scroll.bodyRows) =>
   $.ui.scroll({ component: 'Pane', requestId: PLUGIN, offset: 0, by, bodyRows, contentRows: 60, origin: { kind: 'person' } } as never)
-const SECTION ='SUMMARY OF LAST RESPONSE:'
+const SECTION = CONCISE_LABEL
 const sectionOf = (texts: string[]) => texts.slice(texts.indexOf(SECTION))
 
 test('/summarize in an interactive session returns no text and no context, and sends the whole response to the model', async ($, on) => {
@@ -142,7 +143,7 @@ test('the pane shows the result below the other texts', async ($, on) => {
   await start($)
   await summarize($)
   await w.clock.settle()
-  expect(await paneTexts($)).toEqual(['No summary yet.', SECTION, 'from 0 min ago', 'Findings 0 to 399 listed.'])
+  expect(await paneTexts($)).toEqual(['No summary yet.', SECTION, 'just now', 'Findings 0 to 399 listed.'])
 })
 
 test('the section is placed under the timer\'s texts once a summary exists', async ($, on) => {
@@ -154,7 +155,7 @@ test('the section is placed under the timer\'s texts once a summary exists', asy
   await w.clock.settle()
   const texts = await paneTexts($)
   expect(texts.indexOf('Summary plugin')).toBe(0)
-  expect(texts.indexOf(SECTION)).toBeGreaterThan(texts.indexOf('NOW:'))
+  expect(texts.indexOf(SECTION)).toBeGreaterThan(texts.indexOf('SO FAR'))
   expect(texts.at(-1)).toBe('A shorter copy.')
 })
 
@@ -167,13 +168,13 @@ test('a ui.scroll over an overlong section moves the section and leaves the top 
   const ui = await $.ui.mount({ plugin: PLUGIN, surface: 'terminal', component: 'Pane', requestId: PLUGIN, props: PANE })
   const texts = async () => (await ui.findAll({ type: 'Text' })).map(t => t.text).filter(t => t !== ' ')
   const before = await texts()
-  expect(before.slice(0, 3)).toEqual(['No summary yet.', SECTION, 'from 0 min ago · rows 1-16 of 40'])
+  expect(before.slice(0, 3)).toEqual(['No summary yet.', SECTION, 'just now · rows 1-16 of 40'])
   expect(before.at(3)).toBe('line 1')
 
   expect(await scroll($, 5)).toEqual({})
   const after = await texts()
   expect(after.slice(0, 2)).toEqual(before.slice(0, 2))
-  expect(after[2]).toBe('from 0 min ago · rows 6-21 of 40')
+  expect(after[2]).toBe('just now · rows 6-21 of 40')
   expect(after[3]).toBe('line 6')
   expect(after).toHaveLength(before.length)
   // The plugin took the scroll: the engine's own never saw it.
@@ -181,19 +182,50 @@ test('a ui.scroll over an overlong section moves the section and leaves the top 
 
   // A page key asks for the pane's 20 rows; the section's window is 16.
   await scroll($, 20)
-  expect((await texts())[2]).toBe('from 0 min ago · rows 22-37 of 40')
+  expect((await texts())[2]).toBe('just now · rows 22-37 of 40')
   await scroll($, 500)
-  expect((await texts())[2]).toBe('from 0 min ago · rows 25-40 of 40')
+  expect((await texts())[2]).toBe('just now · rows 25-40 of 40')
   expect((await texts()).at(-1)).toBe('line 40')
   await scroll($, -500)
-  expect((await texts())[2]).toBe('from 0 min ago · rows 1-16 of 40')
+  expect((await texts())[2]).toBe('just now · rows 1-16 of 40')
 
   // A new result opens at its own top, wherever the last one was scrolled to.
   await scroll($, 5)
   w.replies.push(said(lines(40)))
   await summarize($)
   await w.clock.settle()
-  expect((await texts())[2]).toBe('from 0 min ago · rows 1-16 of 40')
+  expect((await texts())[2]).toBe('just now · rows 1-16 of 40')
+  await ui.unmount()
+})
+
+test('the section sits between the texts and FILES, a wheel tick over FILES moves the files, and one elsewhere moves the section', async ($, on) => {
+  const w = world(on)
+  const files = Array.from({ length: 7 }, (_, i) => `/tmp/project/doc${i}.md`)
+  for (const file of files) w.files.set(file, '')
+  w.files.set(`${DIR}/session-summaries/${ID}.jsonl`, `${JSON.stringify({ at: new Date(T0).toISOString(), soFar: 'Earlier work', now: 'Resume it', files, status: 'running', source: 'messages', variant: 'edit' })}\n`)
+  w.replies.push(said(lines(40)))
+  await start($)
+  await summarize($)
+  await w.clock.settle()
+  const ui = await $.ui.mount({ plugin: PLUGIN, surface: 'terminal', component: 'Pane', requestId: PLUGIN, props: PANE })
+  const texts = async () => (await ui.findAll({ type: 'Text' })).map(t => t.text)
+  const tick = (row: number) => $.ui.scroll({ component: 'Pane', requestId: PLUGIN, offset: 0, by: 1, bodyRows: 20, contentRows: 20, origin: { kind: 'person' }, pointer: { row } } as never)
+
+  const before = await texts()
+  expect(before.indexOf('SO FAR')).toBeLessThan(before.indexOf(SECTION))
+  expect(before.indexOf(SECTION)).toBeLessThan(before.findIndex(t => t.startsWith('FILES')))
+  expect(before).toContain('just now · rows 1-8 of 40')
+
+  await tick(19)
+  const overFiles = await texts()
+  expect(overFiles).toContain('FILES 2–6 of 7')
+  expect(overFiles).toContain('just now · rows 1-8 of 40')
+
+  await tick(10)
+  const overSection = await texts()
+  expect(overSection).toContain('FILES 2–6 of 7')
+  expect(overSection).toContain('just now · rows 2-9 of 40')
+  expect(w.engineScrolls).toEqual([])
   await ui.unmount()
 })
 
@@ -218,7 +250,7 @@ test('when the section fits, ui.scroll falls through to the engine and the secti
   const after = (await ui.findAll({ type: 'Text' })).map(t => t.text)
   expect(w.engineScrolls).toEqual([3])
   expect(after).toEqual(before)
-  expect(after).toContain('from 0 min ago')
+  expect(after).toContain('just now')
   await ui.unmount()
 })
 
@@ -370,6 +402,6 @@ test('the summary timer\'s writes leave the section and its scroll position as t
   const after = await paneTexts($, TALL)
   expect(after[0]).toBe('Summary plugin')
   const section = sectionOf(after)
-  expect(section[1]).toMatch(/^from 1 min ago · rows 11-\d+ of 80$/)
+  expect(section[1]).toMatch(/^1m ago · rows 11-\d+ of 80$/)
   expect(section.slice(2, 4)).toEqual(['line 11', 'line 12'])
 })

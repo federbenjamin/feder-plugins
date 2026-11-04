@@ -33,6 +33,7 @@ Everything the plugins write for you to read lives under `~/.claude/stopstopping
 - `session-logs/`: the session logs and their template
 - `handoffs/`: handoff documents
 - `session-summaries/`: one file per session of session-summary's calls, what each read and wrote
+- `session-summary/`: the live file links and their server, only while `/session-summary links` is on
 
 ## Logs
 
@@ -44,7 +45,7 @@ Every mechanism appends one line per firing to its log. Read one back with `awk 
 | cache-keepalive | `~/.claude/stopstopping/logs/cache-keepalive.log` |
 | stop-judge | `~/.claude/stopstopping/logs/stop-judge.log` |
 | session-log | `~/.claude/stopstopping/logs/session-log.log` |
-| session-summary | `~/.claude/stopstopping/logs/session-summary.log` |
+| session-summary | `~/.claude/stopstopping/logs/session-summary.log`; its file server, `~/.claude/stopstopping/logs/session-summary-links.log` |
 | morning-report | `~/.claude/stopstopping/logs/morning-report.log` |
 | stall-notice | `~/.claude/stopstopping/logs/stall-notice.log` |
 

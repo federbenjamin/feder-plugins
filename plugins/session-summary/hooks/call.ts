@@ -1,7 +1,9 @@
 import type { ModelCompleteResult, ModelUsage } from 'claude-code'
 import type { Source } from '../types'
+import { NO_VERDICT } from './documents.ts'
+import type { FileVerdict } from './documents.ts'
 import type { Calls } from './settings.ts'
-import { parseReply, parseTask } from './summary.ts'
+import { parseFileVerdict, parseReply, parseTask } from './summary.ts'
 import type { Previous, TaskVerdict } from './summary.ts'
 
 // The summary call's decisions, apart from its I/O in register.ts: what a reply leaves, the
@@ -11,22 +13,25 @@ export type CallOutcome = 'summary' | 'parse-partial' | 'parse-failed' | 'api-er
 
 // `texts` is what the capture records; `isTaken` says the pane takes them, and only then does the
 // call count as having summarized its window. judge.ts's mapping: an unanswered reply cut by its
-// signal or timeout is `aborted`, any other unanswered one an `api-error` naming why.
-export type ReplyResult = { outcome: CallOutcome; failure: string; task: TaskVerdict; texts: Previous; isTaken: boolean }
+// signal or timeout is `aborted`, any other unanswered one an `api-error` naming why. A reply the
+// pane does not take leaves the file list as it is too.
+export type ReplyResult = { outcome: CallOutcome; failure: string; task: TaskVerdict; texts: Previous; isTaken: boolean; verdict: FileVerdict }
 
-export function replyResult(reply: ModelCompleteResult, previous: Previous, candidates: readonly string[]): ReplyResult {
+export function replyResult(reply: ModelCompleteResult, previous: Previous, allowed: { candidates: readonly string[]; judgeable: readonly string[] }): ReplyResult {
   if (!reply.isAnswered) {
-    if (reply.reason === 'aborted') return { outcome: 'aborted', failure: '', task: null, texts: previous, isTaken: false }
+    if (reply.reason === 'aborted') return { outcome: 'aborted', failure: '', task: null, texts: previous, isTaken: false, verdict: NO_VERDICT }
     const failure = `${reply.reason} ${reply.reason === 'api-error' ? reply.error : ''}`.trimEnd()
-    return { outcome: 'api-error', failure, task: null, texts: previous, isTaken: false }
+    return { outcome: 'api-error', failure, task: null, texts: previous, isTaken: false, verdict: NO_VERDICT }
   }
-  const parsed = parseReply(reply.text, previous, candidates)
+  const parsed = parseReply(reply.text, previous)
+  const isTaken = parsed.outcome !== 'parse-failed'
   return {
     outcome: parsed.outcome,
     failure: '',
     task: parsed.outcome === 'parse-failed' ? null : parseTask(reply.text),
-    texts: { title: parsed.title, lastPrompt: parsed.lastPrompt, soFar: parsed.soFar, now: parsed.now, files: parsed.files },
-    isTaken: parsed.outcome !== 'parse-failed',
+    texts: { title: parsed.title, lastPrompt: parsed.lastPrompt, soFar: parsed.soFar, now: parsed.now },
+    isTaken,
+    verdict: isTaken ? parseFileVerdict(reply.text, allowed) : NO_VERDICT,
   }
 }
 
@@ -42,9 +47,9 @@ export function addCall(calls: Calls, usage: ModelUsage, usd: number): Calls {
 
 // Every firing line's reason leads with these six fields in this order, zeros where no call was
 // made: the README's read-back splits the line by position. A call the timer did not start adds
-// its trigger after them: `manual` (/session-summary now), `first` (the session's first prompt) or
-// `summarize` (/summarize).
-export type Trigger = 'timer' | 'manual' | 'first' | 'summarize'
+// its trigger after them: `manual` (/session-summary now), `first` (the session's first prompt),
+// `prompt` (a later one) or `summarize` (/summarize).
+export type Trigger = 'timer' | 'manual' | 'first' | 'prompt' | 'summarize'
 
 export function firingReason(r: { source: Source; variant: string; usage?: ModelUsage; usd?: number; failure?: string; trigger?: Trigger }): string {
   const u = r.usage

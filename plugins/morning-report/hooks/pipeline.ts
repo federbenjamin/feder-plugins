@@ -237,12 +237,6 @@ export function intOption(value: unknown, bounds: IntBounds): number {
   return Math.min(bounds.max, Math.max(bounds.min, Math.floor(value)))
 }
 
-const STDERR_HEAD_CHARS = 200
-
-export function stderrHead(stderr: string): string {
-  return stderr.trim().slice(0, STDERR_HEAD_CHARS)
-}
-
 export function plural(n: number, word: string): string {
   return `${n} ${word}${n === 1 ? '' : 's'}`
 }
