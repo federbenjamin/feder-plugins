@@ -102,8 +102,8 @@ export const registerPane: Register = on => {
     )
   })
 
-  // A tick over the pinned list scrolls the list, which the hook draws itself. Any other tick or
-  // arrow key scrolls /summarize's section when it is windowed. The tree is held to the body's
+  // A tick over the pinned list scrolls the list, which the hook draws itself. Any other scroll that
+  // reaches here moves /summarize's section when it is windowed. The tree is held to the body's
   // height, so otherwise there is nothing to move, and it goes on to the engine.
   on('ui.scroll', { component: 'Pane', requestId: PLUGIN }, async ($, e, next) => {
     const total = (await read($, documentsAtom)).length
