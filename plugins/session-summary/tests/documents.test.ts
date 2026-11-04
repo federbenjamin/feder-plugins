@@ -305,3 +305,7 @@ test('the flag survives a capture and a resume, and a capture from before it rea
   expect(documentsFrom(JSON.parse(JSON.stringify(captured)), 0)).toEqual(captured)
   expect(documentsFrom([{ path: '/repo/old.md', touchedAt: 1, touches: 1 }, '/repo/older.md'], 5)).toEqual([doc('/repo/old.md', 1, 1), doc('/repo/older.md', 5, 0)])
 })
+
+test('a truncated label in a message is not a path', () => {
+  expect(pathsIn('See …/build/ship.md and …ssion-summary/plan.md, then /tmp/a/real.md')).toEqual(['/tmp/a/real.md'])
+})

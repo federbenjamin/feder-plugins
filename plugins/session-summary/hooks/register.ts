@@ -3,7 +3,7 @@ import type { Source, SummaryStatus } from '../types'
 import { addCall, firingReason, replyResult } from './call.ts'
 import type { CallOutcome, Trigger } from './call.ts'
 import { MESSAGE_CHARS, PLUGIN, QUEUED_MAX, SETTINGS_KEY, SUMMARY_REQUEST, TICK_MS, WINDOW_CHARS } from './config.ts'
-import { capturedDocuments, fileCandidates, judgedDocuments, judgeablePaths, mergeDocuments } from './documents.ts'
+import { absolutePath, capturedDocuments, fileCandidates, judgedDocuments, judgeablePaths, mergeDocuments } from './documents.ts'
 import { linksOff, linksOn, syncShares } from './links-io.ts'
 import { clearDocuments, openPane, readDocuments, readSummary, registerPane, writeDocuments, writeSummary } from './pane.tsx'
 import { DEFAULT_VARIANT } from './prompts.ts'
@@ -60,7 +60,11 @@ async function seed($: EngineInterface): Promise<void> {
     const text = await $.fs.read(path)
     const seeded = seedFromCapture(text)
     if (seeded !== null) await writeSummary($, () => seeded)
-    await writeDocuments($, () => seedDocuments(text))
+    // A resume leaves out a path with no file: an earlier version could list an example from a message.
+    const cwd = await $.session.cwd()
+    const seededDocs = seedDocuments(text)
+    const present = await Promise.all(seededDocs.map(d => $.fs.exists(absolutePath(d.path, cwd))))
+    await writeDocuments($, () => seededDocs.filter((_, i) => present[i]))
   } catch {
     // a session starts without its seed
   }
