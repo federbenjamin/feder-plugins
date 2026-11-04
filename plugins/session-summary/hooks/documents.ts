@@ -234,11 +234,15 @@ export function filesHeader(offset: number, total: number): string {
 }
 
 // One mark per shown row, the thumb's position showing where the window sits; none when all fit.
+export function scrollbarMarks(offset: number, total: number, rows: number): string[] {
+  if (total <= rows) return []
+  const size = Math.max(1, Math.round((rows * rows) / total))
+  const start = Math.round((offset / (total - rows)) * (rows - size))
+  return Array.from({ length: rows }, (_, i) => (i >= start && i < start + size ? '█' : '│'))
+}
+
 export function filesScrollbar(offset: number, total: number): string[] {
-  if (total <= FILES_ROWS) return []
-  const size = Math.max(1, Math.round((FILES_ROWS * FILES_ROWS) / total))
-  const start = Math.round((clampOffset(offset, total) / (total - FILES_ROWS)) * (FILES_ROWS - size))
-  return Array.from({ length: FILES_ROWS }, (_, i) => (i >= start && i < start + size ? '█' : '│'))
+  return scrollbarMarks(clampOffset(offset, total), total, FILES_ROWS)
 }
 
 // Whether a wheel tick was over the section pinned to the bottom of what the body shows.

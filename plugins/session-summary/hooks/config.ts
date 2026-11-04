@@ -42,3 +42,23 @@ export const LINKS_READY_WAIT_MS = 250
 // Kept apart from the judge's request so tuning one never moves the other. The tokens leave room for
 // ADD and SUPERSEDED, whose full paths come after the four texts.
 export const SUMMARY_REQUEST = { model: 'haiku', maxTokens: 500, effort: 'low', timeoutMs: 20_000 } as const
+
+// /summarize: the shorter copy of the agent's last response, in the pane's section above FILES.
+export const CONCISE_COMMAND = 'summarize'
+export const CONCISE_SHAPE = 'concise-2'
+export const CONCISE_LABEL = 'LAST RESPONSE'
+export const CONCISE_USAGE = 'usage: /summarize [on|every|off]'
+// A runaway cap for a session left on /summarize every: past it the oldest summaries drop.
+export const CONCISE_ENTRIES_MAX = 200
+// The prompt-variant field of its firing line, so the README's read-back counts these calls apart.
+export const CONCISE_VARIANT = 'concise'
+// A rewrite can run as long as the response: a reply that reaches maxTokens is marked as cut off.
+export const CONCISE_REQUEST = { model: 'sonnet', maxTokens: 8_000, effort: 'low', timeoutMs: 120_000 } as const
+// The section's rows above its first summary: its gap and its rule.
+export const CONCISE_GAP_ROWS = 2
+// The columns its text gives up: the indent the pane's other blocks have, and a gap and scrollbar mark as FILES has.
+export const CONCISE_TEXT_INSET = 4
+export const CONCISE_BAR_COLUMNS = 2 // the scrollbar and its gap, part of the inset
+export const CONCISE_AGE_MARGIN = 1 // the gap between a header's label and its age
+// The section keeps this many rows of text however long the texts above it run: they are cut instead.
+export const CONCISE_MIN_ROWS = 8

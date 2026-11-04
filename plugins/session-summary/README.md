@@ -8,6 +8,8 @@ A [Claude Code](https://docs.anthropic.com/en/docs/claude-code) plugin for peopl
 - **Now**: one sentence on the most recent task.
 - **Files**: the files the session produced for you to read, as the haiku call judges them, plus anything sent to you, newest first.
 
+`/summarize` adds a fourth: shorter copies of the agent's responses, directly under the texts, so "say it again, more concisely" costs the session's context nothing.
+
 Experimental: it is not part of the `stopstopping` bundle.
 
 ## Install
@@ -40,9 +42,27 @@ It starts in the next session. To run it in every session without installing it,
 
 ## The pane
 
-The pane opens when an interactive session starts, on a darker background than the transcript, newest first: the title in bold over a rule; `● NOW` (green while a turn runs, `○` once it ended) with the age of the texts, at full brightness; then, dimmer and indented, `SO FAR` and `YOU ASKED`. `FILES` stands apart, pinned to the bottom of the pane: at most five rows, newest first, one line each, a file inside the session's directory reading `./<relative path>` and any other `…/<folder>/<name>`, opening on a click where the terminal supports it. A small dot before the label marks a file touched or added in the last 5 minutes. A superseded file's row is dim and struck through; a row that is only dim has no link. The mouse wheel over the section scrolls to older files, one row per tick. A file newly on top brings the list back to the top. Past five files its header says where you are (`FILES 4–8 of 12`) and a scrollbar sits beside the rows. With no files it is hidden. In a short pane the texts are cut from the bottom so the section stays on screen; a text cut this way cannot be scrolled to. The age refreshes every 30 seconds. The input source and prompt variant are not drawn; `/session-summary show` prints them. It reads `No summary yet.` until the session's first summary, with `FILES` under it once there are any.
+The pane opens when an interactive session starts, on a darker background than the transcript, newest first: the title in bold over a rule; `● NOW` (green while a turn runs, `○` once it ended) with the age of the texts, at full brightness; then, dimmer and indented, `SO FAR` and `YOU ASKED`, each with a header you click to collapse it or open it again (`▾` open, `▸` collapsed); they stay as you set them when the texts update and after `/clear`. `FILES` stands apart, pinned to the bottom of the pane: at most five rows, newest first, one line each, a file inside the session's directory reading `./<relative path>` and any other `…/<folder>/<name>`, opening on a click where the terminal supports it. A small dot before the label marks a file touched or added in the last 5 minutes. A superseded file's row is dim and struck through; a row that is only dim has no link. The mouse wheel over the section scrolls to older files, one row per tick. A file newly on top brings the list back to the top. Past five files its header says where you are (`FILES 4–8 of 12`) and a scrollbar sits beside the rows. With no files it is hidden. In a short pane the texts are cut from the bottom so the section stays on screen; a text cut this way cannot be scrolled to. The age refreshes every 30 seconds. The input source and prompt variant are not drawn; `/session-summary show` prints them. It reads `No summary yet.` until the session's first summary, with `FILES` under it once there are any.
 
 Claude Code decides where a pane goes. In the fullscreen layout (`"tui": "fullscreen"`) it docks on the right of the transcript from 110 columns. Below that, and on the main-screen layout, it sits above the prompt. A pane opened at session start waits undrawn on a terminal under 144 columns; `/session-summary` opens it at any width. The same command brings it back after you close it.
+
+## /summarize
+
+`/summarize` shows shorter copies of the agent's responses directly under the pane's texts, below a rule like the one under the title, newest first, drawn like the pane's other blocks: dim and indented, each under its own header with its age at the right. Spare rows fall between them and `FILES`, which stays at the bottom. A separate model call writes each one, so the copies never reach the session's context (only the typed command line is recorded).
+
+| Command | What it does |
+|---|---|
+| `/summarize` | Summarizes the last response once, and leaves `every` as it was. Prints nothing |
+| `/summarize on` | Summarizes the last response once, and turns `every` off. Prints nothing |
+| `/summarize every` | Summarizes each new response when it finishes, starting with the next one. Each is a Sonnet call you pay for |
+| `/summarize off` | Stops adding summaries and keeps the ones in the pane. A call already running still finishes |
+
+- **What it reads.** The agent's newest message with text, whole; tool calls, tool results and cache-keepalive's ping answers are left out. Mid-turn, that is the newest text so far.
+- **What it writes.** Sonnet at low effort rewrites the response far more concisely: it removes what you don't need to understand the outcome or decide what to do next, leads with the outcome, shrinks each relevant section to one line, and puts each question last with one line per option and the recommendation first. On four real messages the result ran at a median of 47% of the original. It is a rewrite, so it can drop a reason or a downside or add a recommendation the agent did not make: go back to the original for anything you are about to act on. Bold and heading marks are removed for the pane. A reply that reaches the token limit is marked as cut off.
+- **Out of date.** The newest summary's header reads `LAST RESPONSE`. Once the agent has finished another response it reads `1 RESPONSE OLD`, then `2 RESPONSES OLD`. Running `/summarize` again on the same response replaces its summary once the new one is ready; if the new call fails, the old one stays. A summary made while a turn runs holds the text so far, so it reads `1 RESPONSE OLD` when that turn ends.
+- **Collapsing.** A new summary collapses the older ones to their header lines, and all of them stay listed. Click a header to open or collapse it (`▾` open, `▸` collapsed).
+- **How long they stay.** Until `/clear`, or until the list passes 200, when the oldest drop. `/clear` keeps `every` on if it was on. They are not restored in a resumed session, and `/summarize` runs even when `/session-summary off` has stopped the timer's calls.
+- **Scrolling.** When the list is taller than the room left, the wheel over it scrolls it alone, with a scrollbar, and so do Page Up and Page Down once you have clicked in the pane. The wheel over `FILES` scrolls the files. The arrow keys and the wheel over the texts above do nothing. The list keeps at least 8 rows: with less room than that, the texts above are cut from the bottom, and `FILES` stays on screen.
 
 ## Experiment switches
 
@@ -66,6 +86,7 @@ Three switches, read at every call, so they change a running session:
 | `/session-summary show` | The texts, the files, the settings, the links state, this session's calls, tokens and dollars, and the capture path |
 | `/session-summary now` | One summary call at once, with the session's status (`running` mid-turn, else `ended`), even when switched off or the window is unchanged; prints its outcome, then what `show` prints. The timer's schedule is unchanged. Interactive sessions only |
 | anything else | Print the usage line |
+| `/summarize [on\|every\|off]` | Shorter copies of the agent's responses in the pane: the last one, every new one, or stop adding. Interactive sessions only |
 
 The command is registered in every session, `claude -p` included, so `claude -p "/session-summary off"` works from a script.
 
@@ -93,20 +114,22 @@ Every call, and every tick that skips one, appends one line to `~/.claude/stopst
 <utc> <outcome> session=<id> ms=<n> reason=source=<arm> variant=<name> in=<n> out=<n> cached=<n> usd=<x>
 ```
 
-A call the timer did not start ends its line with its trigger: `manual` for `/session-summary now`, `first` for the first-prompt call, `prompt` for a later prompt's call.
+A call the timer did not start ends its line with its trigger: `manual` for `/session-summary now`, `first` for the first-prompt call, `prompt` for a later prompt's call, `summarize` for `/summarize` and `summarize-every` for a response under `/summarize every`, whose lines read `variant=concise`.
 
-`in` and `cached` are the uncached and cache-read input tokens; `usd` is priced at haiku's rates per token category.
+`in` and `cached` are the uncached and cache-read input tokens; `usd` is priced per token category at haiku's rates, and at sonnet's on `variant=concise` lines.
 
 | Outcome | Meaning |
 | --- | --- |
 | `summary` | The reply carried all four lines; the pane has them |
 | `parse-partial` | Some of the four lines came back; the missing ones kept their previous text |
 | `parse-failed` | No line came back; the pane is unchanged |
+| `concise` | `/summarize`'s reply; the pane's bottom section has it |
+| `skip-no-response` | `/summarize` found no agent response to shorten; no call |
 | `skip-same` | The window was the same as the last summary's in this turn; no call |
 | `skip-inflight` | A call was due while one of the same turn was still running or waiting for the turn before's, or the turn ended while its call waited; no call |
 | `log-missing` | Source `session-log` with no log file for the session; that call read `messages` |
 | `api-error` | The call failed; the reason names why |
-| `aborted` | The call was cut: its 20-second limit, or the session ended |
+| `aborted` | The call was cut: its 20-second limit, or the session ended. On `/summarize`'s lines: its 120-second limit, a newer run on the same response, or `/clear` |
 | `turn-id-mismatch` | A main turn completed under another id than the running one's, which stays running; the reason names both ids; no call |
 | `documents-failed` | The file list or the shares file could not be updated; the next tick tries again |
 | `links-on` | `/session-summary links on` finished; the reason names the two ports |

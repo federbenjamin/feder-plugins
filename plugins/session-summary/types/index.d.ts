@@ -21,8 +21,29 @@ export type Doc = {
   share?: { token: string; expiresAt: number } // its live entry in the shares file, while links are on
 }
 
+// Which of the pane's collapsible texts the person has collapsed.
+export type CollapsedTexts = { soFar: boolean; asked: boolean }
+
+// One shorter copy in the pane's section above FILES.
+export type ConciseStatus = 'working' | 'ready' | 'failed'
+export type ConciseEntry = {
+  id: number
+  status: ConciseStatus
+  text: string // the shorter copy, or what went wrong
+  at: number // when the run last wrote it, ms
+  responses: number // Concise.responses when it was made: the difference says how old it is
+  isOpen: boolean
+}
+export type Concise = {
+  entries: ConciseEntry[] // newest first
+  responses: number // how many responses the agent has finished in this conversation
+  nextId: number
+  isEvery: boolean // /summarize every is on
+  offset: number // the section's first showing row
+}
+
 declare module 'claude-code' {
   interface PluginState {
-    'session-summary': { summary: Shaped<Summary>; documents: Shaped<Doc[]>; filesOffset: number }
+    'session-summary': { summary: Shaped<Summary>; documents: Shaped<Doc[]>; filesOffset: number; concise: Shaped<Concise>; collapsedTexts: CollapsedTexts }
   }
 }

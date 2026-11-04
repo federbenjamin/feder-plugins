@@ -128,6 +128,7 @@ test('a dock holds the tree to its rows; inline the tree takes what it needs, he
   expect(estimatedRows(null, 40, 9)).toBe(8)
   const view = { title: 'T', isRunning: true, age: '', now: 'x'.repeat(80), soFar: 'y', asked: '' }
   expect(estimatedRows(view, 40, 0)).toBe(3 + 1 + 3 + 3)
+  expect(estimatedRows({ ...view, soFar: 'y'.repeat(190) }, 40, 0, { soFar: true, asked: false })).toBe(3 + 1 + 3 + 2)
 })
 
 const row = (d: Doc, over: Partial<Parameters<typeof fileRow>[1]> = {}) => fileRow(d, { cwd: CWD, linksBase: 'https://host.example:1', now: 100, isPresent: true, ...over })
