@@ -2,7 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 import type { Doc, Summary } from '../types'
 import { DOCUMENTS_SHAPE, PANE_BACKGROUND, PANE_TITLE, PLUGIN, SETTINGS_KEY, SHAPE } from './config.ts'
-import { filesScrollbar, clampOffset, fileRow, filesHeader, isOverFiles, isRecentFile, shownDocuments } from './documents.ts'
+import { filesScrollbar, clampOffset, fileRow, hasNewTop, filesHeader, isOverFiles, isRecentFile, shownDocuments } from './documents.ts'
 import { settingsFrom } from './settings.ts'
 import { EMPTY_SUMMARY, estimatedRows, paneHeight, paneView } from './summary.ts'
 
@@ -108,8 +108,12 @@ export async function readDocuments($: EngineInterface): Promise<readonly Doc[]>
   return read($, documentsAtom)
 }
 
+// A file newly on top shows at once, even when the person had scrolled down.
 export async function writeDocuments($: EngineInterface, change: (docs: Doc[]) => Doc[]): Promise<readonly Doc[]> {
-  return update($, documentsAtom, change)
+  const before = (await read($, documentsAtom))[0]
+  const after = await update($, documentsAtom, change)
+  if (hasNewTop(before, after[0])) await update($, filesOffsetAtom, () => 0)
+  return after
 }
 
 export async function clearDocuments($: EngineInterface): Promise<void> {
