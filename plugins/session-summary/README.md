@@ -8,6 +8,8 @@ A [Claude Code](https://docs.anthropic.com/en/docs/claude-code) plugin for peopl
 - **Now**: one sentence on the most recent task.
 - **Files**: one, at most two, paths you would open now (the plan the session is writing, the report it just sent you).
 
+`/summarize` adds a fourth: a shorter copy of the agent's last response, at the bottom of the pane, so "say it again, more concisely" costs the session's context nothing.
+
 Experimental: it is not part of the `stopstopping` bundle.
 
 ## Install
@@ -39,6 +41,15 @@ The pane opens when an interactive session starts, on a darker background than t
 
 Claude Code decides where a pane goes. In the fullscreen layout (`"tui": "fullscreen"`) it docks on the right of the transcript from 110 columns. Below that, and on the main-screen layout, it sits above the prompt. A pane opened at session start waits undrawn on a terminal under 144 columns; `/session-summary` opens it at any width. The same command brings it back after you close it.
 
+## /summarize
+
+`/summarize` shows a shorter copy of the agent's last response under the pane's other texts, labelled `SUMMARY OF LAST RESPONSE:` with its age. A separate model call writes it and the command prints nothing, so the copy never reaches the session's context (only the typed `/summarize` line is recorded).
+
+- **What it reads.** The agent's newest message with text, whole; tool calls, tool results and cache-keepalive's ping answers are left out. Mid-turn, that is the newest text so far.
+- **What it writes.** Sonnet at low effort rewrites the response far more concisely: it removes what you don't need to understand the outcome or decide what to do next, leads with the outcome, shrinks each relevant section to one line, and puts each question last with one line per option and the recommendation first. On four real messages the result ran at a median of 47% of the original. It is a rewrite, so it can drop a reason or a downside, or add a recommendation the agent did not make: go back to the original for anything you are about to act on. Bold and heading marks are removed for the pane. A reply that reaches the token limit is marked as cut off.
+- **How long it stays.** Until the next `/summarize` or `/clear`. It is not restored in a resumed session, and it runs even when `/session-summary off` has stopped the timer's calls.
+- **Scrolling.** When the copy is taller than the room left, the texts above stay in place and the wheel or arrow keys scroll the copy alone, with its position in the row under the label. With under 8 rows of room the whole pane scrolls instead.
+
 ## Experiment switches
 
 Three switches, read at every call, so they change a running session:
@@ -60,6 +71,7 @@ Three switches, read at every call, so they change a running session:
 | `/session-summary show` | The three texts, the settings, this session's calls, tokens and dollars, and the capture path |
 | `/session-summary now` | One summary call at once, with the session's status (`running` mid-turn, else `ended`), even when switched off or the window is unchanged; prints its outcome, then what `show` prints. The timer's schedule is unchanged. Interactive sessions only |
 | anything else | Print the usage line |
+| `/summarize` | A shorter copy of the agent's last response in the pane; prints nothing. Interactive sessions only |
 
 The command is registered in every session, `claude -p` included, so `claude -p "/session-summary off"` works from a script.
 
@@ -71,7 +83,7 @@ Every call, and every tick that skips one, appends one line to `~/.claude/stopst
 <utc> <outcome> session=<id> ms=<n> reason=source=<arm> variant=<name> in=<n> out=<n> cached=<n> usd=<x>
 ```
 
-A call the timer did not start ends its line with its trigger: `manual` for `/session-summary now`, `first` for the first-prompt call.
+A call the timer did not start ends its line with its trigger: `manual` for `/session-summary now`, `first` for the first-prompt call, `summarize` for `/summarize`, whose lines read `variant=concise`.
 
 `in` and `cached` are the uncached and cache-read input tokens; `usd` is priced at haiku's rates per token category.
 
@@ -80,6 +92,8 @@ A call the timer did not start ends its line with its trigger: `manual` for `/se
 | `summary` | The reply carried all three lines; the pane has them |
 | `parse-partial` | Some of the five lines came back; the missing ones kept their previous text |
 | `parse-failed` | No line came back; the pane is unchanged |
+| `concise` | `/summarize`'s reply; the pane's bottom section has it |
+| `skip-no-response` | `/summarize` found no agent response to shorten; no call |
 | `skip-same` | The window was the same as the last summary's in this turn; no call |
 | `skip-inflight` | A call was due while one of the same turn was still running or waiting for the turn before's, or the turn ended while its call waited; no call |
 | `log-missing` | Source `session-log` with no log file for the session; that call read `messages` |

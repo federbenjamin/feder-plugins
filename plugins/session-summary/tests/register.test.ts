@@ -2,7 +2,7 @@ import { expect, mock, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 import type { ModelCompleteRequest, ModelCompleteResult, On, SessionMessage } from 'claude-code'
 import type { Summary } from '../types'
-import { PLUGIN } from '../hooks/config'
+import { CONCISE_COMMAND, PLUGIN } from '../hooks/config'
 import { VARIANTS } from '../hooks/prompts'
 import { sessionLogPath } from '../hooks/shared/firing'
 import { paneLines, capturePath } from '../hooks/summary'
@@ -140,7 +140,7 @@ const captures = (w: World) =>
 const statuses = (w: World) => w.requests.map(r => /^Status: (\w+)/.exec(String(r.prompt))?.[1])
 const paneTexts = async ($: Engine) => {
   const ui = await $.ui.mount({ plugin: PLUGIN, surface: 'terminal', component: 'Pane', requestId: PLUGIN, props: PANE })
-  const texts = (await ui.findAll({ type: 'Text' })).map(t => t.text)
+  const texts = (await ui.findAll({ type: 'Text' })).map(t => t.text).filter(t => t !== ' ')
   await ui.unmount()
   return texts
 }
@@ -176,7 +176,7 @@ test('an empty summary draws no pane rows', async () => {
 test('a non-interactive session registers /session-summary and makes no call', async ($, on) => {
   const w = world(on)
   await start($, false)
-  expect(w.commands).toEqual([PLUGIN])
+  expect(w.commands).toEqual([PLUGIN, CONCISE_COMMAND])
   expect(w.opened).toEqual([])
   await turnStart($)
   await w.clock.advance(120_000)
@@ -198,7 +198,7 @@ test('an interactive session restores its synthetic capture into the pane', asyn
   const w = world(on, { capture })
   await start($)
   expect(w.reads).toEqual([CAPTURE])
-  expect(w.commands).toEqual([PLUGIN])
+  expect(w.commands).toEqual([PLUGIN, CONCISE_COMMAND])
   expect(await paneTexts($)).toEqual(['SO FAR:', 'Earlier work', 'NOW:', 'Resume it', 'RECENT FILES:', PLAN, 'updated 2 min ago'])
 })
 

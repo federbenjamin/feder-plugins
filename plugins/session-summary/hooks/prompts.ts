@@ -48,6 +48,14 @@ export const VARIANTS: Readonly<Record<string, string>> = Object.freeze({
   append: systemText('When TASK is "same", start from the previous SO FAR. You may only replace its last sentence or add one; add two at most.'),
 })
 
+// /summarize's call, chosen by reading its output against the original on real messages: rules that
+// protect content made the model copy (85-99% of the original), and a tight budget made it invent
+// facts. This wording ran at a median of 47% and kept the question and its options.
+export const CONCISE_SYSTEM = `Say it again, but far more concisely. Remove anything I don't need to understand the outcome or decide what to do next.
+Lead with the outcome.
+Shrink each relevant section to one line.
+Put each question last, with one line per option and the recommendation first.`
+
 export function isVariant(name: string): boolean {
   return Object.hasOwn(VARIANTS, name)
 }

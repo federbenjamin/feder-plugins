@@ -13,8 +13,17 @@ export type Summary = {
   variant: string
 }
 
+// The pane's bottom section: what /summarize last left there.
+export type ConciseStatus = 'empty' | 'working' | 'ready' | 'failed'
+export type Concise = {
+  status: ConciseStatus
+  text: string // the shorter copy, or what went wrong
+  at: number // when the command last wrote it, ms; 0 while empty
+  offset: number // the section's first showing row
+}
+
 declare module 'claude-code' {
   interface PluginState {
-    'session-summary': { summary: Shaped<Summary> }
+    'session-summary': { summary: Shaped<Summary>; concise: Shaped<Concise> }
   }
 }

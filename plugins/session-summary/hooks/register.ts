@@ -2,10 +2,11 @@ import type { EngineInterface, Register } from 'claude-code'
 import type { Source, SummaryStatus } from '../types'
 import { addCall, firingReason, replyResult } from './call.ts'
 import type { CallOutcome, Trigger } from './call.ts'
-import { CANDIDATE_MAX, MESSAGE_CHARS, PLUGIN, QUEUED_MAX, SETTINGS_KEY, SUMMARY_REQUEST, TICK_MS, WINDOW_CHARS } from './config.ts'
+import { CANDIDATE_MAX, CONCISE_COMMAND, MESSAGE_CHARS, PLUGIN, QUEUED_MAX, SETTINGS_KEY, SUMMARY_REQUEST, TICK_MS, WINDOW_CHARS } from './config.ts'
 import { openPane, readSummary, registerPane, writeSummary } from './pane.tsx'
 import { DEFAULT_VARIANT } from './prompts.ts'
 import { settingsFrom, showText, summaryCommand, USAGE } from './settings.ts'
+import { endConcise, newConciseState, runConcise, startConcise } from './summarize.ts'
 import type { Calls, Settings } from './settings.ts'
 import { sessionLogPath } from './shared/firing.ts'
 import { PRICES, usageUsd } from './shared/pricing.ts'
@@ -237,6 +238,8 @@ async function show($: EngineInterface, settings: Settings, calls: Calls): Promi
 
 export const register: Register = (on, options) => {
   registerPane(on, options)
+  const concise = newConciseState()
+  on('command.run', { command: CONCISE_COMMAND }, async $ => runConcise($, concise))
 
   const state: State = {
     isInteractive: false,
@@ -271,10 +274,13 @@ export const register: Register = (on, options) => {
       argumentHint: '[on|off|first <s>|every <s>|source messages|session-log|variant <name>|show|now]',
       immediate: true,
     })
+    await startConcise($, concise, e.isInteractive)
     if (e.isInteractive) {
       await seed($)
       tick = $.clock.every(TICK_MS, () => {
         void onTick($, state)
+        // The pane's "min ago" rows are only true if it is drawn again as time passes.
+        $.ui.invalidate('ui.render')
       })
       void openPane($)
     }
@@ -343,6 +349,7 @@ export const register: Register = (on, options) => {
     } catch {
       // the pane keeps the old texts until the next summary
     }
+    await endConcise($, concise)
     return next(e)
   })
 
