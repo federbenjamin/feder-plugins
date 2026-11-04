@@ -15,8 +15,9 @@ export type Summary = {
 // One file on the documents list.
 export type Doc = {
   path: string // absolute
-  touchedAt: number // ms, when a Write, Edit or SendUserFile last named it
+  touchedAt: number // ms, when a touch last named it or the summary call last added it
   touches: number // how many the messages held at the last merge: a higher count is a new touch
+  isSuperseded?: boolean // the summary call said a newer file replaced it: it sinks and dims, and is never removed
   share?: { token: string; expiresAt: number } // its live entry in the shares file, while links are on
 }
 

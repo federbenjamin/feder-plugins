@@ -67,7 +67,7 @@ export async function linksOn($: EngineInterface): Promise<LinksOn> {
   const serve = await $.process.run([tailscale, 'serve', '--bg', `--https=${LINKS_HTTPS_PORT}`, LOCAL_TARGET], { timeoutMs: TAILSCALE_TIMEOUT_MS }).catch((error: unknown) => ({ exitCode: 1, stderr: error instanceof Error ? error.message : 'it did not finish' }))
   if (serve.exitCode !== 0) return undo(`tailscale serve failed: ${stderrHead(serve.stderr)}`)
   await record($, PLUGIN, 'links-on', `https=${LINKS_HTTPS_PORT} local=${LINKS_LOCAL_PORT}`)
-  return { text: `links on: ${tailnet.base}. Any device on your tailnet holding a link can read that one file for 7 days from its last Write, Edit or send. /session-summary links off ends it.`, base: tailnet.base }
+  return { text: `links on: ${tailnet.base}. Any device on your tailnet holding a link can read that one file for 7 days from when it joined the list or was last touched. /session-summary links off ends it.`, base: tailnet.base }
 }
 
 // Each step runs whatever the one before came to: the shares go first, so every link is dead from

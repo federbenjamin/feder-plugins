@@ -41,7 +41,9 @@ function world(on: On, over: Record<string, Proc> = {}, settings: Record<string,
     files: new Map<string, string>(),
     messages: [] as SessionMessage[],
     readError: '',
+    replies: [] as string[],
   }
+  on('model.complete', async () => ({ value: { isAnswered: true, text: `TITLE: t\nLAST PROMPT: p\nSO FAR: s\nNOW: n\n${w.replies.shift() ?? ''}`, usage: { input_tokens: 1, output_tokens: 1, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 } } }))
   on('fs.exists', async (_$, e) => ({ value: w.files.has(e.path) }))
   on('fs.read', async (_$, e) => (w.readError !== '' ? { deny: w.readError } : { value: w.files.get(e.path) ?? '' }))
   on('fs.write', async (_$, e) => {
@@ -89,7 +91,7 @@ const changedNothing = (w: World) => {
   expect(w.argv.filter(a => a[0] === 'launchctl' || a.includes('--bg') || a.includes('off'))).toEqual([])
   expect(w.files.has(NAMES.plist)).toBe(false)
 }
-const wrote = (path: string): SessionMessage => ({ role: 'assistant', text: '', toolUses: [{ tool_use_id: `w-${path}-${Math.random()}`, tool: 'Write', input: { file_path: path } }] })
+const sent = (path: string): SessionMessage => ({ role: 'assistant', text: '', toolUses: [{ tool_use_id: `s-${path}-${Math.random()}`, tool: 'SendUserFile', input: { files: [path] } }] })
 const step = async ($: Engine) => {
   await $.turn.start({ text: 'go', turnId: 't1' })
   for await (const _ of $.turn.step({ turnId: 't1', index: 0, model: 'claude-opus-5-5', messageCount: 1 })) {
@@ -213,7 +215,7 @@ test('links off says what stayed when a step fails, and still ends the links', a
 
 test('with links on a tick shares a new file, logs only its token prefix, and the pane links it over https', async ($, on) => {
   const w = world(on, {}, { linksBase: BASE, isOff: true })
-  w.messages = [wrote('/tmp/project/notes/plan.md')]
+  w.messages = [sent('/tmp/project/notes/plan.md')]
   await start($)
   await step($)
   await w.clock.advance(30_000)
@@ -232,13 +234,13 @@ test('with links on a tick shares a new file, logs only its token prefix, and th
 
   w.files.set(share!.path, '')
   const ui = await $.ui.mount({ plugin: PLUGIN, surface: 'terminal', component: 'Pane', requestId: PLUGIN, props: PANE })
-  expect((await ui.findAll({ type: 'Text' })).map(t => t.text)).toEqual(['No summary yet.', 'FILES', `${BASE}/${share!.token}/plan.mdnotes/plan.md`])
+  expect((await ui.findAll({ type: 'Text' })).map(t => t.text)).toEqual(['No summary yet.', 'FILES', '•', `${BASE}/${share!.token}/plan.md./notes/plan.md`])
   await ui.unmount()
 })
 
 test('a later touch renews the expiry and keeps the token; a quiet tick writes nothing', async ($, on) => {
   const w = world(on, {}, { linksBase: BASE, isOff: true })
-  w.messages = [wrote('/tmp/project/plan.md')]
+  w.messages = [sent('/tmp/project/plan.md')]
   await start($)
   await step($)
   await w.clock.advance(30_000)
@@ -247,7 +249,7 @@ test('a later touch renews the expiry and keeps the token; a quiet tick writes n
   expect(writes()).toBe(1)
   await w.clock.advance(60_000)
   expect(writes()).toBe(1)
-  w.messages.push(wrote('/tmp/project/plan.md'))
+  w.messages.push(sent('/tmp/project/plan.md'))
   await step($)
   await w.clock.advance(30_000)
   const renewed = shares(w)[0]!
@@ -265,24 +267,24 @@ test('a secret-looking file is listed with no link and never reaches the shares 
   await w.clock.advance(30_000)
   expect(shares(w)).toEqual([])
   const ui = await $.ui.mount({ plugin: PLUGIN, surface: 'terminal', component: 'Pane', requestId: PLUGIN, props: PANE })
-  expect((await ui.findAll({ type: 'Text' })).map(t => t.text)).toEqual(['No summary yet.', 'FILES', '.env'])
+  expect((await ui.findAll({ type: 'Text' })).map(t => t.text)).toEqual(['No summary yet.', 'FILES', '•', './.env'])
   await ui.unmount()
 })
 
 test('a file that is gone shows with no link', async ($, on) => {
   const w = world(on, {}, { linksBase: BASE, isOff: true })
-  w.messages = [wrote('/tmp/project/plan.md')]
+  w.messages = [sent('/tmp/project/plan.md')]
   await start($)
   await step($)
   await w.clock.advance(30_000)
   const ui = await $.ui.mount({ plugin: PLUGIN, surface: 'terminal', component: 'Pane', requestId: PLUGIN, props: PANE })
-  expect((await ui.findAll({ type: 'Text' })).map(t => t.text)).toEqual(['No summary yet.', 'FILES', 'plan.md'])
+  expect((await ui.findAll({ type: 'Text' })).map(t => t.text)).toEqual(['No summary yet.', 'FILES', '•', './plan.md'])
   await ui.unmount()
 })
 
 test('with links off nothing touches the shares file', async ($, on) => {
   const w = world(on, {}, { isOff: true })
-  w.messages = [wrote('/tmp/project/plan.md')]
+  w.messages = [sent('/tmp/project/plan.md')]
   await start($)
   await step($)
   await w.clock.advance(30_000)
@@ -291,9 +293,50 @@ test('with links off nothing touches the shares file', async ($, on) => {
   expect(firings(w)).toEqual([])
 })
 
+test('an added file is shared at its call; superseded, it keeps its link and expiry, and reads apart from a dead row', async ($, on) => {
+  const w = world(on, {}, { linksBase: BASE })
+  const plan = '/tmp/project/plan.md'
+  w.files.set(plan, '')
+  w.messages = [{ role: 'assistant', text: `See ${plan}`, toolUses: [] }]
+  w.replies.push(`ADD: ${plan}`)
+  await start($)
+  await step($)
+  await w.clock.settle()
+  const shared = shares(w)[0]!
+  expect(shared.path).toBe(plan)
+  expect(shared.expiresAt).toBe(T0 + LINK_TTL_MS)
+
+  w.replies.push(`SUPERSEDED: ${plan}`)
+  await w.clock.advance(60_000)
+  await command($, 'now')
+  await w.clock.settle()
+  expect(shares(w)).toEqual([shared])
+  const row = async () => {
+    const ui = await $.ui.mount({ plugin: PLUGIN, surface: 'terminal', component: 'Pane', requestId: PLUGIN, props: PANE })
+    const found = await ui.find({ type: 'Text', text: /plan\.md/ })
+    await ui.unmount()
+    return { text: found!.text, dimColor: found!.props.dimColor, strikethrough: found!.props.strikethrough }
+  }
+  expect(await row()).toEqual({ text: `${BASE}/${shared.token}/plan.md./plan.md`, dimColor: true, strikethrough: true })
+  w.files.delete(plan)
+  expect(await row()).toEqual({ text: './plan.md', dimColor: true, strikethrough: true })
+})
+
+test('a dead row that is not superseded is dim with no strike', async ($, on) => {
+  const w = world(on, {}, { linksBase: BASE, isOff: true })
+  w.messages = [sent('/tmp/project/plan.md')]
+  await start($)
+  await step($)
+  await w.clock.advance(30_000)
+  const ui = await $.ui.mount({ plugin: PLUGIN, surface: 'terminal', component: 'Pane', requestId: PLUGIN, props: PANE })
+  const found = await ui.find({ type: 'Text', text: /plan\.md/ })
+  expect([found!.text, found!.props.dimColor, found!.props.strikethrough]).toEqual(['./plan.md', true, undefined])
+  await ui.unmount()
+})
+
 test('a share write that fails logs without a path, and the next tick tries again', async ($, on) => {
   const w = world(on, { '/bin/sh -c': { exitCode: 1 } }, { linksBase: BASE, isOff: true })
-  w.messages = [wrote('/tmp/project/plan.md')]
+  w.messages = [sent('/tmp/project/plan.md')]
   w.files.set('/tmp/project/plan.md', '')
   await start($)
   await step($)
@@ -303,33 +346,33 @@ test('a share write that fails logs without a path, and the next tick tries agai
   await w.clock.advance(30_000)
   expect(outcomes(w)).toEqual(['documents-failed', 'documents-failed'])
   const row = await $.ui.mount({ plugin: PLUGIN, surface: 'terminal', component: 'Pane', requestId: PLUGIN, props: PANE })
-  expect((await row.findAll({ type: 'Text' })).map(t => t.text)).toEqual(['No summary yet.', 'FILES', 'plan.md'])
+  expect((await row.findAll({ type: 'Text' })).map(t => t.text)).toEqual(['No summary yet.', 'FILES', '•', './plan.md'])
   await row.unmount()
 })
 
 test('a wheel tick over the section scrolls older files; one over the rest leaves them, and the keys pass on', async ($, on) => {
   const w = world(on, {}, { isOff: true })
   on('ui.scroll', async () => ({}))
-  w.messages = ['a.md', 'b.md', 'c.md', 'd.md', 'e.md'].map(p => wrote(`/tmp/project/${p}`))
+  w.messages = ['a.md', 'b.md', 'c.md', 'd.md', 'e.md', 'f.md', 'g.md'].map(p => sent(`/tmp/project/${p}`))
   await start($)
   await step($)
   await w.clock.advance(30_000)
   const rows = async () => {
     const ui = await $.ui.mount({ plugin: PLUGIN, surface: 'terminal', component: 'Pane', requestId: PLUGIN, props: PANE })
-    const texts = (await ui.findAll({ type: 'Text' })).map(t => t.text).filter(t => !/^[█│]$/.test(t) && !t.startsWith('file:') && t !== 'No summary yet.')
+    const texts = (await ui.findAll({ type: 'Text' })).map(t => t.text).filter(t => !/^[█│•]$/.test(t) && !t.startsWith('file:') && t !== 'No summary yet.')
     await ui.unmount()
     return texts
   }
   const wheel = (by: number, row?: number) =>
     $.ui.scroll({ component: 'Pane', requestId: PLUGIN, offset: 0, by, bodyRows: 40, contentRows: 40, origin: { kind: 'person' }, ...(row === undefined ? {} : { pointer: { column: 2, row } }) } as never)
-  expect(await rows()).toEqual(['FILES 1–3 of 5'])
+  expect(await rows()).toEqual(['FILES 1–5 of 7'])
   await wheel(1, 38)
-  expect(await rows()).toEqual(['FILES 2–4 of 5'])
+  expect(await rows()).toEqual(['FILES 2–6 of 7'])
   await wheel(1, 2)
   await wheel(1)
-  expect(await rows()).toEqual(['FILES 2–4 of 5'])
+  expect(await rows()).toEqual(['FILES 2–6 of 7'])
   await wheel(9, 39)
-  expect(await rows()).toEqual(['FILES 3–5 of 5'])
+  expect(await rows()).toEqual(['FILES 3–7 of 7'])
   await wheel(-9, 36)
-  expect(await rows()).toEqual(['FILES 2–4 of 5'])
+  expect(await rows()).toEqual(['FILES 2–6 of 7'])
 })

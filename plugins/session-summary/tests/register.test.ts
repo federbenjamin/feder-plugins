@@ -2,7 +2,7 @@ import { expect, mock, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 import type { ModelCompleteRequest, ModelCompleteResult, On, SessionMessage } from 'claude-code'
 import type { Summary } from '../types'
-import { PLUGIN } from '../hooks/config'
+import { PLUGIN, RECENT_FILE_MS } from '../hooks/config'
 import { VARIANTS } from '../hooks/prompts'
 import { sessionLogPath } from '../hooks/shared/firing'
 import { fileHref, fileLabel } from '../hooks/documents'
@@ -15,12 +15,14 @@ const CAPTURE = capturePath(DIR, ID)
 const LOG = `${DIR}/logs/${PLUGIN}.log`
 const PLAN = 'notes/plan.md'
 // A Text holding a Link reads back as the link's address, then its label.
-const LINKED_PLAN = `file:///tmp/project/${PLAN}${PLAN}`
+const LINKED_PLAN = `file:///tmp/project/${PLAN}./${PLAN}`
+const PLAN_PATH = `/tmp/project/${PLAN}`
 
 const USAGE = { input_tokens: 1200, output_tokens: 80, cache_read_input_tokens: 300, cache_creation_input_tokens: 0 }
 const ZERO = { input_tokens: 0, output_tokens: 0, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 }
 const answer = (soFar: string, now: string): ModelCompleteResult => ({ isAnswered: true, text: `TITLE: Summary plugin\nLAST PROMPT: You asked for the plugin.\nSO FAR: ${soFar}\nNOW: ${now}`, usage: USAGE })
 const ANSWER = answer('Building the summary plugin.', 'Writing its plan.')
+const judged = (lines: string): ModelCompleteResult => ({ isAnswered: true, text: `TITLE: Summary plugin\nLAST PROMPT: You asked for the plugin.\nSO FAR: Building the summary plugin.\nNOW: Writing its plan.\n${lines}`, usage: USAGE })
 const FAILURES: { outcome: string; reply: ModelCompleteResult }[] = [
   { outcome: 'api-error', reply: { isAnswered: false, reason: 'api-error', status: 529, error: 'overloaded', usage: ZERO } },
   { outcome: 'aborted', reply: { isAnswered: false, reason: 'aborted', usage: ZERO } },
@@ -145,7 +147,7 @@ const captures = (w: World) =>
 const statuses = (w: World) => w.requests.map(r => /^Status: (\w+)/.exec(String(r.prompt))?.[1])
 const paneTexts = async ($: Engine) => {
   const ui = await $.ui.mount({ plugin: PLUGIN, surface: 'terminal', component: 'Pane', requestId: PLUGIN, props: PANE })
-  const texts = (await ui.findAll({ type: 'Text' })).map(t => t.text).filter(t => !/^[─█│]+$/.test(t))
+  const texts = (await ui.findAll({ type: 'Text' })).map(t => t.text).filter(t => !/^[─█│•]+$/.test(t))
   await ui.unmount()
   return texts
 }
@@ -170,8 +172,8 @@ test('the pane view carries the status and the age, and is null before the first
 
 test('the age reads just now, then minutes, then hours', async () => {
   expect([ageText(59_000), ageText(60_000), ageText(3_599_000), ageText(3_600_000)]).toEqual(['just now', '1m ago', '59m ago', '1h ago'])
-  expect(fileLabel('notes/plan.md', '/repo/')).toBe('notes/plan.md')
-  expect(fileLabel('/repo/hooks/a b.ts', '/repo')).toBe('hooks/a b.ts')
+  expect(fileLabel('notes/plan.md', '/repo/')).toBe('./notes/plan.md')
+  expect(fileLabel('/repo/hooks/a b.ts', '/repo')).toBe('./hooks/a b.ts')
   expect(fileLabel('/other/deep/dir/c.md', '/repo')).toBe('…/dir/c.md')
   expect(fileHref('/repo/hooks/a b.ts')).toBe('file:///repo/hooks/a%20b.ts')
 })
@@ -207,6 +209,8 @@ test('an interactive session restores its synthetic capture into the pane', asyn
 
 test('a main turn gets its first summary 90 s in: one request, one firing line, one capture line, the pane filled', async ($, on) => {
   const w = world(on)
+  w.files.set(PLAN_PATH, '')
+  w.replies.push(judged(`ADD: ${PLAN_PATH}\nSUPERSEDED: none`))
   await start($)
   await turnStart($)
   await w.clock.advance(60_000)
@@ -214,12 +218,12 @@ test('a main turn gets its first summary 90 s in: one request, one firing line, 
 
   await w.clock.advance(30_000)
   expect(w.requests).toHaveLength(1)
-  expect(w.requests[0]).toMatchObject({ model: 'haiku', system: VARIANTS.edit, maxTokens: 300, effort: 'low', timeoutMs: 20_000 })
+  expect(w.requests[0]).toMatchObject({ model: 'haiku', system: VARIANTS.edit, maxTokens: 500, effort: 'low', timeoutMs: 20_000 })
   expect(String(w.requests[0]!.prompt)).toContain('Status: running')
   expect(logLines(w)).toHaveLength(1)
   expect(logLines(w)[0]).toMatch(/^\S+ summary session=synthetic-session ms=\d+ reason=source=messages variant=edit in=1200 out=80 cached=300 usd=\d+\.\d{4}$/)
   expect(captures(w)).toEqual([
-    expect.objectContaining({ status: 'running', source: 'messages', variant: 'edit', task: null, outcome: 'summary', soFar: 'Building the summary plugin.', now: 'Writing its plan.', files: [{ path: `/tmp/project/${PLAN}`, touchedAt: T0 + 90_000, touches: 1 }] }),
+    expect.objectContaining({ status: 'running', source: 'messages', variant: 'edit', task: null, outcome: 'summary', soFar: 'Building the summary plugin.', now: 'Writing its plan.', candidates: [PLAN_PATH], add: [PLAN_PATH], superseded: [], files: [{ path: PLAN_PATH, touchedAt: T0 + 90_000, touches: 1 }] }),
   ])
   expect(await paneTexts($)).toEqual(['Summary plugin', '● NOW', 'just now', 'Writing its plan.', 'SO FAR', 'Building the summary plugin.', 'YOU ASKED', 'You asked for the plugin.', 'FILES', LINKED_PLAN])
 })
@@ -782,9 +786,14 @@ test('a reply that lands after session.end writes nothing to the next conversati
 })
 
 const sent = (...files: string[]): SessionMessage => ({ role: 'assistant', text: '', toolUses: [{ tool_use_id: `s-${files.join()}`, tool: 'SendUserFile', input: { files } }] })
-const fileTexts = (texts: string[]) => texts.slice(texts.findIndex(t => t.startsWith('FILES')))
+const fileRows = async ($: Engine) => {
+  const ui = await $.ui.mount({ plugin: PLUGIN, surface: 'terminal', component: 'Pane', requestId: PLUGIN, props: PANE })
+  const rows = (await ui.findAll({ type: 'Text' })).filter(t => t.text.startsWith('file:'))
+  await ui.unmount()
+  return rows
+}
 
-test('a file written mid-turn shows at the next tick, with no model call, before the first summary too', async ($, on) => {
+test('a sent file shows at the next tick with no model call, before the first summary too; a written one does not', async ($, on) => {
   const w = world(on, { settings: { isOff: true } })
   w.messages = [user('write the plan')]
   await start($)
@@ -795,13 +804,18 @@ test('a file written mid-turn shows at the next tick, with no model call, before
   w.messages.push(wrote(PLAN))
   await step($)
   await w.clock.advance(30_000)
+  expect(await paneTexts($)).toEqual(['No summary yet.'])
+
+  w.messages.push(sent(PLAN))
+  await step($)
+  await w.clock.advance(30_000)
   expect(w.requests).toEqual([])
   expect(await paneTexts($)).toEqual(['No summary yet.', 'FILES', LINKED_PLAN])
 })
 
 test('the list follows a Write, Edit or send while switched off, and not a Read or text naming a listed file', async ($, on) => {
   const w = world(on, { settings: { isOff: true } })
-  w.messages = [wrote('a.md'), wrote('b.md')]
+  w.messages = [sent('a.md'), sent('b.md')]
   await start($)
   await turnStart($)
   await step($)
@@ -813,20 +827,31 @@ test('the list follows a Write, Edit or send while switched off, and not a Read 
   await w.clock.advance(30_000)
   expect((await run($, 'show')).text).toContain('Files: /tmp/project/b.md, /tmp/project/a.md\n')
 
-  w.messages.push(sent('a.md'))
+  w.messages.push(wrote('a.md'))
   await step($)
   await w.clock.advance(30_000)
   expect((await run($, 'show')).text).toContain('Files: /tmp/project/a.md, /tmp/project/b.md\n')
+
+  w.messages.push(sent('b.md'))
+  await step($)
+  await w.clock.advance(30_000)
+  expect((await run($, 'show')).text).toContain('Files: /tmp/project/b.md, /tmp/project/a.md\n')
   expect(w.requests).toEqual([])
 })
 
-test('a call captures the list without its shares, a resume seeds it, and /clear empties it', async ($, on) => {
+test('a call captures the list without its shares, a resume seeds it with its flags, and /clear empties it', async ($, on) => {
   const w = world(on)
+  w.files.set(PLAN_PATH, '')
+  w.files.set('/tmp/project/old.md', '')
+  w.messages.push(sent('old.md'))
+  w.replies.push(judged(`ADD: ${PLAN_PATH}\nSUPERSEDED: /tmp/project/old.md`))
   await start($)
   await turnStart($)
-  await w.clock.advance(90_000)
-  const capture = w.files.get(CAPTURE)!
-  expect(JSON.parse(capture.trim()).files).toEqual([{ path: `/tmp/project/${PLAN}`, touchedAt: T0 + 90_000, touches: 1 }])
+  await step($)
+  await w.clock.settle()
+  const line = JSON.parse(w.files.get(CAPTURE)!.trim())
+  expect(line.files).toEqual([{ path: PLAN_PATH, touchedAt: T0, touches: 1 }, { path: '/tmp/project/old.md', touchedAt: T0, touches: 1, isSuperseded: true }])
+  expect([line.candidates, line.add, line.superseded]).toEqual([[PLAN_PATH], [PLAN_PATH], ['/tmp/project/old.md']])
 
   await $.session.end({ reason: 'clear', sessionId: ID, resume: { id: ID } })
   await w.clock.settle()
@@ -834,23 +859,134 @@ test('a call captures the list without its shares, a resume seeds it, and /clear
   expect((await run($, 'show')).text).toContain('Files: none\n')
 
   await start($)
-  expect(fileTexts(await paneTexts($))).toEqual(['FILES', LINKED_PLAN])
+  const rows = await fileRows($)
+  expect(rows.map(r => r.text)).toEqual([LINKED_PLAN, 'file:///tmp/project/old.md./old.md'])
+  expect(rows.map(r => r.props.strikethrough)).toEqual([undefined, true])
 })
 
-test('the section shows the newest three, and its header says where it stands only past three', async ($, on) => {
+test('the section shows the newest five, and its header says where it stands only past five', async ($, on) => {
   const w = world(on, { settings: { isOff: true } })
-  w.messages = ['one.md', 'two.md', 'three.md'].map(wrote)
+  w.messages = ['one.md', 'two.md', 'three.md', 'four.md', 'five.md'].map(n => sent(n))
   await start($)
   await turnStart($)
   await step($)
   await w.clock.advance(30_000)
-  const rows = (name: string) => `file:///tmp/project/${name}${name}`
-  expect(await paneTexts($)).toEqual(['No summary yet.', 'FILES', rows('three.md'), rows('two.md'), rows('one.md')])
+  const rows = (name: string) => `file:///tmp/project/${name}./${name}`
+  expect(await paneTexts($)).toEqual(['No summary yet.', 'FILES', rows('five.md'), rows('four.md'), rows('three.md'), rows('two.md'), rows('one.md')])
 
-  w.messages.push(wrote('four.md'))
+  w.messages.push(sent('six.md'))
   await step($)
   await w.clock.advance(30_000)
-  expect(await paneTexts($)).toEqual(['No summary yet.', 'FILES 1–3 of 4', rows('four.md'), rows('three.md'), rows('two.md')])
+  expect(await paneTexts($)).toEqual(['No summary yet.', 'FILES 1–5 of 6', rows('six.md'), rows('five.md'), rows('four.md'), rows('three.md'), rows('two.md')])
+})
+
+test('the request offers existing files as candidates and the list to judge, and nothing a secret filter or the session log holds back', async ($, on) => {
+  const w = world(on)
+  const log = sessionLogPath('/h/.claude/stopstopping', ID)
+  for (const f of [PLAN_PATH, '/tmp/project/.env', '/tmp/project/sent.md', log]) w.files.set(f, '')
+  w.messages.push(wrote('/tmp/project/.env'), sent('sent.md'), sent('/tmp/project/secret-notes.md'), { role: 'assistant', text: `Log is ${log}, and /tmp/project/no-such.md`, toolUses: [] })
+  await start($)
+  await turnStart($)
+  await step($)
+  await w.clock.settle()
+  const files = String(w.requests[0]!.prompt).split('File candidates:\n')[1]!
+  expect(files).toBe(`- ${PLAN_PATH}\n\nCurrent file list:\n- /tmp/project/sent.md`)
+  expect((await run($, 'show')).text).toContain('Files: /tmp/project/secret-notes.md, /tmp/project/sent.md\n')
+})
+
+test('a named path outside its set changes nothing, and a parse-partial reply still applies its verdict', async ($, on) => {
+  const w = world(on)
+  w.files.set(PLAN_PATH, '')
+  w.replies.push({ isAnswered: true, text: `NOW: Writing.\nADD: /invented.md, ${PLAN_PATH}`, usage: USAGE })
+  await start($)
+  await turnStart($)
+  await step($)
+  await w.clock.settle()
+  expect(outcomes(w)).toEqual(['parse-partial'])
+  expect((await run($, 'show')).text).toContain(`Files: ${PLAN_PATH}\n`)
+})
+
+for (const failure of [...FAILURES, { outcome: 'parse-failed', reply: { isAnswered: true, text: `ADD: ${PLAN_PATH}`, usage: USAGE } as ModelCompleteResult }]) {
+  test(`a call that ends ${failure.outcome} (${failure.reply.isAnswered ? failure.reply.text.slice(0, 3) : 'unanswered'}) leaves the list as it is`, async ($, on) => {
+    const w = world(on)
+    w.files.set(PLAN_PATH, '')
+    w.messages.push(sent('kept.md'))
+    w.replies.push(failure.reply)
+    await start($)
+    await turnStart($)
+    await step($)
+    await w.clock.settle()
+    expect(outcomes(w)).toEqual([failure.outcome])
+    expect((await run($, 'show')).text).toContain('Files: /tmp/project/kept.md\n')
+  })
+}
+
+test('switched off, nothing joins but a sent file; /session-summary now is a call, so its ADD joins', async ($, on) => {
+  const w = world(on, { settings: { isOff: true } })
+  w.files.set(PLAN_PATH, '')
+  w.messages.push({ role: 'assistant', text: `The plan is ${PLAN_PATH}.`, toolUses: [] })
+  await start($)
+  await turnStart($)
+  await step($)
+  await w.clock.advance(120_000)
+  expect((await run($, 'show')).text).toContain('Files: none\n')
+
+  w.replies.push(judged(`ADD: ${PLAN_PATH}`))
+  await run($, 'now')
+  expect((await run($, 'show')).text).toContain(`Files: ${PLAN_PATH}\n`)
+})
+
+test('a superseded row is dim and struck through and keeps its link; a later touch clears it', async ($, on) => {
+  const w = world(on)
+  w.messages = [user('go'), sent('old.md'), sent('new.md')]
+  w.replies.push(judged('SUPERSEDED: /tmp/project/new.md'))
+  await start($)
+  await turnStart($)
+  await step($)
+  await w.clock.settle()
+  const rows = await fileRows($)
+  expect(rows.map(r => r.text)).toEqual(['file:///tmp/project/old.md./old.md', 'file:///tmp/project/new.md./new.md'])
+  expect(rows.map(r => [r.props.dimColor, r.props.strikethrough])).toEqual([[undefined, undefined], [true, true]])
+
+  w.messages.push(wrote('new.md'))
+  await step($)
+  await w.clock.advance(30_000)
+  const after = await fileRows($)
+  expect(after.map(r => r.text)).toEqual(['file:///tmp/project/new.md./new.md', 'file:///tmp/project/old.md./old.md'])
+  expect(after.map(r => r.props.strikethrough)).toEqual([undefined, undefined])
+})
+
+test('a recent file has a dot in a column of its own, which the redraw drops once it ages out; every row keeps the column', async ($, on) => {
+  const w = world(on)
+  w.messages = [user('go'), sent('a.md')]
+  w.replies.push(judged('SUPERSEDED: none'))
+  await start($)
+  await turnStart($)
+  await step($)
+  await w.clock.settle()
+  const dots = async () => {
+    const ui = await $.ui.mount({ plugin: PLUGIN, surface: 'terminal', component: 'Pane', requestId: PLUGIN, props: PANE })
+    const found = (await ui.findAll({ type: 'Text' })).filter(t => t.text === '•').length
+    const columns = (await ui.findAll({ type: 'Box' })).filter(b => b.props.width === 1).length
+    await ui.unmount()
+    return { found, columns }
+  }
+  expect(await dots()).toEqual({ found: 1, columns: 1 })
+  await w.clock.advance(RECENT_FILE_MS + 1)
+  expect(await dots()).toEqual({ found: 0, columns: 1 })
+})
+
+test('an added file gets its dot at the call that added it', async ($, on) => {
+  const w = world(on)
+  w.files.set(PLAN_PATH, '')
+  w.replies.push(judged(`ADD: ${PLAN_PATH}`))
+  await start($)
+  await turnStart($)
+  await step($)
+  await w.clock.settle()
+  const ui = await $.ui.mount({ plugin: PLUGIN, surface: 'terminal', component: 'Pane', requestId: PLUGIN, props: PANE })
+  expect((await ui.findAll({ type: 'Text' })).filter(t => t.text === '•')).toHaveLength(1)
+  await ui.unmount()
 })
 
 test('switched off mid-turn, a summarized turn makes no ended call', async ($, on) => {

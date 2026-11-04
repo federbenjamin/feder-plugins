@@ -2,6 +2,7 @@ import type { ModelUsage, SessionMessage } from 'claude-code'
 import type { Doc, Source, Summary, SummaryStatus } from '../types'
 import { FILES_ROWS, TOOL_LINE_CHARS } from './config.ts'
 import { documentsFrom } from './documents.ts'
+import type { FileVerdict } from './documents.ts'
 import { DEFAULT_VARIANT, isVariant, VARIANTS } from './prompts.ts'
 import { isSource } from './settings.ts'
 import { clip, toolInputHead } from './shared/text.ts'
@@ -94,7 +95,11 @@ export function formatLog(text: string, windowChars: number): string {
 
 export type Previous = Pick<Summary, 'title' | 'lastPrompt' | 'soFar' | 'now'>
 
-export function buildRequest(r: { variant: string; source: Source; previous: Previous; newestPrompt: string; input: string; status: SummaryStatus; isTitleProvisional: boolean }): { system: string; prompt: string } {
+const pathLines = (paths: readonly string[]): string => paths.map(p => `- ${p}`).join('\n') || '(none)'
+
+// `candidates` and `judgeable` are what the reply's ADD and SUPERSEDED may name. A candidate marked
+// superseded tells the model it already said a newer file replaced that one.
+export function buildRequest(r: { variant: string; source: Source; previous: Previous; newestPrompt: string; input: string; status: SummaryStatus; isTitleProvisional: boolean; candidates: readonly string[]; superseded: ReadonlySet<string>; judgeable: readonly string[] }): { system: string; prompt: string } {
   const system = VARIANTS[r.variant] ?? VARIANTS[DEFAULT_VARIANT]!
   const header = r.source === 'session-log' ? "The session's own log (tail):" : 'Recent activity (oldest first, may start mid-way):'
   const prompt = [
@@ -107,6 +112,8 @@ export function buildRequest(r: { variant: string; source: Source; previous: Pre
     ].join('\n'),
     `Newest prompt:\n${r.newestPrompt || '(none yet)'}`,
     `${header}\n${r.input}`,
+    `File candidates:\n${pathLines(r.candidates.map(p => (r.superseded.has(p) ? `${p} (superseded)` : p)))}`,
+    `Current file list:\n${pathLines(r.judgeable)}`,
   ].join('\n\n')
   return { system, prompt }
 }
@@ -140,6 +147,20 @@ export function parseReply(text: string, previous: Previous): Parsed {
   return { title: title ?? previous.title, lastPrompt: lastPrompt ?? previous.lastPrompt, soFar: soFar ?? previous.soFar, now: now ?? previous.now, outcome: found === 4 ? 'summary' : 'parse-partial' }
 }
 
+const ADD_LINE = /^ADD:[^\S\r\n]*(\S.*)$/m
+const SUPERSEDED_LINE = /^SUPERSEDED:[^\S\r\n]*(\S.*)$/m
+
+function namedPaths(text: string, line: RegExp, allowed: readonly string[]): string[] {
+  const names = (lineValue(text, line) ?? '').split(',').map(n => n.trim().replace(/^[`"']+|[`"']+$/g, ''))
+  return [...new Set(names)].filter(n => allowed.includes(n))
+}
+
+// ADD and SUPERSEDED, each held to what the request let it name, so `none`, a missing line and an
+// invented path all come to nothing. They never decide a call's outcome: the four texts do.
+export function parseFileVerdict(text: string, allowed: { candidates: readonly string[]; judgeable: readonly string[] }): FileVerdict {
+  return { add: namedPaths(text, ADD_LINE, allowed.candidates), superseded: namedPaths(text, SUPERSEDED_LINE, allowed.judgeable) }
+}
+
 export function capturePath(dir: string, sessionId: string): string {
   return `${dir}/session-summaries/${sessionId}.jsonl`
 }
@@ -159,6 +180,9 @@ export type Capture = {
   soFar: string
   now: string
   files: Doc[] // the documents list as it stood, without its shares: a capture holds no token
+  candidates: readonly string[] // what the request offered ADD
+  add: readonly string[] // what the reply's ADD and SUPERSEDED came to
+  superseded: readonly string[]
   outcome: string
   ms: number
   usage: ModelUsage

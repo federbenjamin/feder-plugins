@@ -79,9 +79,9 @@ export function mergeShares(current: readonly Share[], wanted: readonly { path: 
 // Each document with its entry in the file, if it has one.
 export function adoptShares(docs: readonly Doc[], shares: readonly Share[]): Doc[] {
   const byPath = new Map(shares.map(s => [s.path, s]))
-  return docs.map(({ path, touchedAt, touches }) => {
-    const share = byPath.get(path)
-    return share === undefined ? { path, touchedAt, touches } : { path, touchedAt, touches, share: { token: share.token, expiresAt: share.expiresAt } }
+  return docs.map(({ share: _, ...doc }) => {
+    const share = byPath.get(doc.path)
+    return share === undefined ? doc : { ...doc, share: { token: share.token, expiresAt: share.expiresAt } }
   })
 }
 
