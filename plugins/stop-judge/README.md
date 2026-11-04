@@ -21,7 +21,7 @@ It starts in the next session.
 ## How it works
 
 - **Nothing blocks.** The judge runs after the turn has ended; the reminder lands a few seconds later.
-- **The reminder is a user-style prompt.** It reads `STOP JUDGE — nothing holds it: <the step>.` and the agent answers it like any message from you. It carries no rule text and does not tell the agent what to do.
+- **The reminder is a user-style prompt.** It reads `STOP JUDGE — nothing holds it: <the step>. If you left the operator a question or decision, do this in a subagent so you can take it up when they return.` and the agent answers it like any message from you. Work goes on while your question waits, without filling the context you will come back to.
 - **Once per prompt.** After one reminder the judge stays quiet until you type again. A reminder is never sent while there is text in your prompt box: you are answering. Nor is one sent once a newer turn has started, since it would queue behind that turn and land on work it was never about.
 - **Headless runs too.** A `claude -p` agent in a repo or worktree is judged; an unattended run is where a caught early stop pays most. A `claude -p` run started in a temporary folder is a script's and passes without a model call (`pass-scripted`).
 - **Passes without a model call** for subagent turns, interrupted turns, a keepalive ping turn, a scripted run, and a turn with no final text.
@@ -41,7 +41,7 @@ Haiku reports; it never decides. The fixed instructions in `hooks/prompt.ts` ask
 | `operator choice open` | The step depends on a pick you have not made |
 | `new work` | Nothing in the request or the work gives a reason for it |
 | `design open` | It changes behaviour someone relies on, above low effort, with no stated risk and cost |
-| `high effort` | Hours of work or more |
+| `high effort` | Hours of work or more, unless it comes from a plan you agreed to |
 | `hard to undo` | It cannot be taken back, or it reaches someone else |
 
 With none of them, the reason is `nothing holds it`, and the reminder goes.
@@ -60,7 +60,7 @@ A quote counts only when its words are in what you typed, ignoring case and punc
 
 The tuning cases shaped the questions, and the proposal check rests on 2 of them. Its 4 nudges on the fresh sample are 2 tries on each of 2 cases.
 
-On 47 held-out turns no earlier round used, with labels written first, it is no better than the old judge: should stop ties at 2/76, and should continue is 4/12 against the old judge's 8/12. That last row rests on 6 turns, so it is a warning rather than a measurement. [`EXPERIMENTS.md`](EXPERIMENTS.md) has the detail. These are replays: they have not yet been compared with live firings, which is what the capture is for.
+On 47 held-out turns no earlier round used, labelled before the run and then corrected by the operator's rulings on the unclear ones, it is no better than the old judge: should stop ties at 4/86, and should continue is 4/8 against the old judge's 6/8. That last row rests on 4 turns, so it is a warning rather than a measurement. [`EXPERIMENTS.md`](EXPERIMENTS.md) has the detail. These are replays: they have not yet been compared with live firings, which is what the capture is for.
 
 **Cost.** About 2,500 tokens of fixed instructions are marked for the prompt cache, so a call within five minutes of another pays them at the cache-read price; a typical call also sends about 2,500 tokens of its own, and spends about 180 output tokens. `maxTokens` is 1024. On a model that cannot turn thinking off, the engine adds 2,048 tokens of room for thinking on top of that cap, and thinking counts in `output_tokens`, so a call can report more than its cap: replies with about 180 tokens of text reached 955 in testing.
 

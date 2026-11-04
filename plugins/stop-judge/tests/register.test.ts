@@ -1,7 +1,7 @@
 import { expect, mock, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 import type { ModelCompleteRequest, On } from 'claude-code'
-import { JUDGE_REQUEST, TAIL_BYTES } from '../hooks/config'
+import { JUDGE_REQUEST, NUDGE_SUBAGENT, TAIL_BYTES } from '../hooks/config'
 import { transcriptFindArgv } from '../hooks/judge'
 import { PROMPT } from '../hooks/prompt'
 
@@ -10,7 +10,7 @@ const TRANSCRIPT = '/home/u/.claude/projects/-work-app/sess-1.jsonl'
 const OFFER = 'Tests pass.\n\nWant me to open the PR?'
 const ANSWERS = { step: 'Open the PR', blocker: 'none', blocker_quote: '', in_plan: 'no', new_work: 'no', effort: 'low', reversible: 'easy', gate_quote: '', open_choice: 'no', ban_quote: '', instructions_conflict: 'no', changes_behavior: 'no', states_risk_and_cost: 'no', why: 'an offer' }
 const CONTINUE = JSON.stringify(ANSWERS)
-const NUDGE = 'STOP JUDGE — nothing holds it: Open the PR.'
+const NUDGE = `STOP JUDGE — nothing holds it: Open the PR. ${NUDGE_SUBAGENT}`
 const LOGGED = 'nothing holds it; step: Open the PR; why: an offer'
 const done = { exitCode: 0, stdout: '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false }
 

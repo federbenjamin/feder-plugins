@@ -62,7 +62,7 @@ export function decide(a: Answers, said: Said): Decision {
   if (low(a, 'open_choice') === YES) return stop('operator choice open')
   if (low(a, 'new_work') === YES) return stop('new work')
   if (low(a, 'changes_behavior') === YES && low(a, 'states_risk_and_cost') !== YES && effort !== 'low') return stop('design open')
-  if (effort === 'high') return stop('high effort')
+  if (effort === 'high' && low(a, 'in_plan') !== YES) return stop('high effort')
   if (low(a, 'reversible') === 'hard') return stop('hard to undo')
   return { decision: 'continue', why: 'nothing holds it' }
 }

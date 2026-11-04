@@ -73,6 +73,10 @@ test('a stop reason earlier in the order wins over every later one', () => {
   for (const [over, want] of rest) expect(why({ ...allHeld, ...over })).toBe(want)
 })
 
+test('high effort holds only outside a plan the operator agreed to', () => {
+  expect(why({ effort: 'high', in_plan: 'yes' })).toBe('nothing holds it')
+})
+
 test('a low-effort change goes ahead, and so does one whose risk and cost are stated', () => {
   expect(why({ changes_behavior: 'yes', effort: 'low' })).toBe('nothing holds it')
   expect(why({ changes_behavior: 'yes', effort: 'medium', states_risk_and_cost: 'yes' })).toBe('nothing holds it')

@@ -6,6 +6,9 @@ export const TAIL_BYTES = 8_000_000
 // room; a model that cannot turn thinking off gets 2048 more from the engine, thinking included.
 export const JUDGE_REQUEST = { model: 'haiku', maxTokens: 1024, effort: 'low', timeoutMs: 20_000 } as const
 
+// The end of every reminder: work goes on while a question waits, and the agent's context stays on the question.
+export const NUDGE_SUBAGENT = 'If you left the operator a question or decision, do this in a subagent so you can take it up when they return.'
+
 // Earlier messages that ask to be consulted.
 export const FRAMING =
   /\bdiscuss|ask me|one by one|one at a time|confirm with me|check with me|show me (first|before)|i want to (approve|see|review)|before (you|we) (build|start|do|change)|do(n'?t| not) (build|start|do|change)|\bwait\b/i

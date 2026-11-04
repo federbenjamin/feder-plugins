@@ -1,5 +1,5 @@
 import type { ModelUsage } from 'claude-code'
-import { JUDGE_REQUEST } from './config.ts'
+import { JUDGE_REQUEST, NUDGE_SUBAGENT } from './config.ts'
 import type { Judged } from './decide.ts'
 import { PROMPT } from './prompt.ts'
 import { contentText, isRecord, parseRow, SIBLING_TEXTS, typedText } from './shared/typed.ts'
@@ -126,7 +126,7 @@ export function isNudgeLate(t: { isTurnRunning: boolean; lastEnded: string | und
 }
 
 export function nudgeText(reason: string): string {
-  return `${NUDGE_PREFIX}${reason.replace(/\.+$/, '')}.`
+  return `${NUDGE_PREFIX}${reason.replace(/\.+$/, '')}. ${NUDGE_SUBAGENT}`
 }
 
 export function transcriptFindArgv(home: string, sessionId: string): string[] {

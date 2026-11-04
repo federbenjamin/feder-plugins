@@ -48,9 +48,10 @@ test('the guard returns the first applicable bypass and otherwise lets the judge
   expect(guardOutcome(normal)).toBe(null)
 })
 
-test('a nudge is one concise sentence without copied rule text', () => {
-  expect(nudgeText('nothing holds it: Run the suite.')).toBe('STOP JUDGE — nothing holds it: Run the suite.')
-  expect(nudgeText('nothing holds it: Run the suite')).toBe('STOP JUDGE — nothing holds it: Run the suite.')
+test('a nudge names the step, then says to use a subagent while a question waits', () => {
+  const want = 'STOP JUDGE — nothing holds it: Run the suite. If you left the operator a question or decision, do this in a subagent so you can take it up when they return.'
+  expect(nudgeText('nothing holds it: Run the suite.')).toBe(want)
+  expect(nudgeText('nothing holds it: Run the suite')).toBe(want)
 })
 
 test('the transcript lookup is scoped to one session file below the projects directory', () => {
