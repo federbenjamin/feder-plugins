@@ -1,7 +1,7 @@
 import { expect, mock, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 import type { CommandSpec, ModelCompleteRequest, ModelCompleteResult, On, SessionMessage } from 'claude-code'
-import { CONCISE_COMMAND, CONCISE_LABEL, PLUGIN, TICK_MS } from '../hooks/config'
+import { CONCISE_COMMAND, CONCISE_LABEL, CONCISE_USAGE, PLUGIN, TICK_MS } from '../hooks/config'
 import { CONCISE_SYSTEM } from '../hooks/prompts'
 
 const T0 = Date.parse('2026-10-23T12:00:00Z')
@@ -110,7 +110,7 @@ const paneTexts = async ($: Engine, scroll = PANE.scroll) => {
 // The harness hands a ui.scroll hook exactly what $.ui.scroll is given, so the engine's own fields are spelled out.
 const scroll = ($: Engine, by: number, bodyRows = PANE.scroll.bodyRows) =>
   $.ui.scroll({ component: 'Pane', requestId: PLUGIN, offset: 0, by, bodyRows, contentRows: 60, origin: { kind: 'person' } } as never)
-const SECTION = CONCISE_LABEL
+const SECTION = `▾ ${CONCISE_LABEL}`
 const sectionOf = (texts: string[]) => texts.slice(texts.findIndex(t => t.startsWith(SECTION)))
 
 test('/summarize in an interactive session returns no text and no context, and sends the whole response to the model', async ($, on) => {
@@ -169,34 +169,38 @@ test('a ui.scroll over an overlong section moves the section and leaves the top 
   await w.clock.settle()
   const ui = await $.ui.mount({ plugin: PLUGIN, surface: 'terminal', component: 'Pane', requestId: PLUGIN, props: PANE })
   const texts = async () => (await ui.findAll({ type: 'Text' })).map(t => t.text).filter(isContent)
+  // The header and 40 lines are one list of 41 rows in a window of 18.
   const before = await texts()
-  expect(before.slice(0, 3)).toEqual(['No summary yet.', `${SECTION} 1–17 of 40`, 'just now'])
+  expect(before.slice(0, 3)).toEqual(['No summary yet.', SECTION, 'just now'])
   expect(before.at(3)).toBe('line 1')
+  expect(before.at(-1)).toBe('line 17')
 
   expect(await scroll($, 5)).toEqual({})
   const after = await texts()
   expect(after[0]).toBe(before[0])
-  expect(after[1]).toBe(`${SECTION} 6–22 of 40`)
-  expect(after[3]).toBe('line 6')
-  expect(after).toHaveLength(before.length)
+  // The header scrolls out with the rows above it.
+  expect(after).not.toContain(SECTION)
+  expect(after[1]).toBe('line 5')
+  expect(after.at(-1)).toBe('line 22')
+  expect(after).toHaveLength(before.length - 1)
   // The plugin took the scroll: the engine's own never saw it.
   expect(w.engineScrolls).toEqual([])
 
-  // A page key asks for the pane's 20 rows; the section's window is 17.
+  // A page key asks for the pane's 20 rows; the section's window is 18.
   await scroll($, 20)
-  expect((await texts())[1]).toBe(`${SECTION} 23–39 of 40`)
+  expect((await texts())[1]).toBe('line 23')
   await scroll($, 500)
-  expect((await texts())[1]).toBe(`${SECTION} 24–40 of 40`)
+  expect((await texts())[1]).toBe('line 23')
   expect((await texts()).at(-1)).toBe('line 40')
   await scroll($, -500)
-  expect((await texts())[1]).toBe(`${SECTION} 1–17 of 40`)
+  expect((await texts())[1]).toBe(SECTION)
 
   // A new result opens at its own top, wherever the last one was scrolled to.
   await scroll($, 5)
   w.replies.push(said(lines(40)))
   await summarize($)
   await w.clock.settle()
-  expect((await texts())[1]).toBe(`${SECTION} 1–17 of 40`)
+  expect((await texts())[1]).toBe(SECTION)
   await ui.unmount()
 })
 
@@ -214,7 +218,7 @@ test('the section sits between the texts and FILES, a wheel tick over FILES move
   const tick = (row: number) => $.ui.scroll({ component: 'Pane', requestId: PLUGIN, offset: 0, by: 1, bodyRows: 20, contentRows: 20, origin: { kind: 'person' }, pointer: { row } } as never)
 
   const before = await texts()
-  const header = `${SECTION} 1–8 of 40`
+  const header = SECTION
   expect(before.indexOf('SO FAR')).toBeLessThan(before.indexOf(header))
   expect(before.indexOf(header)).toBeLessThan(before.findIndex(t => t.startsWith('FILES')))
 
@@ -226,7 +230,11 @@ test('the section sits between the texts and FILES, a wheel tick over FILES move
   await tick(10)
   const overSection = await texts()
   expect(overSection).toContain('FILES 2–6 of 7')
-  expect(overSection).toContain(`${SECTION} 2–9 of 40`)
+  // The section's window is 8 rows: one step down drops the header and brings in line 8.
+  expect(overSection).not.toContain(SECTION)
+  expect(overSection).toContain('line 1')
+  expect(overSection).toContain('line 8')
+  expect(overSection).not.toContain('line 9')
   expect(w.engineScrolls).toEqual([])
   await ui.unmount()
 })
@@ -391,8 +399,10 @@ test('the summary timer\'s writes leave the section and its scroll position as t
   const ui = await $.ui.mount({ plugin: PLUGIN, surface: 'terminal', component: 'Pane', requestId: PLUGIN, props: { ...PANE, scroll: TALL } })
   await scroll($, 10, 40)
   await ui.unmount()
-  const before = sectionOf(await paneTexts($, TALL))
-  expect(before.slice(2, 4)).toEqual(['line 11', 'line 12'])
+  // The header is out of the window: the section starts at line 10.
+  const before = await paneTexts($, TALL)
+  expect(before).not.toContain(SECTION)
+  expect(before.slice(1, 3)).toEqual(['line 10', 'line 11'])
 
   // The timer's summary adds the title, SO FAR and NOW rows above, so the room shrinks but the offset holds.
   await $.turn.start({ text: 'explain the findings', turnId: 't1' })
@@ -403,8 +413,299 @@ test('the summary timer\'s writes leave the section and its scroll position as t
 
   const after = await paneTexts($, TALL)
   expect(after[0]).toBe('Summary plugin')
-  const section = sectionOf(after)
-  expect(section[0]).toMatch(new RegExp(`^${SECTION} 11–\\d+ of 80$`))
-  expect(section[1]).toBe('1m ago')
-  expect(section.slice(2, 4)).toEqual(['line 11', 'line 12'])
+  expect(after).not.toContain(SECTION)
+  const first = after.indexOf('line 10')
+  expect(first).toBeGreaterThan(after.indexOf('SO FAR'))
+  expect(after[first + 1]).toBe('line 11')
+})
+
+// ---- /summarize on, every, off and the list of summaries ----
+
+const run = ($: Engine, args: string) => $.command.run({ command: CONCISE_COMMAND, args, origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 120 } })
+// A main turn that finishes with an answer: one response.
+const respond = async ($: Engine, w: World, turnId: string, answer = 'Done.', isAborted = false) => {
+  await $.turn.start({ text: 'next question', turnId })
+  await $.turn.complete({ turnId, reason: 'answer', answer, durationMs: 1, isAborted })
+  await w.clock.settle()
+}
+const keepalive = async ($: Engine, w: World, turnId: string) => {
+  await $.turn.start({ text: 'keepalive ping. Reply only: ok', turnId })
+  await $.turn.complete({ turnId, reason: 'answer', answer: 'ok', durationMs: 1, isAborted: false })
+  await w.clock.settle()
+}
+const heads = (texts: string[]) => texts.filter(t => /^[▾▸] SUMMARY/.test(t))
+
+test('an unknown argument prints the usage and makes no call and no pane', async ($, on) => {
+  const w = world(on)
+  await start($)
+  const opened = w.opened.length
+  const result = await run($, 'weekly')
+  await w.clock.settle()
+  expect(result.text).toBe(CONCISE_USAGE)
+  expect(w.requests).toEqual([])
+  expect(w.opened).toHaveLength(opened)
+})
+
+test('/summarize on runs once now, prints nothing, and turns every off', async ($, on) => {
+  const w = world(on)
+  await start($)
+  await run($, 'every')
+  const result = await run($, 'on')
+  await w.clock.settle()
+  expect(result.text).toBeUndefined()
+  expect(conciseRequests(w)).toHaveLength(1)
+  await respond($, w, 't1')
+  expect(conciseRequests(w)).toHaveLength(1)
+})
+
+test('a bare /summarize runs once and leaves every as it was', async ($, on) => {
+  const w = world(on)
+  await start($)
+  await run($, 'every')
+  await run($, '')
+  await w.clock.settle()
+  expect(conciseRequests(w)).toHaveLength(1)
+  await respond($, w, 't1')
+  expect(conciseRequests(w)).toHaveLength(2)
+})
+
+test('a bare /summarize never turns every on', async ($, on) => {
+  const w = world(on)
+  await start($)
+  await run($, '')
+  await w.clock.settle()
+  await respond($, w, 't1')
+  expect(conciseRequests(w)).toHaveLength(1)
+})
+
+test('/summarize every prints one line, makes no call now, and opens the pane', async ($, on) => {
+  const w = world(on)
+  await start($)
+  const result = await run($, 'every')
+  await w.clock.settle()
+  expect(result.text).toMatch(/^summarize every:/)
+  expect(result.text).not.toContain('\n')
+  expect(w.requests).toEqual([])
+  expect(await paneTexts($)).toEqual(['No summary yet.'])
+  expect(w.opened.at(-1)).toBe(PLUGIN)
+})
+
+test('with every on, each response makes one call and adds a summary, newest first', async ($, on) => {
+  const w = world(on)
+  w.replies.push(said('copy one'), said('copy two'), said('copy three'))
+  await start($)
+  await run($, 'every')
+  await respond($, w, 't1')
+  await respond($, w, 't2')
+  await respond($, w, 't3')
+  expect(conciseRequests(w)).toHaveLength(3)
+  const texts = await paneTexts($)
+  // Only the newest is open; the older two are collapsed to their headers.
+  expect(heads(texts)).toEqual([SECTION, '▸ SUMMARY · 1 RESPONSE OLD', '▸ SUMMARY · 2 RESPONSES OLD'])
+  expect(texts).toContain('copy three')
+  expect(texts).not.toContain('copy two')
+  expect(texts).not.toContain('copy one')
+})
+
+test('the firing line of an every summary carries the summarize-every trigger', async ($, on) => {
+  const w = world(on)
+  await start($)
+  await run($, 'every')
+  await respond($, w, 't1')
+  const concise = logLines(w).filter(l => l.includes(' concise session='))
+  expect(concise).toHaveLength(1)
+  expect(concise[0]).toMatch(/ summarize-every$/)
+})
+
+test('a keepalive turn is no response: no call under every, and the label does not age', async ($, on) => {
+  const w = world(on)
+  await start($)
+  await run($, 'every')
+  await respond($, w, 't1')
+  expect(conciseRequests(w)).toHaveLength(1)
+  await keepalive($, w, 'k1')
+  await keepalive($, w, 'k2')
+  expect(conciseRequests(w)).toHaveLength(1)
+  expect(heads(await paneTexts($))).toEqual([SECTION])
+})
+
+test('an aborted turn and an empty answer are no response', async ($, on) => {
+  const w = world(on)
+  await start($)
+  await run($, 'every')
+  await respond($, w, 't1', 'Half an answer', true)
+  await respond($, w, 't2', '   ')
+  expect(conciseRequests(w)).toEqual([])
+  await run($, '')
+  await w.clock.settle()
+  expect(heads(await paneTexts($))).toEqual([SECTION])
+})
+
+test('a subagent turn is no response', async ($, on) => {
+  const w = world(on)
+  await start($)
+  await run($, 'every')
+  await $.turn.complete({ turnId: 'a1', agentId: 'sub-1', reason: 'answer', answer: 'sub result', durationMs: 1, isAborted: false } as never)
+  await w.clock.settle()
+  expect(conciseRequests(w)).toEqual([])
+})
+
+test('the label of a summary moves from last response to 1 response old to 2 as turns complete', async ($, on) => {
+  const w = world(on)
+  await start($)
+  await run($, '')
+  await w.clock.settle()
+  expect(heads(await paneTexts($))).toEqual([SECTION])
+  await respond($, w, 't1')
+  expect(heads(await paneTexts($))).toEqual(['▾ SUMMARY · 1 RESPONSE OLD'])
+  await respond($, w, 't2')
+  expect(heads(await paneTexts($))).toEqual(['▾ SUMMARY · 2 RESPONSES OLD'])
+})
+
+test('a new summary collapses the older one, which keeps its header and loses its text', async ($, on) => {
+  const w = world(on)
+  w.replies.push(said('OLD copy'), said('NEW copy'))
+  await start($)
+  await run($, '')
+  await w.clock.settle()
+  await respond($, w, 't1')
+  await run($, '')
+  await w.clock.settle()
+  const texts = await paneTexts($)
+  expect(heads(texts)).toEqual([SECTION, '▸ SUMMARY · 1 RESPONSE OLD'])
+  expect(texts).toContain('NEW copy')
+  expect(texts).not.toContain('OLD copy')
+})
+
+test('a second summary of the same response replaces the first instead of stacking', async ($, on) => {
+  const w = world(on)
+  await start($)
+  await run($, '')
+  await w.clock.settle()
+  await respond($, w, 't1')
+  await run($, '')
+  await w.clock.settle()
+  await run($, '')
+  await w.clock.settle()
+  expect(heads(await paneTexts($))).toEqual([SECTION, '▸ SUMMARY · 1 RESPONSE OLD'])
+})
+
+test('a summary with no newer one stays open however many responses have passed', async ($, on) => {
+  const w = world(on)
+  w.replies.push(said('STALE copy'))
+  await start($)
+  await run($, '')
+  await w.clock.settle()
+  for (const id of ['t1', 't2', 't3', 't4']) await respond($, w, id)
+  const texts = await paneTexts($)
+  expect(heads(texts)).toEqual(['▾ SUMMARY · 4 RESPONSES OLD'])
+  expect(texts).toContain('STALE copy')
+})
+
+test('/summarize off prints one line, makes no call, stops every, and keeps the summaries', async ($, on) => {
+  const w = world(on)
+  w.replies.push(said('KEPT copy'))
+  await start($)
+  await run($, 'every')
+  await respond($, w, 't1')
+  expect(conciseRequests(w)).toHaveLength(1)
+  const result = await run($, 'off')
+  await w.clock.settle()
+  expect(result.text).toMatch(/^summarize off:/)
+  expect(result.text).not.toContain('\n')
+  expect(conciseRequests(w)).toHaveLength(1)
+  await respond($, w, 't2')
+  expect(conciseRequests(w)).toHaveLength(1)
+  const texts = await paneTexts($)
+  expect(texts).toContain('KEPT copy')
+  expect(heads(texts)).toEqual(['▾ SUMMARY · 1 RESPONSE OLD'])
+})
+
+test('a press on a header collapses its summary and a second press opens it again', async ($, on) => {
+  const w = world(on)
+  w.replies.push(said('PRESSED copy'))
+  await start($)
+  await run($, '')
+  await w.clock.settle()
+  const ui = await $.ui.mount({ plugin: PLUGIN, surface: 'terminal', component: 'Pane', requestId: PLUGIN, props: PANE })
+  const texts = async () => (await ui.findAll({ type: 'Text' })).map(t => t.text).filter(isContent)
+  expect(await texts()).toContain('PRESSED copy')
+  await ui.press({ key: 'summary-1' })
+  const collapsed = await texts()
+  expect(heads(collapsed)).toEqual([`▸ ${CONCISE_LABEL}`])
+  expect(collapsed).not.toContain('PRESSED copy')
+  await ui.press({ key: 'summary-1' })
+  const opened = await texts()
+  expect(heads(opened)).toEqual([SECTION])
+  expect(opened).toContain('PRESSED copy')
+  await ui.unmount()
+})
+
+test('a press opens only the header it is on', async ($, on) => {
+  const w = world(on)
+  w.replies.push(said('FIRST copy'), said('SECOND copy'))
+  await start($)
+  await run($, '')
+  await w.clock.settle()
+  await respond($, w, 't1')
+  await run($, '')
+  await w.clock.settle()
+  const ui = await $.ui.mount({ plugin: PLUGIN, surface: 'terminal', component: 'Pane', requestId: PLUGIN, props: PANE })
+  const texts = async () => (await ui.findAll({ type: 'Text' })).map(t => t.text).filter(isContent)
+  await ui.press({ key: 'summary-1' })
+  const after = await texts()
+  expect(after).toContain('FIRST copy')
+  expect(after).toContain('SECOND copy')
+  expect(heads(after)).toEqual([SECTION, '▾ SUMMARY · 1 RESPONSE OLD'])
+  await ui.unmount()
+})
+
+test('every survives a /clear while the summaries and the response count do not', async ($, on) => {
+  const w = world(on)
+  await start($)
+  await run($, 'every')
+  await respond($, w, 't1')
+  await respond($, w, 't2')
+  await $.session.end({ reason: 'clear', sessionId: ID, resume: { id: ID } })
+  expect(await paneTexts($)).toEqual(['No summary yet.'])
+  await start($)
+  await respond($, w, 't3')
+  expect(conciseRequests(w)).toHaveLength(3)
+  // The count began again at the first response of the new conversation.
+  expect(heads(await paneTexts($))).toEqual([SECTION])
+})
+
+test('a /clear then a summary does not age by the old conversation\'s responses', async ($, on) => {
+  const w = world(on)
+  await start($)
+  await respond($, w, 't1')
+  await respond($, w, 't2')
+  await $.session.end({ reason: 'clear', sessionId: ID, resume: { id: ID } })
+  await start($)
+  await run($, '')
+  await w.clock.settle()
+  expect(heads(await paneTexts($))).toEqual([SECTION])
+})
+
+test('an every summary cuts the call of a manual one still running on the same response', async ($, on) => {
+  const w = world(on)
+  w.replies.push(said('MANUAL copy'), said('EVERY copy'))
+  w.holds.push(60_000, 0)
+  await start($)
+  await run($, '')
+  await w.clock.advance(1_000)
+  await run($, 'every')
+  await respond($, w, 't1')
+  const texts = await paneTexts($)
+  expect(texts).toContain('EVERY copy')
+  expect(texts).not.toContain('MANUAL copy')
+})
+
+test('a non-interactive session counts no responses and makes no every call', async ($, on) => {
+  const w = world(on)
+  await start($, false)
+  const result = await run($, 'every')
+  expect(result.text).toMatch(/interactive sessions only/)
+  await respond($, w, 't1')
+  expect(conciseRequests(w)).toEqual([])
 })

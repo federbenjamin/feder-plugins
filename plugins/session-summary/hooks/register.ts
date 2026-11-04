@@ -8,7 +8,7 @@ import { linksOff, linksOn, syncShares } from './links-io.ts'
 import { clearDocuments, openPane, readDocuments, readSummary, registerPane, writeDocuments, writeSummary } from './pane.tsx'
 import { DEFAULT_VARIANT } from './prompts.ts'
 import { settingsFrom, showText, summaryCommand, USAGE } from './settings.ts'
-import { endConcise, newConciseState, runConcise, startConcise } from './summarize.ts'
+import { conciseResponse, endConcise, newConciseState, runConcise, startConcise } from './summarize.ts'
 import type { Calls, Settings } from './settings.ts'
 import { sessionLogPath } from './shared/firing.ts'
 import { PRICES, usageUsd } from './shared/pricing.ts'
@@ -294,7 +294,7 @@ async function show($: EngineInterface, settings: Settings, calls: Calls): Promi
 export const register: Register = (on, options) => {
   registerPane(on, options)
   const concise = newConciseState()
-  on('command.run', { command: CONCISE_COMMAND }, async $ => runConcise($, concise))
+  on('command.run', { command: CONCISE_COMMAND }, async ($, e) => runConcise($, concise, e.args))
 
   const state: State = {
     isInteractive: false,
@@ -389,6 +389,8 @@ export const register: Register = (on, options) => {
     const result = await next(e)
     if (!e.agentId) {
       const isSummarized = state.isTurnSummarized
+      // A keepalive ping's turn was never the main turn, so it never counts as a response.
+      const isResponse = state.mainTurn !== undefined && !e.isAborted && (e.answer ?? '').trim() !== ''
       state.mainTurn = mainTurnEnded(state.mainTurn, e)
       // A main complete under another id leaves the turn running here: its summary state is not
       // this completion's to touch.
@@ -398,6 +400,7 @@ export const register: Register = (on, options) => {
       }
       state.isTurnSummarized = false
       if (isSummarized) void summarize($, state, 'ended')
+      if (isResponse) void conciseResponse($, concise)
     }
     return result
   })

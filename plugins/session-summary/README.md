@@ -8,7 +8,7 @@ A [Claude Code](https://docs.anthropic.com/en/docs/claude-code) plugin for peopl
 - **Now**: one sentence on the most recent task.
 - **Files**: the files the session produced for you to read, as the haiku call judges them, plus anything sent to you, newest first.
 
-`/summarize` adds a fourth: a shorter copy of the agent's last response, low in the pane just above the files, so "say it again, more concisely" costs the session's context nothing.
+`/summarize` adds a fourth: shorter copies of the agent's responses, low in the pane just above the files, so "say it again, more concisely" costs the session's context nothing.
 
 Experimental: it is not part of the `stopstopping` bundle.
 
@@ -48,12 +48,21 @@ Claude Code decides where a pane goes. In the fullscreen layout (`"tui": "fullsc
 
 ## /summarize
 
-`/summarize` shows a shorter copy of the agent's last response between the pane's texts and `FILES`, drawn like the pane's other blocks: dim and indented, under a `SUMMARY OF LAST RESPONSE` header with its age at the right. A separate model call writes it and the command prints nothing, so the copy never reaches the session's context (only the typed `/summarize` line is recorded).
+`/summarize` shows shorter copies of the agent's responses between the pane's texts and `FILES`, newest first, drawn like the pane's other blocks: dim and indented, each under its own header with its age at the right. A separate model call writes each one, so the copies never reach the session's context (only the typed command line is recorded).
+
+| Command | What it does |
+|---|---|
+| `/summarize` | Summarizes the last response once, and leaves `every` as it was. Prints nothing |
+| `/summarize on` | Summarizes the last response once, and turns `every` off. Prints nothing |
+| `/summarize every` | Summarizes each new response when it finishes, starting with the next one. Each is a Sonnet call you pay for |
+| `/summarize off` | Stops adding summaries and keeps the ones in the pane. A call already running still finishes |
 
 - **What it reads.** The agent's newest message with text, whole; tool calls, tool results and cache-keepalive's ping answers are left out. Mid-turn, that is the newest text so far.
 - **What it writes.** Sonnet at low effort rewrites the response far more concisely: it removes what you don't need to understand the outcome or decide what to do next, leads with the outcome, shrinks each relevant section to one line, and puts each question last with one line per option and the recommendation first. On four real messages the result ran at a median of 47% of the original. It is a rewrite, so it can drop a reason or a downside, add a recommendation the agent did not make, or, on a short message, answer the message instead of shortening it: go back to the original for anything you are about to act on. Bold and heading marks are removed for the pane. A reply that reaches the token limit is marked as cut off.
-- **How long it stays.** Until the next `/summarize` or `/clear`. It is not restored in a resumed session, and it runs even when `/session-summary off` has stopped the timer's calls.
-- **Scrolling.** When the copy is taller than the room left, the wheel over the copy scrolls it alone, with a scrollbar and its position in the header (`SUMMARY OF LAST RESPONSE 4–25 of 28`), as `FILES` shows its own, and so do Page Up and Page Down once you have clicked in the pane. The wheel over `FILES` scrolls the files. The arrow keys and the wheel over the texts above do nothing. The copy keeps at least 8 rows: with less room than that, the texts above are cut from the bottom, and `FILES` stays on screen.
+- **Out of date.** The newest summary's header reads `SUMMARY OF LAST RESPONSE`. Once the agent has finished another response it reads `SUMMARY · 1 RESPONSE OLD`, then `SUMMARY · 2 RESPONSES OLD`. Running `/summarize` again on the same response replaces its summary.
+- **Collapsing.** A new summary collapses the older ones to their header lines, and all of them stay listed. Click a header to open or collapse it (`▾` open, `▸` collapsed).
+- **How long they stay.** Until `/clear`, or until the list passes 200, when the oldest drop. `/clear` keeps `every` on if it was on. They are not restored in a resumed session, and `/summarize` runs even when `/session-summary off` has stopped the timer's calls.
+- **Scrolling.** When the list is taller than the room left, the wheel over it scrolls it alone, with a scrollbar, and so do Page Up and Page Down once you have clicked in the pane. The wheel over `FILES` scrolls the files. The arrow keys and the wheel over the texts above do nothing. The list keeps at least 8 rows: with less room than that, the texts above are cut from the bottom, and `FILES` stays on screen.
 
 ## Experiment switches
 
@@ -77,7 +86,7 @@ Three switches, read at every call, so they change a running session:
 | `/session-summary show` | The texts, the files, the settings, the links state, this session's calls, tokens and dollars, and the capture path |
 | `/session-summary now` | One summary call at once, with the session's status (`running` mid-turn, else `ended`), even when switched off or the window is unchanged; prints its outcome, then what `show` prints. The timer's schedule is unchanged. Interactive sessions only |
 | anything else | Print the usage line |
-| `/summarize` | A shorter copy of the agent's last response in the pane; prints nothing. Interactive sessions only |
+| `/summarize [on\|every\|off]` | Shorter copies of the agent's responses in the pane: the last one, every new one, or stop adding. Interactive sessions only |
 
 The command is registered in every session, `claude -p` included, so `claude -p "/session-summary off"` works from a script.
 
@@ -105,7 +114,7 @@ Every call, and every tick that skips one, appends one line to `~/.claude/stopst
 <utc> <outcome> session=<id> ms=<n> reason=source=<arm> variant=<name> in=<n> out=<n> cached=<n> usd=<x>
 ```
 
-A call the timer did not start ends its line with its trigger: `manual` for `/session-summary now`, `first` for the first-prompt call, `prompt` for a later prompt's call, `summarize` for `/summarize`, whose lines read `variant=concise`.
+A call the timer did not start ends its line with its trigger: `manual` for `/session-summary now`, `first` for the first-prompt call, `prompt` for a later prompt's call, `summarize` for `/summarize` and `summarize-every` for a response under `/summarize every`, whose lines read `variant=concise`.
 
 `in` and `cached` are the uncached and cache-read input tokens; `usd` is priced at haiku's rates per token category.
 

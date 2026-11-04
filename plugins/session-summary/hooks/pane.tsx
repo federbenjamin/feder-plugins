@@ -1,9 +1,9 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 import type { Concise, Doc, Summary } from '../types'
-import { conciseView, EMPTY_CONCISE, scrolledOffset } from './concise.ts'
+import { conciseView, EMPTY_CONCISE, scrolledOffset, toggleEntry } from './concise.ts'
 import type { ConciseView } from './concise.ts'
-import { CONCISE_HEADER_ROWS, CONCISE_SHAPE, DOCUMENTS_SHAPE, PANE_BACKGROUND, PANE_TITLE, PLUGIN, SETTINGS_KEY, SHAPE } from './config.ts'
+import { CONCISE_GAP_ROWS, CONCISE_SHAPE, DOCUMENTS_SHAPE, PANE_BACKGROUND, PANE_TITLE, PLUGIN, SETTINGS_KEY, SHAPE } from './config.ts'
 import { filesScrollbar, clampOffset, fileRow, filesHeader, isOverFiles, isRecentFile, shownDocuments } from './documents.ts'
 import { settingsFrom } from './settings.ts'
 import { EMPTY_SUMMARY, estimatedRows, filesRows, paneHeight, paneView } from './summary.ts'
@@ -22,7 +22,7 @@ export const registerPane: Register = on => {
   let window: ConciseView['window'] = null
 
   on('ui.render', { component: 'Pane', requestId: PLUGIN }, async ($, e) => {
-    const { Box, Link, Text } = $.ui.resolve(e)
+    const { Box, Button, Link, Text } = $.ui.resolve(e)
     const now = await $.clock.now()
     const view = paneView(await read($, summaryAtom), now)
     const docs = await read($, documentsAtom)
@@ -43,7 +43,7 @@ export const registerPane: Register = on => {
         <Text dimColor>{text}</Text>
       </Box>
     )
-    const height = paneHeight({ placement: e.props.placement, bodyRows: e.props.scroll.bodyRows, estimated: estimated + (copy === null ? 0 : CONCISE_HEADER_ROWS + copy.rows.length) })
+    const height = paneHeight({ placement: e.props.placement, bodyRows: e.props.scroll.bodyRows, estimated: estimated + (copy === null ? 0 : CONCISE_GAP_ROWS + copy.rows.length) })
     return (
       <Box flexDirection="column" {...(height === undefined ? {} : { height })}>
         <Box flexDirection="column" flexGrow={1} flexShrink={1} overflow="hidden">
@@ -71,18 +71,23 @@ export const registerPane: Register = on => {
         </Box>
         {copy !== null && (
           <Box flexDirection="column" flexShrink={0} marginTop={1} paddingLeft={2}>
-            <Box flexDirection="row" justifyContent="space-between">
-              <Box flexShrink={1}>
-                <Text dimColor bold wrap="truncate-end">{copy.header}</Text>
-              </Box>
-              <Box flexShrink={0} marginLeft={1}>
-                <Text dimColor>{copy.age}</Text>
-              </Box>
-            </Box>
             {copy.rows.map((row, i) => (
               <Box flexDirection="row" columnGap={1}>
                 <Box flexGrow={1} flexShrink={1}>
-                  <Text dimColor wrap="truncate-end">{row === '' ? ' ' : row}</Text>
+                  {row.kind === 'head' ? (
+                    <Box flexDirection="row" flexGrow={1} justifyContent="space-between">
+                      <Box flexShrink={1}>
+                        <Button key={`summary-${row.id}`} plain dimColor onPress={() => void update($, conciseAtom, c => toggleEntry(c, row.id))}>
+                          <Text bold>{row.label}</Text>
+                        </Button>
+                      </Box>
+                      <Box flexShrink={0} marginLeft={1}>
+                        <Text dimColor>{row.age}</Text>
+                      </Box>
+                    </Box>
+                  ) : (
+                    <Text dimColor wrap="truncate-end">{row.text === '' ? ' ' : row.text}</Text>
+                  )}
                 </Box>
                 {copy.bar[i] !== undefined && <Text dimColor={copy.bar[i] === '│'}>{copy.bar[i]}</Text>}
               </Box>
