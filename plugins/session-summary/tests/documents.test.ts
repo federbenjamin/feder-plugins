@@ -1,7 +1,7 @@
 import { expect, test } from 'claude-code/testing'
 import type { Doc } from '../types'
 import { FILE_CANDIDATE_CHECKS_MAX, FILE_CANDIDATES_MAX, RECENT_FILE_MS } from '../hooks/config.ts'
-import { filesScrollbar, absolutePath, capturedDocuments, clampOffset, documentsFrom, fileCandidates, fileLabel, fileRow, filesHeader, isDocumentPath, isOverFiles, isRecentFile, judgeablePaths, judgedDocuments, mergeDocuments, pathsIn, shownDocuments } from '../hooks/documents.ts'
+import { hasNewTop, filesScrollbar, absolutePath, capturedDocuments, clampOffset, documentsFrom, fileCandidates, fileLabel, fileRow, filesHeader, isDocumentPath, isOverFiles, isRecentFile, judgeablePaths, judgedDocuments, mergeDocuments, pathsIn, shownDocuments } from '../hooks/documents.ts'
 import { estimatedRows, paneHeight } from '../hooks/summary.ts'
 
 const CWD = '/repo'
@@ -308,4 +308,13 @@ test('the flag survives a capture and a resume, and a capture from before it rea
 
 test('a truncated label in a message is not a path', () => {
   expect(pathsIn('See …/build/ship.md and …ssion-summary/plan.md, then /tmp/a/real.md')).toEqual(['/tmp/a/real.md'])
+})
+
+test('a new file on top, or the top file touched again, is a new top; an unchanged top or an empty list is not', () => {
+  const doc = { path: '/a.md', touchedAt: 1, touches: 1 }
+  expect(hasNewTop(doc, { ...doc, path: '/b.md' })).toBe(true)
+  expect(hasNewTop(doc, { ...doc, touchedAt: 2 })).toBe(true)
+  expect(hasNewTop(undefined, doc)).toBe(true)
+  expect(hasNewTop(doc, { ...doc, touches: 2 })).toBe(false)
+  expect(hasNewTop(doc, undefined)).toBe(false)
 })
