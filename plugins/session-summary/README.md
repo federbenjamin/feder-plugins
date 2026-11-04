@@ -58,8 +58,8 @@ Claude Code decides where a pane goes. In the fullscreen layout (`"tui": "fullsc
 | `/summarize off` | Stops adding summaries and keeps the ones in the pane. A call already running still finishes |
 
 - **What it reads.** The agent's newest message with text, whole; tool calls, tool results and cache-keepalive's ping answers are left out. Mid-turn, that is the newest text so far.
-- **What it writes.** Sonnet at low effort rewrites the response far more concisely: it removes what you don't need to understand the outcome or decide what to do next, leads with the outcome, shrinks each relevant section to one line, and puts each question last with one line per option and the recommendation first. On four real messages the result ran at a median of 47% of the original. It is a rewrite, so it can drop a reason or a downside, add a recommendation the agent did not make, or, on a short message, answer the message instead of shortening it: go back to the original for anything you are about to act on. Bold and heading marks are removed for the pane. A reply that reaches the token limit is marked as cut off.
-- **Out of date.** The newest summary's header reads `LAST RESPONSE`. Once the agent has finished another response it reads `1 RESPONSE OLD`, then `2 RESPONSES OLD`. Running `/summarize` again on the same response replaces its summary.
+- **What it writes.** Sonnet at low effort rewrites the response far more concisely: it removes what you don't need to understand the outcome or decide what to do next, leads with the outcome, shrinks each relevant section to one line, and puts each question last with one line per option and the recommendation first. On four real messages the result ran at a median of 47% of the original. It is a rewrite, so it can drop a reason or a downside or add a recommendation the agent did not make: go back to the original for anything you are about to act on. Bold and heading marks are removed for the pane. A reply that reaches the token limit is marked as cut off.
+- **Out of date.** The newest summary's header reads `LAST RESPONSE`. Once the agent has finished another response it reads `1 RESPONSE OLD`, then `2 RESPONSES OLD`. Running `/summarize` again on the same response replaces its summary once the new one is ready; if the new call fails, the old one stays. A summary made while a turn runs holds the text so far, so it reads `1 RESPONSE OLD` when that turn ends.
 - **Collapsing.** A new summary collapses the older ones to their header lines, and all of them stay listed. Click a header to open or collapse it (`▾` open, `▸` collapsed).
 - **How long they stay.** Until `/clear`, or until the list passes 200, when the oldest drop. `/clear` keeps `every` on if it was on. They are not restored in a resumed session, and `/summarize` runs even when `/session-summary off` has stopped the timer's calls.
 - **Scrolling.** When the list is taller than the room left, the wheel over it scrolls it alone, with a scrollbar, and so do Page Up and Page Down once you have clicked in the pane. The wheel over `FILES` scrolls the files. The arrow keys and the wheel over the texts above do nothing. The list keeps at least 8 rows: with less room than that, the texts above are cut from the bottom, and `FILES` stays on screen.
@@ -116,7 +116,7 @@ Every call, and every tick that skips one, appends one line to `~/.claude/stopst
 
 A call the timer did not start ends its line with its trigger: `manual` for `/session-summary now`, `first` for the first-prompt call, `prompt` for a later prompt's call, `summarize` for `/summarize` and `summarize-every` for a response under `/summarize every`, whose lines read `variant=concise`.
 
-`in` and `cached` are the uncached and cache-read input tokens; `usd` is priced at haiku's rates per token category.
+`in` and `cached` are the uncached and cache-read input tokens; `usd` is priced per token category at haiku's rates, and at sonnet's on `variant=concise` lines.
 
 | Outcome | Meaning |
 | --- | --- |
@@ -129,7 +129,7 @@ A call the timer did not start ends its line with its trigger: `manual` for `/se
 | `skip-inflight` | A call was due while one of the same turn was still running or waiting for the turn before's, or the turn ended while its call waited; no call |
 | `log-missing` | Source `session-log` with no log file for the session; that call read `messages` |
 | `api-error` | The call failed; the reason names why |
-| `aborted` | The call was cut: its 20-second limit, or the session ended |
+| `aborted` | The call was cut: its 20-second limit, or the session ended. On `/summarize`'s lines: its 120-second limit, a newer run on the same response, or `/clear` |
 | `turn-id-mismatch` | A main turn completed under another id than the running one's, which stays running; the reason names both ids; no call |
 | `documents-failed` | The file list or the shares file could not be updated; the next tick tries again |
 | `links-on` | `/session-summary links on` finished; the reason names the two ports |

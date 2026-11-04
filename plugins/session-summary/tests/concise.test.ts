@@ -272,11 +272,18 @@ test('addEntry puts the new summary first and open, and collapses every older on
   expect(c2.entries.map(e => [e.id, e.isOpen])).toEqual([[6, true], [5, false]])
 })
 
-test('addEntry for the same response replaces the earlier entry instead of stacking', () => {
-  const c1 = addEntry({ ...EMPTY_CONCISE, responses: 3 }, 'ready', 'first', 1)
-  const c2 = addEntry(c1, 'working', 'second', 2)
-  expect(c2.entries).toHaveLength(1)
-  expect(c2.entries[0]).toMatchObject({ id: 2, text: 'second' })
+test('a re-run on the same response replaces a finished summary only when it is ready, and an unfinished one at once', () => {
+  const first = addEntry({ ...EMPTY_CONCISE, responses: 3 }, 'ready', 'first', 1)
+  const running = addEntry(first, 'working', 'second', 2)
+  expect(running.entries.map(e => e.text)).toEqual(['second', 'first'])
+  expect(running.entries[1]!.isOpen).toBe(false)
+
+  expect(settleEntry(running, 2, 'ready', 'done', 3).entries.map(e => e.text)).toEqual(['done'])
+  const failed = settleEntry(running, 2, 'failed', 'broke', 3)
+  expect(failed.entries.map(e => e.text)).toEqual(['broke', 'first'])
+
+  expect(addEntry(running, 'working', 'third', 4).entries.map(e => e.text)).toEqual(['third', 'first'])
+  expect(addEntry(failed, 'working', 'third', 4).entries.map(e => e.text)).toEqual(['third', 'first'])
 })
 
 test('a summary with no newer one stays open however stale', () => {
@@ -295,7 +302,7 @@ test('addEntry drops the oldest past CONCISE_ENTRIES_MAX', () => {
 })
 
 test('settleEntry writes only the named entry, and nothing when it is gone', () => {
-  const c: Concise = { ...EMPTY_CONCISE, entries: [entry({ id: 2, status: 'working', text: 'w' }), entry({ id: 1, text: 'keep' })] }
+  const c: Concise = { ...EMPTY_CONCISE, entries: [entry({ id: 2, status: 'working', text: 'w', responses: 1 }), entry({ id: 1, text: 'keep' })] }
   const settled = settleEntry(c, 2, 'ready', 'done', 55)
   expect(settled.entries[0]).toMatchObject({ id: 2, status: 'ready', text: 'done', at: 55, isOpen: true })
   expect(settled.entries[1]).toEqual(c.entries[1])
@@ -327,6 +334,10 @@ test('a wheel step moves the section by its rows in either direction', () => {
 test('a page key moves by the section\'s rows, not the pane\'s', () => {
   expect(scrolledOffset({ offset: 0, by: 20, bodyRows: 20, window: { rows: 12, maxOffset: 40 } })).toBe(12)
   expect(scrolledOffset({ offset: 30, by: -20, bodyRows: 20, window: { rows: 12, maxOffset: 40 } })).toBe(18)
+})
+
+test('after the list shrinks, a tick moves from where the window is drawn, not from the stored offset', () => {
+  expect(scrolledOffset({ offset: 40, by: -1, bodyRows: 20, window: WINDOW })).toBe(WINDOW.maxOffset - 1)
 })
 
 test('scrolling clamps at the first row and at the last window', () => {

@@ -165,10 +165,6 @@ export async function clearDocuments($: EngineInterface): Promise<void> {
   await update($, filesOffsetAtom, () => 0)
 }
 
-export async function readConcise($: EngineInterface): Promise<Concise> {
-  return read($, conciseAtom)
-}
-
 export async function writeConcise($: EngineInterface, change: (c: Concise) => Concise): Promise<Concise> {
   return update($, conciseAtom, change)
 }

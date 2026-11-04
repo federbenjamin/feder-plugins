@@ -21,16 +21,20 @@ export function conciseAction(args: string): ConciseAction {
   return parseCommand(args, GRAMMAR)
 }
 
-// A new summary is the open one and every older one collapses. One of the same response replaces it.
+// A new summary is the open one and every older one collapses. An unfinished or failed one of the same
+// response gives way at once; a finished one stays until the new one is ready, so a failed re-run costs nothing.
 export function addEntry(c: Concise, status: ConciseStatus, text: string, at: number): Concise {
-  const older = c.entries.filter(e => e.responses !== c.responses).map(e => ({ ...e, isOpen: false }))
+  const older = c.entries.filter(e => e.responses !== c.responses || e.status === 'ready').map(e => ({ ...e, isOpen: false }))
   const entry: ConciseEntry = { id: c.nextId, status, text, at, responses: c.responses, isOpen: true }
   return { ...c, entries: [entry, ...older].slice(0, CONCISE_ENTRIES_MAX), nextId: c.nextId + 1, offset: 0 }
 }
 
 // A run whose entry was replaced or cleared finds nothing to write.
 export function settleEntry(c: Concise, id: number, status: ConciseStatus, text: string, at: number): Concise {
-  return { ...c, entries: c.entries.map(e => (e.id === id ? { ...e, status, text, at } : e)) }
+  const settled = c.entries.find(e => e.id === id)
+  if (settled === undefined) return c
+  const kept = status === 'ready' ? c.entries.filter(e => e.id === id || e.responses !== settled.responses) : c.entries
+  return { ...c, entries: kept.map(e => (e.id === id ? { ...e, status, text, at } : e)) }
 }
 
 export function toggleEntry(c: Concise, id: number): Concise {
@@ -189,5 +193,7 @@ export function conciseView(p: { concise: Concise; now: number; columns: number;
 // A page key asks for the pane's rows; the section's window is what a page means here.
 export function scrolledOffset(s: { offset: number; by: number; bodyRows: number; window: { rows: number; maxOffset: number } }): number {
   const by = Math.abs(s.by) === s.bodyRows ? Math.sign(s.by) * s.window.rows : s.by
-  return Math.min(Math.max(s.offset + by, 0), s.window.maxOffset)
+  // The list may have shrunk since the offset was stored: move from where the window is drawn.
+  const from = Math.min(Math.max(s.offset, 0), s.window.maxOffset)
+  return Math.min(Math.max(from + by, 0), s.window.maxOffset)
 }

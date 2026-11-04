@@ -3,14 +3,14 @@ import { firingReason } from './call.ts'
 import type { Trigger } from './call.ts'
 import { addEntry, conciseAction, conciseRequest, conciseResult, EMPTY_CONCISE, lastResponse, settleEntry } from './concise.ts'
 import { CONCISE_COMMAND, CONCISE_REQUEST, CONCISE_USAGE, CONCISE_VARIANT, PLUGIN } from './config.ts'
-import { openPane, readConcise, writeConcise } from './pane.tsx'
+import { openPane, writeConcise } from './pane.tsx'
 import { PRICES, usageUsd } from './shared/pricing.ts'
 import { record } from './shared/record.ts'
 
 // /summarize: shorter copies of the agent's responses, listed in the pane's section above FILES. A
 // run prints no copy, because a command's printed text is recorded for the model and the point is
-// to keep the copies out of the context. A newer run on the same response cuts the one before it;
-// a /clear empties the list.
+// to keep the copies out of the context. A newer run on the same response cuts an unfinished one
+// before it; a /clear empties the list.
 
 export type ConciseState = {
   isInteractive: boolean
@@ -31,11 +31,12 @@ async function summarize($: EngineInterface, state: ConciseState, trigger: Extra
   try {
     const startedAt = await $.clock.now()
     const response = lastResponse(await $.session.messages())
-    const before = await readConcise($)
-    for (const entry of before.entries) {
-      if (entry.responses === before.responses) state.runs.get(entry.id)?.abort()
+    const { entries } = await writeConcise($, c => addEntry(c, 'working', 'Shortening the last response.', startedAt))
+    id = entries[0]!.id
+    // A run whose entry just gave way has nowhere to write.
+    for (const [other, run] of state.runs) {
+      if (!entries.some(e => e.id === other)) run.abort()
     }
-    id = (await writeConcise($, c => addEntry(c, 'working', 'Shortening the last response.', startedAt))).entries[0]!.id
     if (response === '') {
       await settle('failed', 'The agent has no response to shorten yet.', startedAt)
       await record($, PLUGIN, 'skip-no-response', firingReason(reason))
