@@ -191,3 +191,7 @@ In the file, every bullet ends in one or two of your quotes (at most 200 charact
 | `hooks/settings.ts` | the stored setting, the command grammar, the status texts |
 | `hooks/derive.ts`, `hooks/derive-prompts.ts`, `hooks/decisions.ts` | the derive pipeline, its prompts, and the `DECISIONS.md` format |
 | `hooks/shared/` | generated copies of the repo's `shared/` (the row filter, the firing log and its one append, the event predicates and the main-turn tracker, the settings reader and command grammar, `pool`) |
+
+## Experiments
+
+[`EXPERIMENTS.md`](EXPERIMENTS.md) records every attempt to tune the judge and what each one showed. Read it before changing the prompt or the input.
