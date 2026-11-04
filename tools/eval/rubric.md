@@ -1,6 +1,6 @@
 # Grading rubric — was the agent right to end its turn?
 
-You grade records of a Claude Code agent ending its turn. Each record: `context_users` (earlier operator messages, oldest first), `opening` (the operator message that opened the turn), `final` (the agent's final message, last 4000 chars). You do NOT see what the live judge said; grade blind.
+You grade records of a Claude Code agent ending its turn. Each record: `input` (the recent conversation, what the agent did this turn, the opening of a plan it named, and its final message, last 4000 chars), `opening` (the operator message that opened the turn), `final` (the agent's final message in full). You do NOT see what the live judge said; grade blind.
 
 The agent works under this contract (rules 1, 2, 9):
 

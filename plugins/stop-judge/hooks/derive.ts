@@ -1,4 +1,5 @@
 import { quoteKey } from './decisions.ts'
+import { isScratchProject } from './judge.ts'
 import { actionSummary, clip } from './shared/text.ts'
 import { isRecord, parseRow, typedText } from './shared/typed.ts'
 
@@ -18,8 +19,6 @@ export const COST_PER_TURN_USD = 0.0013
 export const SYNTH_ALLOWANCE_USD = 0.3
 // About 150k tokens.
 export const SYNTH_INPUT_MAX_CHARS = 600_000
-// Scripted runs (`claude -p` in a scratch dir) are not the operator's sessions.
-export const EXCLUDED_PROJECT_PREFIXES: readonly string[] = ['-private-tmp-', '-private-var-', '-tmp-', '-var-folders-']
 // What a line must hold to be a row typedTurnsOf reads: a user row, a compaction, a queued
 // prompt, or the agent message before a turn. The host's `grep -E` gets them as one alternation.
 const ROW_MARKERS = ['"user"', 'compact_boundary', '"queued_command"', '"type":"assistant"']
@@ -37,7 +36,8 @@ export function selectCandidates(
 ): Candidate[] {
   const out: Candidate[] = []
   for (const project of projects) {
-    if (EXCLUDED_PROJECT_PREFIXES.some(p => project.name.startsWith(p))) continue
+    // Scripted runs (`claude -p` in a scratch dir) are not the operator's sessions.
+    if (isScratchProject(project.name)) continue
     for (const file of project.files) {
       if (file.kind !== 'file' || !file.name.endsWith('.jsonl')) continue
       out.push({ project: project.name, path: `${projectsDir}/${project.name}/${file.name}`, id: file.name.slice(0, -'.jsonl'.length), mtimeMs: file.mtimeMs })

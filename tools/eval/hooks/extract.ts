@@ -1,12 +1,14 @@
-import { assistantText, framingAndPrior, minutesFact, parseRows, splitTurn, TAIL_BYTES } from './judge/judge.ts'
-import type { MinutesGap } from './judge/judge.ts'
+import { TAIL_BYTES } from './judge/config.ts'
+import { buildInput, readTurn } from './judge/input.ts'
+import type { Turn } from './judge/input.ts'
+import { assistantText, splitTurn } from './judge/judge.ts'
 import { parseFiringLine } from './judge/shared/firing.ts'
 import type { FiringLine } from './judge/shared/firing.ts'
-import { isRecord, parseRow, typedText } from './judge/shared/typed.ts'
+import { isRecord, parseRow } from './judge/shared/typed.ts'
 import type { TranscriptRow } from './judge/shared/typed.ts'
 
-// Records of judged stops: what the judge saw at each firing, rebuilt from the session's
-// transcript through the judge's own parser. Also the key the run reads them back from.
+// Records of judged stops: the request the judge builds at each firing, rebuilt from the session's
+// transcript through the judge's own builder. Also the key the run reads them back from.
 
 export type EvalRecord = {
   id: string
@@ -16,15 +18,12 @@ export type EvalRecord = {
   judge_reason: string
   final: string | null
   opening: string
-  context_users: string[]
+  operator_text: string
+  input: string
 }
 
+// `stop-lowconf` is in logs written before the fixed-questions judge: a turn that was judged.
 export const JUDGED: readonly string[] = ['continue', 'stop', 'stop-lowconf']
-
-// Pre-filter for `grep -a -E`: the rows splitTurn and typedText read. A tool result is a user row
-// neither ever reads, and the bulk of a long transcript.
-export const ROW_GREP = '"type":"(user|assistant)"|"queued_command"'
-const TOOL_RESULT = '"type":"tool_result"'
 
 // Within this of the firing time an assistant row is the one the judge read (the log line is
 // written after the model call).
@@ -32,19 +31,9 @@ const FIRING_LAG_MS = 2000
 
 const timeOf = (row: TranscriptRow): number => (typeof row.timestamp === 'string' ? Date.parse(row.timestamp) : Number.NaN)
 
-export function transcriptRows(grepped: string): TranscriptRow[] {
-  return parseRows(
-    grepped
-      .split('\n')
-      .filter(line => !line.includes(TOOL_RESULT))
-      .join('\n'),
-  )
-}
-
 // One transcript line as the judge's tail would hold it: its bytes in the file, its row's time,
 // whether it is an agent row with text (the judge reads right after the turn's last one), and the
-// row cut to what minutesFact reads (whole when the person typed it, else its time). A null row
-// is a line parseRow drops (cut, not an object, a sidechain row).
+// row. A null row is a line parseRow drops (cut, not an object, a sidechain row).
 export type LineMark = { start: number; end: number; at: number; isAnswer: boolean; row: TranscriptRow | null }
 
 function utf8Length(text: string): number {
@@ -71,9 +60,8 @@ export function pushMark(marks: LineMark[], grepLine: string): void {
   const prev = marks.at(-1)
   if (prev) prev.end = start
   const row = parseRow(text)
-  const kept = row === null || typedText(row, { sdk: true }) !== null ? row : 'timestamp' in row ? { timestamp: row.timestamp } : {}
   const isAnswer = row !== null && assistantText(row).trim() !== ''
-  marks.push({ start, end: start + utf8Length(text) + 1, at: row === null ? lineTime(text) : timeOf(row), isAnswer, row: kept })
+  marks.push({ start, end: start + utf8Length(text) + 1, at: row === null ? lineTime(text) : timeOf(row), isAnswer, row })
 }
 
 // The time of a line parseRow drops: a sidechain row was still in the file the judge read.
@@ -87,14 +75,14 @@ function lineTime(text: string): number {
 }
 
 // Where the rebuilt file ends. `answer`: at the turn's last agent row with text, the moment the
-// judge read; its clock is that row's time. `stamp`: no such row, so at the firing log's stamp,
-// which lies after the read by the model call and any rows written meanwhile.
+// judge read. `stamp`: no such row, so at the firing log's stamp, which lies after the read by the
+// model call and any rows written meanwhile.
 export type Cut = 'answer' | 'stamp'
 
-// The rows the judge's `tail -c tailBytes` read at the firing logged at `ts`, and its clock then:
-// the file ended after the turn's last agent row (else after the last line timed before `ts`),
-// and the line the tail's first byte cut into does not parse. null with no time.
-export function tailAt(marks: readonly LineMark[], ts: string | null, tailBytes: number = TAIL_BYTES): { rows: TranscriptRow[]; now: number; cut: Cut } | null {
+// The rows the judge's `tail -c tailBytes` read at the firing logged at `ts`: the file ended after
+// the turn's last agent row (else after the last line timed before `ts`), and the line the tail's
+// first byte cut into does not parse. null with no time.
+export function tailAt(marks: readonly LineMark[], ts: string | null, tailBytes: number = TAIL_BYTES): { rows: TranscriptRow[]; cut: Cut } | null {
   const at = ts === null ? Number.NaN : Date.parse(ts)
   if (Number.isNaN(at)) return null
   let answer = -1
@@ -106,22 +94,14 @@ export function tailAt(marks: readonly LineMark[], ts: string | null, tailBytes:
   }
   const cut: Cut = answer >= 0 ? 'answer' : 'stamp'
   const last = answer >= 0 ? answer : before
-  const now = answer >= 0 ? marks[answer]!.at : at
-  if (last < 0) return { rows: [], now, cut }
+  if (last < 0) return { rows: [], cut }
   const from = Math.max(0, marks[last]!.end - tailBytes)
   const rows: TranscriptRow[] = []
   for (let i = 0; i <= last; i++) {
     const m = marks[i]!
     if (m.start >= from && m.row !== null) rows.push(m.row)
   }
-  return { rows, now, cut }
-}
-
-// The minutes fact the judge sent at the firing logged at `ts`: minutesFact over the tail it
-// read then, at its clock then, lower-bound flag included; with where the rebuild cut the file.
-export function tailFact(marks: readonly LineMark[], ts: string | null, tailBytes: number = TAIL_BYTES): { gap: MinutesGap | null; cut: Cut } | null {
-  const tail = tailAt(marks, ts, tailBytes)
-  return tail === null ? null : { gap: minutesFact(tail.rows, new Date(tail.now)), cut: tail.cut }
+  return { rows, cut }
 }
 
 // The judged lines of a firing log; the id is the line's index, as the graded set's ids are.
@@ -132,19 +112,20 @@ export function firingsOf(log: string): { id: string; firing: FiringLine }[] {
   })
 }
 
-// `rows` null: the session's transcript is gone; the record keeps its log fields with no final.
-export function extractRecord(id: string, firing: FiringLine, rows: readonly TranscriptRow[] | null): EvalRecord {
-  const base = { id, ts: firing.at, session: firing.session, outcome: firing.outcome, judge_reason: firing.reason }
-  if (rows === null) return { ...base, final: null, opening: '', context_users: [] }
-  const until = Date.parse(firing.at) + FIRING_LAG_MS
-  const { final, opening, prior } = splitTurn(
-    rows.filter(row => timeOf(row) <= until),
-    undefined,
-  )
-  return { ...base, final: final === '' ? null : final, opening, context_users: final === '' ? [] : framingAndPrior(prior) }
+// What the judge read at a firing: its turn and opening; null with no transcript or no final.
+export function turnAtFiring(firing: FiringLine, marks: readonly LineMark[] | null): { turn: Turn; opening: string } | null {
+  const rows = marks === null ? null : tailAt(marks, firing.at)?.rows
+  if (!rows) return null
+  const { final, opening } = splitTurn(rows, undefined)
+  return final === '' ? null : { turn: readTurn(rows, final), opening }
 }
 
-const strings = (v: unknown): string[] => (Array.isArray(v) ? v.filter((s): s is string => typeof s === 'string') : [])
+// `at` null: the transcript is gone or held no final; the record keeps its log fields with no final.
+export function extractRecord(id: string, firing: FiringLine, at: { turn: Turn; opening: string } | null, plan: { path: string; body: string } | null): EvalRecord {
+  const base = { id, ts: firing.at, session: firing.session, outcome: firing.outcome, judge_reason: firing.reason }
+  if (at === null) return { ...base, final: null, opening: '', operator_text: '', input: '' }
+  return { ...base, final: at.turn.final, opening: at.opening, operator_text: at.turn.operatorText, input: buildInput(at.turn, plan) }
+}
 
 function recordOf(v: unknown): EvalRecord | null {
   if (!isRecord(v) || typeof v.id !== 'string' || typeof v.outcome !== 'string') return null
@@ -157,7 +138,8 @@ function recordOf(v: unknown): EvalRecord | null {
     judge_reason: text(v.judge_reason) ?? '',
     final: text(v.final),
     opening: text(v.opening) ?? '',
-    context_users: strings(v.context_users),
+    operator_text: text(v.operator_text) ?? '',
+    input: text(v.input) ?? '',
   }
 }
 

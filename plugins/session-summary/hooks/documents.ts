@@ -214,6 +214,10 @@ export function documentsFrom(files: unknown, at: number): Doc[] {
   })
 }
 
+export function hasNewTop(before: Doc | undefined, after: Doc | undefined): boolean {
+  return after !== undefined && (after.path !== before?.path || after.touchedAt !== before?.touchedAt)
+}
+
 export function clampOffset(offset: number, total: number): number {
   return Math.max(0, Math.min(offset, total - FILES_ROWS))
 }

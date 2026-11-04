@@ -17,6 +17,7 @@ test('only newest top-level transcript files from non-scratch projects are candi
         ],
       },
       { name: '-tmp-reader-run', files: [{ name: 'ignored.jsonl', kind: 'file', mtimeMs: 99 }] },
+      { name: '-private-tmp', files: [{ name: 'started-in-tmp-itself.jsonl', kind: 'file', mtimeMs: 97 }] },
       { name: '-private-var-scratch', files: [{ name: 'also-ignored.jsonl', kind: 'file', mtimeMs: 98 }] },
     ],
     '/projects',
