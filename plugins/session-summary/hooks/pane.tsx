@@ -2,7 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 import type { Doc, Summary } from '../types'
 import { DOCUMENTS_SHAPE, PANE_BACKGROUND, PANE_TITLE, PLUGIN, SETTINGS_KEY, SHAPE } from './config.ts'
-import { filesScrollbar, clampOffset, fileRow, filesHeader, isOverFiles, shownDocuments } from './documents.ts'
+import { filesScrollbar, clampOffset, fileRow, filesHeader, isOverFiles, isRecentFile, shownDocuments } from './documents.ts'
 import { settingsFrom } from './settings.ts'
 import { EMPTY_SUMMARY, estimatedRows, paneHeight, paneView } from './summary.ts'
 
@@ -65,11 +65,14 @@ export const registerPane: Register = on => {
             <Text dimColor bold>{filesHeader(offset, docs.length)}</Text>
             {rows.map((row, i) => (
               <Box flexDirection="row" columnGap={1}>
+                <Box width={1} flexShrink={0}>
+                  {isRecentFile(shown[i]!, now) && <Text color="success">•</Text>}
+                </Box>
                 <Box flexGrow={1} flexShrink={1}>
                   {row.href === undefined ? (
-                    <Text dimColor wrap="truncate-start">{row.label}</Text>
+                    <Text dimColor strikethrough={row.isSuperseded} wrap="truncate-start">{row.label}</Text>
                   ) : (
-                    <Text wrap="truncate-start"><Link href={row.href}>{row.label}</Link></Text>
+                    <Text dimColor={row.isSuperseded} strikethrough={row.isSuperseded} wrap="truncate-start"><Link href={row.href}>{row.label}</Link></Text>
                   )}
                 </Box>
                 {bar[i] !== undefined && <Text dimColor={bar[i] === '│'}>{bar[i]}</Text>}

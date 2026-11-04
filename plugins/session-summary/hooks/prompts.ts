@@ -36,9 +36,13 @@ const REST = [
   'Answer in exactly this form:\nTASK: same | new\nTITLE: <text>\nLAST PROMPT: <text>\nSO FAR: <text>\nNOW: <text>',
 ]
 
+const FILES = `Also answer two more lines at the end. The message lists "File candidates": paths seen in this session's writes, edits, commands and messages.
+ADD: from the candidates only, the files the person would want to open and read themselves: a plan, a report, a brief, a design doc, a diagram, a result they were pointed to. Not source code, config, tests, logs, an agent's own notes, or a path given only as an example. Comma-separated, or none.
+SUPERSEDED: from "Current file list" only, the files a newer file has replaced, or that are no longer current, like a draft that shipped or a plan a later one replaced. Comma-separated, or none. A file stays useful unless something clearly replaced it.`
+
 function systemText(stability: string): string {
   const soFar = [SO_FAR, stability, SO_FAR_NEW, SO_FAR_END].filter(Boolean).join(' ')
-  return [INTRO, TASK, TITLE, LAST_PROMPT, soFar, ...REST].join('\n\n')
+  return [INTRO, TASK, TITLE, LAST_PROMPT, soFar, ...REST, FILES].join('\n\n')
 }
 
 export const VARIANTS: Readonly<Record<string, string>> = Object.freeze({

@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 import { DEFAULT_VARIANT, VARIANTS } from '../hooks/prompts.ts'
-import { buildRequest, keptLastPrompt, newestPrompt, parseReply, seedDocuments, seedFromCapture, withQueued } from '../hooks/summary.ts'
+import { buildRequest, keptLastPrompt, newestPrompt, parseFileVerdict, parseReply, seedDocuments, seedFromCapture, withQueued } from '../hooks/summary.ts'
 
 const previous = { title: 'Boundary tests', lastPrompt: 'You asked for boundary tests.', soFar: 'Finished the setup.', now: 'Writing boundary tests.' }
 
@@ -13,6 +13,9 @@ test('an unknown variant falls back to the default system text while preserving 
     input: 'tail of the session log',
     status: 'ended',
     isTitleProvisional: true,
+    candidates: [],
+    superseded: new Set(),
+    judgeable: [],
   })
 
   expect(request.system).toBe(VARIANTS[DEFAULT_VARIANT])
@@ -20,9 +23,38 @@ test('an unknown variant falls back to the default system text while preserving 
   expect(request.prompt).toContain('Previous TITLE: Boundary tests (provisional: written from the first prompt alone)\n')
   expect(request.prompt).toContain('Previous LAST PROMPT: You asked for boundary tests.\nPrevious SO FAR: Finished the setup.')
   expect(request.prompt).toContain('Previous NOW: Writing boundary tests.')
-  expect(request.prompt).not.toMatch(/FILES|Candidate/)
-  expect(request.system).not.toMatch(/FILES|candidate/)
-  expect(request.prompt).toContain("Newest prompt:\nadd the edge case too\n\nThe session's own log (tail):\ntail of the session log")
+  expect(request.prompt).toContain("Newest prompt:\nadd the edge case too\n\nThe session's own log (tail):\ntail of the session log\n\nFile candidates:\n(none)\n\nCurrent file list:\n(none)")
+})
+
+const base = { variant: 'edit', source: 'messages' as const, previous, newestPrompt: 'go', input: 'x', status: 'running' as const, isTitleProvisional: false }
+
+test('the request lists the candidates, marking a superseded one, and the file list the reply may judge', () => {
+  const { prompt } = buildRequest({ ...base, candidates: ['/repo/a.md', '/repo/old.md'], superseded: new Set(['/repo/old.md']), judgeable: ['/repo/b.md', '/repo/c.md'] })
+  expect(prompt.endsWith('File candidates:\n- /repo/a.md\n- /repo/old.md (superseded)\n\nCurrent file list:\n- /repo/b.md\n- /repo/c.md')).toBe(true)
+})
+
+test('every variant carries the ADD and SUPERSEDED rule, with no narrowing, after the four texts', () => {
+  const rule = `Also answer two more lines at the end. The message lists "File candidates": paths seen in this session's writes, edits, commands and messages.
+ADD: from the candidates only, the files the person would want to open and read themselves: a plan, a report, a brief, a design doc, a diagram, a result they were pointed to. Not source code, config, tests, logs, an agent's own notes, or a path given only as an example. Comma-separated, or none.
+SUPERSEDED: from "Current file list" only, the files a newer file has replaced, or that are no longer current, like a draft that shipped or a plan a later one replaced. Comma-separated, or none. A file stays useful unless something clearly replaced it.`
+  for (const system of Object.values(VARIANTS)) expect(system.endsWith(rule)).toBe(true)
+  for (const system of Object.values(VARIANTS)) expect(system).not.toMatch(/README|GLOSSARY/)
+})
+
+const allowed = { candidates: ['/repo/a.md', '/repo/b c.md', '/repo/d.md'], judgeable: ['/repo/old.md', '/repo/older.md'] }
+
+test('ADD and SUPERSEDED read their comma-separated paths, each only from its own set', () => {
+  expect(parseFileVerdict('NOW: x\nADD: /repo/a.md, /repo/b c.md\nSUPERSEDED: /repo/older.md', allowed)).toEqual({ add: ['/repo/a.md', '/repo/b c.md'], superseded: ['/repo/older.md'] })
+  expect(parseFileVerdict('ADD: /repo/old.md, /invented.md, a.md\nSUPERSEDED: /repo/a.md, /invented.md', allowed)).toEqual({ add: [], superseded: [] })
+})
+
+test('none, a missing line, an empty line and a repeat change nothing; wrapping quotes and Windows line ends are read through', () => {
+  const nothing = { add: [], superseded: [] }
+  expect(parseFileVerdict('ADD: none\nSUPERSEDED: None', allowed)).toEqual(nothing)
+  expect(parseFileVerdict('TITLE: a\nNOW: b', allowed)).toEqual(nothing)
+  expect(parseFileVerdict('ADD:\nSUPERSEDED: /repo/old.md', allowed)).toEqual({ add: [], superseded: ['/repo/old.md'] })
+  expect(parseFileVerdict('ADD: /repo/a.md, /repo/a.md\nNOW: b', allowed)).toEqual({ add: ['/repo/a.md'], superseded: [] })
+  expect(parseFileVerdict('ADD: `/repo/a.md`, "/repo/d.md"\r\nSUPERSEDED: /repo/old.md\r\n', allowed)).toEqual({ add: ['/repo/a.md', '/repo/d.md'], superseded: ['/repo/old.md'] })
 })
 
 test('a reply is complete at its four lines, and a FILES line from an older form changes nothing', () => {
@@ -80,6 +112,7 @@ test('a capture seeds the documents it held, and one from before the list its ba
   expect(seedDocuments(JSON.stringify({ soFar: 'x', now: 'y', at, files: [doc, 7, { touches: 1 }] }))).toEqual([doc])
   expect(seedDocuments(JSON.stringify({ soFar: 'x', now: 'y', at, files: ['/repo/old.md', 3] }))).toEqual([{ path: '/repo/old.md', touchedAt: Date.parse(at), touches: 0 }])
   expect(seedDocuments(JSON.stringify({ soFar: 'x', now: 'y', at }))).toEqual([])
+  expect(seedDocuments(JSON.stringify({ soFar: 'x', now: 'y', at, files: [{ ...doc, isSuperseded: true }] }))).toEqual([{ ...doc, isSuperseded: true }])
   expect(seedDocuments('not json')).toEqual([])
 })
 

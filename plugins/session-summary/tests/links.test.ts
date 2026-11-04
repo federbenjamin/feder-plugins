@@ -75,6 +75,9 @@ test('rows take their entry from the file and lose one the file no longer has', 
   const doc = { path: '/a.md', touchedAt: 1, touches: 1 }
   const other = { path: '/b.md', touchedAt: 1, touches: 1, share: { token: 'old', expiresAt: 3 } }
   expect(adoptShares([doc, other], [{ token: 't', path: '/a.md', expiresAt: 5 }])).toEqual([{ ...doc, share: { token: 't', expiresAt: 5 } }, { path: '/b.md', touchedAt: 1, touches: 1 }])
+  const superseded = { ...doc, isSuperseded: true }
+  expect(adoptShares([superseded], [{ token: 't', path: '/a.md', expiresAt: 5 }])).toEqual([{ ...superseded, share: { token: 't', expiresAt: 5 } }])
+  expect(adoptShares([superseded], [])).toEqual([superseded])
 })
 
 test('a link is the base, the token and the encoded basename', () => {

@@ -3,7 +3,7 @@ import type { Source, SummaryStatus } from '../types'
 import { addCall, firingReason, replyResult } from './call.ts'
 import type { CallOutcome, Trigger } from './call.ts'
 import { MESSAGE_CHARS, PLUGIN, QUEUED_MAX, SETTINGS_KEY, SUMMARY_REQUEST, TICK_MS, WINDOW_CHARS } from './config.ts'
-import { capturedDocuments, mergeDocuments } from './documents.ts'
+import { capturedDocuments, fileCandidates, judgedDocuments, judgeablePaths, mergeDocuments } from './documents.ts'
 import { linksOff, linksOn, syncShares } from './links-io.ts'
 import { clearDocuments, openPane, readDocuments, readSummary, registerPane, writeDocuments, writeSummary } from './pane.tsx'
 import { DEFAULT_VARIANT } from './prompts.ts'
@@ -19,7 +19,8 @@ import type { Previous, Queued } from './summary.ts'
 
 // Keeps short texts about this session (title, so far, now) and the list of its documents in a
 // pane beside the chat. A haiku call writes the texts firstSeconds after a main turn starts, every
-// everySeconds while it runs, and once more when a summarized turn ends; the tick keeps the list.
+// everySeconds while it runs, and once more when a summarized turn ends. The same call judges which
+// files join the list; the tick follows sent files and touches.
 // Every call is logged and captured to the session's own file, which a resumed session seeds the
 // pane from. Pure logic is in summary.ts, call.ts, documents.ts and links.ts.
 
@@ -150,13 +151,19 @@ async function call($: EngineInterface, state: State, status: SummaryStatus, epo
 
     const stored = await readSummary($)
     const previous: Previous = { title: stored.title, lastPrompt: stored.lastPrompt, soFar: stored.soFar, now: stored.now }
+    const cwd = await $.session.cwd()
+    const home = (await $.env.get('HOME')) ?? ''
+    const listed = await readDocuments($)
+    const candidates = await fileCandidates(transcript, { cwd, home, listed, exists: path => $.fs.exists(path).catch(() => false) })
+    const judgeable = judgeablePaths(listed)
+    const superseded = new Set(listed.filter(d => d.isSuperseded).map(d => d.path))
     if (!isCurrent()) return undefined
     const startedAt = await $.clock.now()
     const controller = new AbortController()
     state.controller = controller
     let reply
     try {
-      reply = await $.model.complete({ ...SUMMARY_REQUEST, ...buildRequest({ variant, source, previous, newestPrompt: newest, input, status, isTitleProvisional: state.isTitleProvisional }) }, { signal: controller.signal })
+      reply = await $.model.complete({ ...SUMMARY_REQUEST, ...buildRequest({ variant, source, previous, newestPrompt: newest, input, status, isTitleProvisional: state.isTitleProvisional, candidates, superseded, judgeable }) }, { signal: controller.signal })
     } finally {
       if (state.controller === controller) state.controller = undefined
     }
@@ -164,7 +171,7 @@ async function call($: EngineInterface, state: State, status: SummaryStatus, epo
     const ms = endedAt - startedAt
     const usage = reply.usage
     const usd = usageUsd(usage, PRICES.haiku)
-    const replied = replyResult(reply, previous)
+    const replied = replyResult(reply, previous, { candidates, judgeable })
     const result = { ...replied, texts: { ...replied.texts, lastPrompt: keptLastPrompt({ newest, summarized: state.summarizedPrompt, previous: previous.lastPrompt, replied: replied.texts.lastPrompt }) } }
     // Every await can let session.end reset the state, so each write checks the epoch again
     // after it; the atom update re-runs its change on a version miss, so it checks there too.
@@ -174,6 +181,11 @@ async function call($: EngineInterface, state: State, status: SummaryStatus, epo
       if (isCurrent()) {
         state.isTitleProvisional = trigger === 'first'
         state.summarizedPrompt = newest
+      }
+      if (isCurrent() && result.verdict.add.length + result.verdict.superseded.length > 0) {
+        await writeDocuments($, docs => (isCurrent() ? judgedDocuments(docs, result.verdict, { messages: transcript, cwd, home, now: endedAt }) : docs))
+        // An added file gets its link now rather than at the next tick.
+        if (result.verdict.add.length > 0) await refreshDocuments($, state)
       }
     }
     if (isCurrent()) {
@@ -196,6 +208,9 @@ async function call($: EngineInterface, state: State, status: SummaryStatus, epo
         newestPrompt: newest,
         ...result.texts,
         files: capturedDocuments(await readDocuments($)),
+        candidates,
+        add: result.verdict.add,
+        superseded: result.verdict.superseded,
         outcome: result.outcome,
         ms,
         usage,
