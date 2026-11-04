@@ -157,8 +157,33 @@ test('the section is placed under the timer\'s texts once a summary exists', asy
   await w.clock.settle()
   const texts = await paneTexts($)
   expect(texts.indexOf('Summary plugin')).toBe(0)
-  expect(texts.indexOf(SECTION)).toBeGreaterThan(texts.indexOf('SO FAR'))
+  expect(texts.indexOf(SECTION)).toBeGreaterThan(texts.indexOf('▾ SO FAR'))
   expect(texts.at(-1)).toBe('A shorter copy.')
+})
+
+test('a press on SO FAR or YOU ASKED collapses that text alone to its header, the timer keeps it so, and a second press opens it', async ($, on) => {
+  const w = world(on)
+  await start($)
+  await $.turn.start({ text: 'explain the findings', turnId: 't1' })
+  await w.clock.advance(90_000)
+  const ui = await $.ui.mount({ plugin: PLUGIN, surface: 'terminal', component: 'Pane', requestId: PLUGIN, props: PANE })
+  const texts = async () => (await ui.findAll({ type: 'Text' })).map(t => t.text)
+  expect(await texts()).toEqual(expect.arrayContaining(['▾ SO FAR', 'Building it.', '▾ YOU ASKED', 'You asked.']))
+
+  await ui.press({ key: 'text-soFar' })
+  const closed = await texts()
+  expect(closed).toEqual(expect.arrayContaining(['▸ SO FAR', '▾ YOU ASKED', 'You asked.']))
+  expect(closed).not.toContain('Building it.')
+
+  await w.clock.advance(600_000)
+  await w.clock.settle()
+  expect(await texts()).toContain('▸ SO FAR')
+
+  await ui.press({ key: 'text-asked' })
+  expect(await texts()).not.toContain('You asked.')
+  await ui.press({ key: 'text-soFar' })
+  expect(await texts()).toEqual(expect.arrayContaining(['▾ SO FAR', 'Building it.', '▸ YOU ASKED']))
+  await ui.unmount()
 })
 
 test('the pane draws the texts, then the rule, then the first summary header, then FILES', async ($, on) => {
@@ -177,8 +202,8 @@ test('the pane draws the texts, then the rule, then the first summary header, th
   const rule = texts.findIndex(t => /^─+$/.test(t))
   const header = texts.findIndex(t => t.startsWith(SECTION))
   const filesAt = texts.findIndex(t => t.startsWith('FILES'))
-  expect(texts.indexOf('SO FAR')).toBeGreaterThanOrEqual(0)
-  expect(texts.indexOf('SO FAR')).toBeLessThan(rule)
+  expect(texts.indexOf('▾ SO FAR')).toBeGreaterThanOrEqual(0)
+  expect(texts.indexOf('▾ SO FAR')).toBeLessThan(rule)
   expect(rule).toBeGreaterThan(-1)
   expect(header).toBe(rule + 1)
   expect(filesAt).toBeGreaterThan(header)
@@ -243,7 +268,7 @@ test('the section sits between the texts and FILES, a wheel tick over FILES move
 
   const before = await texts()
   const header = SECTION
-  expect(before.indexOf('SO FAR')).toBeLessThan(before.indexOf(header))
+  expect(before.indexOf('▾ SO FAR')).toBeLessThan(before.indexOf(header))
   expect(before.indexOf(header)).toBeLessThan(before.findIndex(t => t.startsWith('FILES')))
 
   await tick(19)
@@ -439,7 +464,7 @@ test('the summary timer\'s writes leave the section and its scroll position as t
   expect(after[0]).toBe('Summary plugin')
   expect(after).not.toContain(SECTION)
   const first = after.indexOf('line 10')
-  expect(first).toBeGreaterThan(after.indexOf('SO FAR'))
+  expect(first).toBeGreaterThan(after.indexOf('▾ SO FAR'))
   expect(after[first + 1]).toBe('line 11')
 })
 
@@ -457,7 +482,7 @@ const keepalive = async ($: Engine, w: World, turnId: string) => {
   await $.turn.complete({ turnId, reason: 'answer', answer: 'ok', durationMs: 1, isAborted: false })
   await w.clock.settle()
 }
-const heads = (texts: string[]) => texts.filter(t => /^[▾▸] SUMMARY/.test(t))
+const heads = (texts: string[]) => texts.filter(t => /^[▾▸] (LAST RESPONSE|\d+ RESPONSES? OLD)/.test(t))
 
 test('an unknown argument prints the usage and makes no call and no pane', async ($, on) => {
   const w = world(on)
@@ -525,7 +550,7 @@ test('with every on, each response makes one call and adds a summary, newest fir
   expect(conciseRequests(w)).toHaveLength(3)
   const texts = await paneTexts($)
   // Only the newest is open; the older two are collapsed to their headers.
-  expect(heads(texts)).toEqual([SECTION, '▸ SUMMARY · 1 RESPONSE OLD', '▸ SUMMARY · 2 RESPONSES OLD'])
+  expect(heads(texts)).toEqual([SECTION, '▸ 1 RESPONSE OLD', '▸ 2 RESPONSES OLD'])
   expect(texts).toContain('copy three')
   expect(texts).not.toContain('copy two')
   expect(texts).not.toContain('copy one')
@@ -581,9 +606,9 @@ test('the label of a summary moves from last response to 1 response old to 2 as 
   await w.clock.settle()
   expect(heads(await paneTexts($))).toEqual([SECTION])
   await respond($, w, 't1')
-  expect(heads(await paneTexts($))).toEqual(['▾ SUMMARY · 1 RESPONSE OLD'])
+  expect(heads(await paneTexts($))).toEqual(['▾ 1 RESPONSE OLD'])
   await respond($, w, 't2')
-  expect(heads(await paneTexts($))).toEqual(['▾ SUMMARY · 2 RESPONSES OLD'])
+  expect(heads(await paneTexts($))).toEqual(['▾ 2 RESPONSES OLD'])
 })
 
 test('a new summary collapses the older one, which keeps its header and loses its text', async ($, on) => {
@@ -596,7 +621,7 @@ test('a new summary collapses the older one, which keeps its header and loses it
   await run($, '')
   await w.clock.settle()
   const texts = await paneTexts($)
-  expect(heads(texts)).toEqual([SECTION, '▸ SUMMARY · 1 RESPONSE OLD'])
+  expect(heads(texts)).toEqual([SECTION, '▸ 1 RESPONSE OLD'])
   expect(texts).toContain('NEW copy')
   expect(texts).not.toContain('OLD copy')
 })
@@ -611,7 +636,7 @@ test('a second summary of the same response replaces the first instead of stacki
   await w.clock.settle()
   await run($, '')
   await w.clock.settle()
-  expect(heads(await paneTexts($))).toEqual([SECTION, '▸ SUMMARY · 1 RESPONSE OLD'])
+  expect(heads(await paneTexts($))).toEqual([SECTION, '▸ 1 RESPONSE OLD'])
 })
 
 test('a summary with no newer one stays open however many responses have passed', async ($, on) => {
@@ -622,7 +647,7 @@ test('a summary with no newer one stays open however many responses have passed'
   await w.clock.settle()
   for (const id of ['t1', 't2', 't3', 't4']) await respond($, w, id)
   const texts = await paneTexts($)
-  expect(heads(texts)).toEqual(['▾ SUMMARY · 4 RESPONSES OLD'])
+  expect(heads(texts)).toEqual(['▾ 4 RESPONSES OLD'])
   expect(texts).toContain('STALE copy')
 })
 
@@ -642,7 +667,7 @@ test('/summarize off prints one line, makes no call, stops every, and keeps the 
   expect(conciseRequests(w)).toHaveLength(1)
   const texts = await paneTexts($)
   expect(texts).toContain('KEPT copy')
-  expect(heads(texts)).toEqual(['▾ SUMMARY · 1 RESPONSE OLD'])
+  expect(heads(texts)).toEqual(['▾ 1 RESPONSE OLD'])
 })
 
 test('a press on a header collapses its summary and a second press opens it again', async ($, on) => {
@@ -680,7 +705,7 @@ test('a press opens only the header it is on', async ($, on) => {
   const after = await texts()
   expect(after).toContain('FIRST copy')
   expect(after).toContain('SECOND copy')
-  expect(heads(after)).toEqual([SECTION, '▾ SUMMARY · 1 RESPONSE OLD'])
+  expect(heads(after)).toEqual([SECTION, '▾ 1 RESPONSE OLD'])
   await ui.unmount()
 })
 

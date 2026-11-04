@@ -46,7 +46,7 @@ export const SUMMARY_REQUEST = { model: 'haiku', maxTokens: 500, effort: 'low', 
 // /summarize: the shorter copy of the agent's last response, in the pane's section above FILES.
 export const CONCISE_COMMAND = 'summarize'
 export const CONCISE_SHAPE = 'concise-2'
-export const CONCISE_LABEL = 'SUMMARY OF LAST RESPONSE'
+export const CONCISE_LABEL = 'LAST RESPONSE'
 export const CONCISE_USAGE = 'usage: /summarize [on|every|off]'
 // A runaway cap for a session left on /summarize every: past it the oldest summaries drop.
 export const CONCISE_ENTRIES_MAX = 200

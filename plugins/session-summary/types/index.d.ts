@@ -21,6 +21,9 @@ export type Doc = {
   share?: { token: string; expiresAt: number } // its live entry in the shares file, while links are on
 }
 
+// Which of the pane's collapsible texts the person has collapsed.
+export type CollapsedTexts = { soFar: boolean; asked: boolean }
+
 // One shorter copy in the pane's section above FILES.
 export type ConciseStatus = 'working' | 'ready' | 'failed'
 export type ConciseEntry = {
@@ -41,6 +44,6 @@ export type Concise = {
 
 declare module 'claude-code' {
   interface PluginState {
-    'session-summary': { summary: Shaped<Summary>; documents: Shaped<Doc[]>; filesOffset: number; concise: Shaped<Concise> }
+    'session-summary': { summary: Shaped<Summary>; documents: Shaped<Doc[]>; filesOffset: number; concise: Shaped<Concise>; collapsedTexts: CollapsedTexts }
   }
 }

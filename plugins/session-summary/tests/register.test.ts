@@ -205,7 +205,7 @@ test('an interactive session restores its synthetic capture into the pane', asyn
   await start($)
   expect(w.reads[0]).toBe(CAPTURE)
   expect(w.commands).toEqual([PLUGIN, CONCISE_COMMAND])
-  expect(await paneTexts($)).toEqual(['● NOW', '2m ago', 'Resume it', 'SO FAR', 'Earlier work', 'FILES', LINKED_PLAN])
+  expect(await paneTexts($)).toEqual(['● NOW', '2m ago', 'Resume it', '▾ SO FAR', 'Earlier work', 'FILES', LINKED_PLAN])
 })
 
 test('a main turn gets its first summary 90 s in: one request, one firing line, one capture line, the pane filled', async ($, on) => {
@@ -226,7 +226,7 @@ test('a main turn gets its first summary 90 s in: one request, one firing line, 
   expect(captures(w)).toEqual([
     expect.objectContaining({ status: 'running', source: 'messages', variant: 'edit', task: null, outcome: 'summary', soFar: 'Building the summary plugin.', now: 'Writing its plan.', candidates: [PLAN_PATH], add: [PLAN_PATH], superseded: [], files: [{ path: PLAN_PATH, touchedAt: T0 + 90_000, touches: 1 }] }),
   ])
-  expect(await paneTexts($)).toEqual(['Summary plugin', '● NOW', 'just now', 'Writing its plan.', 'SO FAR', 'Building the summary plugin.', 'YOU ASKED', 'You asked for the plugin.', 'FILES', LINKED_PLAN])
+  expect(await paneTexts($)).toEqual(['Summary plugin', '● NOW', 'just now', 'Writing its plan.', '▾ SO FAR', 'Building the summary plugin.', '▾ YOU ASKED', 'You asked for the plugin.', 'FILES', LINKED_PLAN])
 })
 
 test('a running turn is summarized again 600 s later, and once more with status ended when it completes', async ($, on) => {
@@ -379,7 +379,7 @@ test('the ended call of a turn, starting after the next turn started, leaves tha
   await turnStart($, 'STOP JUDGE — open the PR yourself.')
   await w.clock.advance(5_000)
   expect(statuses(w)).toEqual(['running', 'ended'])
-  expect((await paneTexts($)).slice(0, 7)).toEqual(['Summary plugin', '○ NOW', 'just now', 'Waiting on the person.', 'SO FAR', 'Turn A done.', 'YOU ASKED'])
+  expect((await paneTexts($)).slice(0, 7)).toEqual(['Summary plugin', '○ NOW', 'just now', 'Waiting on the person.', '▾ SO FAR', 'Turn A done.', '▾ YOU ASKED'])
   w.messages.push(wrote('notes/report.md'))
   await w.clock.advance(75_000)
   expect(statuses(w)).toEqual(['running', 'ended'])
@@ -504,7 +504,7 @@ test('a turn whose predecessor\'s running call is still in flight at its firstSe
   await w.clock.advance(10_000)
   expect(statuses(w)).toEqual(['running', 'ended', 'running'])
   expect(outcomes(w)).toEqual(['summary', 'summary', 'summary'])
-  expect((await paneTexts($)).slice(0, 7)).toEqual(['Summary plugin', '● NOW', 'just now', 'Pushing the branch.', 'SO FAR', 'Opening the PR.', 'YOU ASKED'])
+  expect((await paneTexts($)).slice(0, 7)).toEqual(['Summary plugin', '● NOW', 'just now', 'Pushing the branch.', '▾ SO FAR', 'Opening the PR.', '▾ YOU ASKED'])
 })
 
 test('a running call waiting behind the turn before\'s call is dropped when its own turn ends meanwhile, and that turn gets its ended call', async ($, on) => {

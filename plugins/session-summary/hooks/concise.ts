@@ -40,7 +40,7 @@ export function toggleEntry(c: Concise, id: number): Concise {
 export function entryLabel(entry: ConciseEntry, responses: number): string {
   const age = responses - entry.responses
   if (age <= 0) return CONCISE_LABEL
-  return `SUMMARY · ${age} ${age === 1 ? 'RESPONSE' : 'RESPONSES'} OLD`
+  return `${age} ${age === 1 ? 'RESPONSE' : 'RESPONSES'} OLD`
 }
 
 // The agent's newest message with text. A cache-keepalive ping's answer is not a response to anyone.

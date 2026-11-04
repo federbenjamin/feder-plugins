@@ -147,8 +147,9 @@ const ageOf = (v: { rows: ConciseRow[] }) => (v.rows[0] as { age: string }).age
 test('a header is cut to one row after its age, with room for the scrollbar only when there is one', () => {
   const at = (columns: number, bodyRows: number, c: Concise) => conciseView({ concise: c, now: NOW, columns, bodyRows, aboveRows: 1, fileRows: 0 })!.rows[0]
   const stale = concise({ text: 'x', at: NOW - 3 * 60_000 }, { responses: 2 })
-  expect(at(36, 40, stale)).toEqual(head(1, '▾ SUMMARY · 2 RESPONSES OLD', '3m ago'))
-  expect(at(36, 10, concise({ text: lines(30), at: NOW - 3 * 60_000 }, { responses: 2 }))).toEqual(head(1, '▾ SUMMARY · 2 RESPONSES …', '3m ago'))
+  expect(at(26, 40, stale)).toEqual(head(1, '▾ 2 RESPONSES OLD', '3m ago'))
+  expect(at(24, 40, stale)).toEqual(head(1, '▾ 2 RESPONSES …', '3m ago'))
+  expect(at(24, 10, concise({ text: lines(30), at: NOW - 3 * 60_000 }, { responses: 2 }))).toEqual(head(1, '▾ 2 RESPONSE…', '3m ago'))
 })
 
 test('no summaries adds no section', () => {
@@ -183,8 +184,8 @@ test('summaries list newest first, a blank row between open ones, a collapsed on
     head(3, `▾ ${CONCISE_LABEL}`, 'just now'),
     text('new'),
     text(''),
-    head(2, '▸ SUMMARY · 1 RESPONSE OLD', 'just now'),
-    head(1, '▾ SUMMARY · 2 RESPONSES OLD', 'just now'),
+    head(2, '▸ 1 RESPONSE OLD', 'just now'),
+    head(1, '▾ 2 RESPONSES OLD', 'just now'),
     text('old'),
   ])
 })
@@ -221,7 +222,7 @@ test('the window runs across a summary boundary into the next summary\'s header'
   expect(v.window).toEqual({ rows: 9, maxOffset: 4 })
   expect(v.rows[0]).toEqual(text('line 4'))
   expect(v.rows.at(-2)).toEqual(text(''))
-  expect(v.rows.at(-1)).toEqual(head(1, '▸ SUMMARY · 1 RESPONSE OLD', 'just now'))
+  expect(v.rows.at(-1)).toEqual(head(1, '▸ 1 RESPONSE OLD', 'just now'))
 })
 
 test('an offset past the end clamps to the last full window, and a negative one to the first', () => {
@@ -280,7 +281,7 @@ test('addEntry for the same response replaces the earlier entry instead of stack
 
 test('a summary with no newer one stays open however stale', () => {
   const c = addEntry(EMPTY_CONCISE, 'ready', 'a', 1)
-  expect(entryLabel(c.entries[0]!, 9)).toBe('SUMMARY · 9 RESPONSES OLD')
+  expect(entryLabel(c.entries[0]!, 9)).toBe('9 RESPONSES OLD')
   expect(c.entries[0]!.isOpen).toBe(true)
 })
 
@@ -311,8 +312,8 @@ test('toggleEntry flips only the named entry and keeps its text', () => {
 
 test('entryLabel names the last response until one finishes, then counts responses', () => {
   expect(entryLabel(entry({ responses: 4 }), 4)).toBe(CONCISE_LABEL)
-  expect(entryLabel(entry({ responses: 4 }), 5)).toBe('SUMMARY · 1 RESPONSE OLD')
-  expect(entryLabel(entry({ responses: 4 }), 6)).toBe('SUMMARY · 2 RESPONSES OLD')
+  expect(entryLabel(entry({ responses: 4 }), 5)).toBe('1 RESPONSE OLD')
+  expect(entryLabel(entry({ responses: 4 }), 6)).toBe('2 RESPONSES OLD')
 })
 
 const WINDOW = { rows: 16, maxOffset: 14 }

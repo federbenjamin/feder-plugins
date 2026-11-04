@@ -1,5 +1,5 @@
 import type { ModelUsage, SessionMessage } from 'claude-code'
-import type { Doc, Source, Summary, SummaryStatus } from '../types'
+import type { CollapsedTexts, Doc, Source, Summary, SummaryStatus } from '../types'
 import { FILES_ROWS, TOOL_LINE_CHARS } from './config.ts'
 import { documentsFrom } from './documents.ts'
 import type { FileVerdict } from './documents.ts'
@@ -274,11 +274,16 @@ export function filesRows(fileCount: number): number {
 }
 
 // About how many rows the pane's tree takes, wrapped words included: a guess on the high side.
-export function estimatedRows(view: PaneView | null, columns: number, fileCount: number): number {
+export const NONE_COLLAPSED: CollapsedTexts = Object.freeze({ soFar: false, asked: false })
+
+export function estimatedRows(view: PaneView | null, columns: number, fileCount: number, collapsed: CollapsedTexts = NONE_COLLAPSED): number {
   const files = filesRows(fileCount)
   if (view === null) return 1 + files
-  const section = (text: string) => (text === '' ? 0 : 2 + wrappedRows(text, columns - 2))
-  return (view.title === '' ? 0 : 3) + 1 + wrappedRows(view.now, columns) + section(view.soFar) + section(view.asked) + files
+  const section = (text: string, isCollapsed: boolean) => {
+    if (text === '') return 0
+    return isCollapsed ? 2 : 2 + wrappedRows(text, columns - 2)
+  }
+  return (view.title === '' ? 0 : 3) + 1 + wrappedRows(view.now, columns) + section(view.soFar, collapsed.soFar) + section(view.asked, collapsed.asked) + files
 }
 
 // A dock has its whole height to pin FILES to the bottom of. An inline frame fits its tree, so the

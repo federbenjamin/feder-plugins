@@ -1,17 +1,18 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
-import type { Concise, Doc, Summary } from '../types'
+import type { CollapsedTexts, Concise, Doc, Summary } from '../types'
 import { conciseView, EMPTY_CONCISE, scrolledOffset, toggleEntry } from './concise.ts'
 import type { ConciseView } from './concise.ts'
 import { CONCISE_GAP_ROWS, CONCISE_SHAPE, DOCUMENTS_SHAPE, PANE_BACKGROUND, PANE_TITLE, PLUGIN, SETTINGS_KEY, SHAPE } from './config.ts'
 import { filesScrollbar, clampOffset, fileRow, filesHeader, isOverFiles, isRecentFile, shownDocuments } from './documents.ts'
 import { settingsFrom } from './settings.ts'
-import { EMPTY_SUMMARY, estimatedRows, filesRows, paneHeight, paneView } from './summary.ts'
+import { EMPTY_SUMMARY, estimatedRows, filesRows, NONE_COLLAPSED, paneHeight, paneView } from './summary.ts'
 
 export const summaryAtom = atom({ plugin: 'session-summary', key: 'summary' } as const, EMPTY_SUMMARY, { shape: SHAPE })
 const documentsAtom = atom({ plugin: 'session-summary', key: 'documents' } as const, [] as Doc[], { shape: DOCUMENTS_SHAPE })
 const filesOffsetAtom = atom({ plugin: 'session-summary', key: 'filesOffset' } as const, 0)
 export const conciseAtom = atom({ plugin: 'session-summary', key: 'concise' } as const, EMPTY_CONCISE, { shape: CONCISE_SHAPE })
+const collapsedTextsAtom = atom({ plugin: 'session-summary', key: 'collapsedTexts' } as const, NONE_COLLAPSED)
 
 export function openPane($: EngineInterface) {
   return $.ui.open({ id: PLUGIN, title: PANE_TITLE, backgroundColor: PANE_BACKGROUND })
@@ -29,7 +30,8 @@ export const registerPane: Register = on => {
     const offset = await read($, filesOffsetAtom)
     const { linksBase } = settingsFrom(await $.store.get(SETTINGS_KEY))
     const shown = shownDocuments(docs, offset)
-    const estimated = estimatedRows(view, e.props.bodyColumns, docs.length)
+    const collapsed = await read($, collapsedTextsAtom)
+    const estimated = estimatedRows(view, e.props.bodyColumns, docs.length, collapsed)
     const copy = conciseView({ concise: await read($, conciseAtom), now, columns: e.props.bodyColumns, bodyRows: e.props.scroll.bodyRows, aboveRows: estimated, fileRows: filesRows(docs.length) })
     window = copy?.window ?? null
     if (view === null && docs.length === 0 && copy === null) return <Text dimColor>No summary yet.</Text>
@@ -37,10 +39,12 @@ export const registerPane: Register = on => {
     const present = linksBase === '' ? shown.map(() => true) : await Promise.all(shown.map(d => $.fs.exists(d.path)))
     const rows = shown.map((doc, i) => fileRow(doc, { cwd, linksBase, now, isPresent: present[i]! }))
     const bar = filesScrollbar(offset, docs.length)
-    const section = (label: string, text: string) => (
+    const section = (id: keyof CollapsedTexts, label: string, text: string) => (
       <Box flexDirection="column" paddingLeft={2} flexShrink={0}>
-        <Text dimColor bold>{label}</Text>
-        <Text dimColor>{text}</Text>
+        <Button key={`text-${id}`} plain dimColor onPress={() => void update($, collapsedTextsAtom, c => ({ ...c, [id]: !c[id] }))}>
+          <Text bold>{`${collapsed[id] ? '▸' : '▾'} ${label}`}</Text>
+        </Button>
+        {!collapsed[id] && <Text dimColor>{text}</Text>}
       </Box>
     )
     const height = paneHeight({ placement: e.props.placement, bodyRows: e.props.scroll.bodyRows, estimated: estimated + (copy === null ? 0 : CONCISE_GAP_ROWS + copy.rows.length) })
@@ -64,8 +68,8 @@ export const registerPane: Register = on => {
                 </Box>
                 <Text>{view.now}</Text>
               </Box>
-              {section('SO FAR', view.soFar)}
-              {view.asked !== '' && section('YOU ASKED', view.asked)}
+              {section('soFar', 'SO FAR', view.soFar)}
+              {view.asked !== '' && section('asked', 'YOU ASKED', view.asked)}
             </Box>
           )}
         </Box>
