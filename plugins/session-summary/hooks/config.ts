@@ -51,7 +51,9 @@ export const CONCISE_LABEL = 'SUMMARY OF LAST RESPONSE'
 export const CONCISE_VARIANT = 'concise'
 // A rewrite can run as long as the response: a reply that reaches maxTokens is marked as cut off.
 export const CONCISE_REQUEST = { model: 'sonnet', maxTokens: 8_000, effort: 'low', timeoutMs: 120_000 } as const
-// The section's rows above its text: its gap, the label, the age row.
-export const CONCISE_HEADER_ROWS = 3
+// The section's rows above its text: its gap and its header.
+export const CONCISE_HEADER_ROWS = 2
+// The columns its text gives up: the indent the pane's other blocks have, and a gap and scrollbar mark as FILES has.
+export const CONCISE_TEXT_INSET = 4
 // The section keeps this many rows of text however long the texts above it run: they are cut instead.
 export const CONCISE_MIN_ROWS = 8

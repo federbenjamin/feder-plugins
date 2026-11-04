@@ -3,7 +3,7 @@ import type { EngineInterface, Register } from 'claude-code'
 import type { Concise, Doc, Summary } from '../types'
 import { conciseView, EMPTY_CONCISE, scrolledOffset } from './concise.ts'
 import type { ConciseView } from './concise.ts'
-import { CONCISE_HEADER_ROWS, CONCISE_LABEL, CONCISE_SHAPE, DOCUMENTS_SHAPE, PANE_BACKGROUND, PANE_TITLE, PLUGIN, SETTINGS_KEY, SHAPE } from './config.ts'
+import { CONCISE_HEADER_ROWS, CONCISE_SHAPE, DOCUMENTS_SHAPE, PANE_BACKGROUND, PANE_TITLE, PLUGIN, SETTINGS_KEY, SHAPE } from './config.ts'
 import { filesScrollbar, clampOffset, fileRow, filesHeader, isOverFiles, isRecentFile, shownDocuments } from './documents.ts'
 import { settingsFrom } from './settings.ts'
 import { EMPTY_SUMMARY, estimatedRows, filesRows, paneHeight, paneView } from './summary.ts'
@@ -70,11 +70,22 @@ export const registerPane: Register = on => {
           )}
         </Box>
         {copy !== null && (
-          <Box flexDirection="column" flexShrink={0} marginTop={1}>
-            <Text bold>{CONCISE_LABEL}</Text>
-            <Text dimColor>{copy.age}</Text>
-            {copy.rows.map(row => (
-              <Text wrap="truncate-end">{row === '' ? ' ' : row}</Text>
+          <Box flexDirection="column" flexShrink={0} marginTop={1} paddingLeft={2}>
+            <Box flexDirection="row" justifyContent="space-between">
+              <Box flexShrink={1}>
+                <Text dimColor bold wrap="truncate-end">{copy.header}</Text>
+              </Box>
+              <Box flexShrink={0} marginLeft={1}>
+                <Text dimColor>{copy.age}</Text>
+              </Box>
+            </Box>
+            {copy.rows.map((row, i) => (
+              <Box flexDirection="row" columnGap={1}>
+                <Box flexGrow={1} flexShrink={1}>
+                  <Text dimColor wrap="truncate-end">{row === '' ? ' ' : row}</Text>
+                </Box>
+                {copy.bar[i] !== undefined && <Text dimColor={copy.bar[i] === '│'}>{copy.bar[i]}</Text>}
+              </Box>
             ))}
           </Box>
         )}

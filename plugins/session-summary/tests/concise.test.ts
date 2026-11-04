@@ -15,7 +15,7 @@ test('plainText removes bold and heading marks and leaves code spans and lists',
 
 import type { ModelCompleteResult, SessionMessage } from 'claude-code'
 import type { Concise } from '../types'
-import { CONCISE_MIN_ROWS } from '../hooks/config'
+import { CONCISE_LABEL, CONCISE_MIN_ROWS, CONCISE_TEXT_INSET } from '../hooks/config'
 import { cells, conciseResult, conciseView, EMPTY_CONCISE, lastResponse, scrolledOffset, wrapRows } from '../hooks/concise'
 
 const NOW = Date.parse('2026-10-23T12:00:00Z')
@@ -144,35 +144,46 @@ test('an empty concise status adds no section', () => {
 })
 
 test('a section that fits is drawn whole with its age and no window', () => {
-  expect(view(concise({ text: 'alpha\nbeta', at: NOW - 3 * 60_000 }), 40)).toEqual({ age: '3m ago', rows: ['alpha', 'beta'], window: null })
+  expect(view(concise({ text: 'alpha\nbeta', at: NOW - 3 * 60_000 }), 40)).toEqual({ header: CONCISE_LABEL, age: '3m ago', rows: ['alpha', 'beta'], bar: [], window: null })
+})
+
+test('the text wraps inside the indent and the scrollbar column', () => {
+  const rows = view(concise({ text: 'word '.repeat(40) }), 40).rows
+  for (const row of rows) expect(cells(row)).toBeLessThanOrEqual(60 - CONCISE_TEXT_INSET)
 })
 
 test('a section exactly as tall as the room is not windowed', () => {
-  // bodyRows 20 - 1 above - 3 header = 16 rows of room
-  const v = view(concise({ text: lines(16) }), 20)
+  // bodyRows 20 - 1 above - 2 header = 17 rows of room
+  const v = view(concise({ text: lines(17) }), 20)
   expect(v.window).toBeNull()
-  expect(v.rows).toHaveLength(16)
+  expect(v.rows).toHaveLength(17)
 })
 
-test('an overlong section shows exactly the room\'s rows, with the position in the age row', () => {
+test('an overlong section shows exactly the room\'s rows, with the position in the header and one scrollbar mark per row', () => {
   const v = view(concise(), 20)
-  expect(v.window).toEqual({ rows: 16, maxOffset: 14 })
-  expect(v.age).toBe('just now · rows 1-16 of 30')
-  expect(v.rows).toEqual(Array.from({ length: 16 }, (_, i) => `line ${i + 1}`))
+  expect(v.window).toEqual({ rows: 17, maxOffset: 13 })
+  expect(v.header).toBe(`${CONCISE_LABEL} 1–17 of 30`)
+  expect(v.age).toBe('just now')
+  expect(v.rows).toEqual(Array.from({ length: 17 }, (_, i) => `line ${i + 1}`))
+  expect(v.bar).toHaveLength(17)
+  expect(v.bar[0]).toBe('█')
+  expect(v.bar.at(-1)).toBe('│')
 })
 
-test('scrolling the window moves the section rows and the position', () => {
-  const v = view(concise({ offset: 5 }), 20)
-  expect(v.age).toBe('just now · rows 6-21 of 30')
-  expect(v.rows[0]).toBe('line 6')
-  expect(v.rows.at(-1)).toBe('line 21')
+test('scrolling the window moves the section rows, the position and the scrollbar', () => {
+  const v = view(concise({ offset: 13 }), 20)
+  expect(v.header).toBe(`${CONCISE_LABEL} 14–30 of 30`)
+  expect(v.rows[0]).toBe('line 14')
+  expect(v.rows.at(-1)).toBe('line 30')
+  expect(v.bar[0]).toBe('│')
+  expect(v.bar.at(-1)).toBe('█')
 })
 
 test('an offset past the end clamps to the last full window, and a negative one to the first', () => {
   const end = view(concise({ offset: 999 }), 20)
-  expect(end.age).toBe('just now · rows 15-30 of 30')
+  expect(end.header).toBe(`${CONCISE_LABEL} 14–30 of 30`)
   expect(end.rows.at(-1)).toBe('line 30')
-  expect(view(concise({ offset: -4 }), 20).age).toBe('just now · rows 1-16 of 30')
+  expect(view(concise({ offset: -4 }), 20).header).toBe(`${CONCISE_LABEL} 1–17 of 30`)
 })
 
 test('with little room left by the texts, the section still keeps CONCISE_MIN_ROWS', () => {
@@ -182,7 +193,7 @@ test('with little room left by the texts, the section still keeps CONCISE_MIN_RO
 })
 
 test('FILES keeps its rows however short the pane: the section gives way, to one row at least', () => {
-  expect(view(concise(), 12, { aboveRows: 12, fileRows: 7 }).rows).toHaveLength(2)
+  expect(view(concise(), 12, { aboveRows: 12, fileRows: 7 }).rows).toHaveLength(3)
   expect(view(concise(), 6, { aboveRows: 12, fileRows: 7 }).rows).toHaveLength(1)
 })
 

@@ -1,6 +1,7 @@
 import type { ModelCompleteResult, SessionMessage } from 'claude-code'
 import type { Concise } from '../types'
-import { CONCISE_HEADER_ROWS, CONCISE_MIN_ROWS } from './config.ts'
+import { CONCISE_HEADER_ROWS, CONCISE_LABEL, CONCISE_MIN_ROWS, CONCISE_TEXT_INSET } from './config.ts'
+import { scrollbarMarks } from './documents.ts'
 import { CONCISE_SYSTEM } from './prompts.ts'
 import { ageText, isBumpTurn } from './summary.ts'
 
@@ -106,24 +107,27 @@ function conciseAge(concise: Concise, now: number): string {
   return ageText(now - concise.at)
 }
 
-// The section as drawn: `window` is set when it is taller than its room and scrolls. Null while empty.
-export type ConciseView = { age: string; rows: string[]; window: { rows: number; maxOffset: number } | null }
+// The section as drawn, in FILES's shape: a header that says where the window sits, one row per line
+// with its scrollbar mark. `window` is set when it is taller than its room and scrolls. Null while empty.
+export type ConciseView = { header: string; age: string; rows: string[]; bar: string[]; window: { rows: number; maxOffset: number } | null }
 
 // `aboveRows` is what the texts and FILES take, and `fileRows` what FILES alone takes. The section
 // gets what the texts leave, at least CONCISE_MIN_ROWS: past that the texts are cut from the bottom
 // to give it room, as the pane's tree cuts them for FILES. FILES always stays on screen.
 export function conciseView(p: { concise: Concise; now: number; columns: number; bodyRows: number; aboveRows: number; fileRows: number }): ConciseView | null {
   if (p.concise.status === 'empty') return null
-  const section = wrapRows(p.concise.text, p.columns)
+  const section = wrapRows(p.concise.text, p.columns - CONCISE_TEXT_INSET)
   const wanted = Math.max(p.bodyRows - p.aboveRows - CONCISE_HEADER_ROWS, CONCISE_MIN_ROWS)
   const room = Math.max(Math.min(wanted, p.bodyRows - p.fileRows - CONCISE_HEADER_ROWS), 1)
   const age = conciseAge(p.concise, p.now)
-  if (section.length <= room) return { age, rows: section, window: null }
+  if (section.length <= room) return { header: CONCISE_LABEL, age, rows: section, bar: [], window: null }
   const maxOffset = section.length - room
   const offset = Math.min(Math.max(p.concise.offset, 0), maxOffset)
   return {
-    age: `${age} · rows ${offset + 1}-${offset + room} of ${section.length}`,
+    header: `${CONCISE_LABEL} ${offset + 1}–${offset + room} of ${section.length}`,
+    age,
     rows: section.slice(offset, offset + room),
+    bar: scrollbarMarks(offset, section.length, room),
     window: { rows: room, maxOffset },
   }
 }

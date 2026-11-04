@@ -99,9 +99,11 @@ const start = ($: Engine, isInteractive = true) => $.session.start({ cwd: '/tmp/
 const summarize = ($: Engine) => $.command.run({ command: CONCISE_COMMAND, args: '', origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 120 } })
 const conciseRequests = (w: World) => w.requests.filter(r => r.system === CONCISE_SYSTEM)
 const logLines = (w: World) => (w.files.get(LOG) ?? '').split('\n').filter(Boolean)
+// Blank rows and scrollbar marks are not what a test reads.
+const isContent = (text: string) => text !== ' ' && !/^[█│]$/.test(text)
 const paneTexts = async ($: Engine, scroll = PANE.scroll) => {
   const ui = await $.ui.mount({ plugin: PLUGIN, surface: 'terminal', component: 'Pane', requestId: PLUGIN, props: { ...PANE, scroll } })
-  const texts = (await ui.findAll({ type: 'Text' })).map(t => t.text).filter(t => t !== ' ')
+  const texts = (await ui.findAll({ type: 'Text' })).map(t => t.text).filter(isContent)
   await ui.unmount()
   return texts
 }
@@ -109,7 +111,7 @@ const paneTexts = async ($: Engine, scroll = PANE.scroll) => {
 const scroll = ($: Engine, by: number, bodyRows = PANE.scroll.bodyRows) =>
   $.ui.scroll({ component: 'Pane', requestId: PLUGIN, offset: 0, by, bodyRows, contentRows: 60, origin: { kind: 'person' } } as never)
 const SECTION = CONCISE_LABEL
-const sectionOf = (texts: string[]) => texts.slice(texts.indexOf(SECTION))
+const sectionOf = (texts: string[]) => texts.slice(texts.findIndex(t => t.startsWith(SECTION)))
 
 test('/summarize in an interactive session returns no text and no context, and sends the whole response to the model', async ($, on) => {
   const w = world(on)
@@ -166,35 +168,35 @@ test('a ui.scroll over an overlong section moves the section and leaves the top 
   await summarize($)
   await w.clock.settle()
   const ui = await $.ui.mount({ plugin: PLUGIN, surface: 'terminal', component: 'Pane', requestId: PLUGIN, props: PANE })
-  const texts = async () => (await ui.findAll({ type: 'Text' })).map(t => t.text).filter(t => t !== ' ')
+  const texts = async () => (await ui.findAll({ type: 'Text' })).map(t => t.text).filter(isContent)
   const before = await texts()
-  expect(before.slice(0, 3)).toEqual(['No summary yet.', SECTION, 'just now · rows 1-16 of 40'])
+  expect(before.slice(0, 3)).toEqual(['No summary yet.', `${SECTION} 1–17 of 40`, 'just now'])
   expect(before.at(3)).toBe('line 1')
 
   expect(await scroll($, 5)).toEqual({})
   const after = await texts()
-  expect(after.slice(0, 2)).toEqual(before.slice(0, 2))
-  expect(after[2]).toBe('just now · rows 6-21 of 40')
+  expect(after[0]).toBe(before[0])
+  expect(after[1]).toBe(`${SECTION} 6–22 of 40`)
   expect(after[3]).toBe('line 6')
   expect(after).toHaveLength(before.length)
   // The plugin took the scroll: the engine's own never saw it.
   expect(w.engineScrolls).toEqual([])
 
-  // A page key asks for the pane's 20 rows; the section's window is 16.
+  // A page key asks for the pane's 20 rows; the section's window is 17.
   await scroll($, 20)
-  expect((await texts())[2]).toBe('just now · rows 22-37 of 40')
+  expect((await texts())[1]).toBe(`${SECTION} 23–39 of 40`)
   await scroll($, 500)
-  expect((await texts())[2]).toBe('just now · rows 25-40 of 40')
+  expect((await texts())[1]).toBe(`${SECTION} 24–40 of 40`)
   expect((await texts()).at(-1)).toBe('line 40')
   await scroll($, -500)
-  expect((await texts())[2]).toBe('just now · rows 1-16 of 40')
+  expect((await texts())[1]).toBe(`${SECTION} 1–17 of 40`)
 
   // A new result opens at its own top, wherever the last one was scrolled to.
   await scroll($, 5)
   w.replies.push(said(lines(40)))
   await summarize($)
   await w.clock.settle()
-  expect((await texts())[2]).toBe('just now · rows 1-16 of 40')
+  expect((await texts())[1]).toBe(`${SECTION} 1–17 of 40`)
   await ui.unmount()
 })
 
@@ -212,19 +214,19 @@ test('the section sits between the texts and FILES, a wheel tick over FILES move
   const tick = (row: number) => $.ui.scroll({ component: 'Pane', requestId: PLUGIN, offset: 0, by: 1, bodyRows: 20, contentRows: 20, origin: { kind: 'person' }, pointer: { row } } as never)
 
   const before = await texts()
-  expect(before.indexOf('SO FAR')).toBeLessThan(before.indexOf(SECTION))
-  expect(before.indexOf(SECTION)).toBeLessThan(before.findIndex(t => t.startsWith('FILES')))
-  expect(before).toContain('just now · rows 1-8 of 40')
+  const header = `${SECTION} 1–8 of 40`
+  expect(before.indexOf('SO FAR')).toBeLessThan(before.indexOf(header))
+  expect(before.indexOf(header)).toBeLessThan(before.findIndex(t => t.startsWith('FILES')))
 
   await tick(19)
   const overFiles = await texts()
   expect(overFiles).toContain('FILES 2–6 of 7')
-  expect(overFiles).toContain('just now · rows 1-8 of 40')
+  expect(overFiles).toContain(header)
 
   await tick(10)
   const overSection = await texts()
   expect(overSection).toContain('FILES 2–6 of 7')
-  expect(overSection).toContain('just now · rows 2-9 of 40')
+  expect(overSection).toContain(`${SECTION} 2–9 of 40`)
   expect(w.engineScrolls).toEqual([])
   await ui.unmount()
 })
@@ -402,6 +404,7 @@ test('the summary timer\'s writes leave the section and its scroll position as t
   const after = await paneTexts($, TALL)
   expect(after[0]).toBe('Summary plugin')
   const section = sectionOf(after)
-  expect(section[1]).toMatch(/^1m ago · rows 11-\d+ of 80$/)
+  expect(section[0]).toMatch(new RegExp(`^${SECTION} 11–\\d+ of 80$`))
+  expect(section[1]).toBe('1m ago')
   expect(section.slice(2, 4)).toEqual(['line 11', 'line 12'])
 })
