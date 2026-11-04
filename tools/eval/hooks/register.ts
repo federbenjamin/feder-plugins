@@ -1,12 +1,11 @@
 import type { EngineInterface, Register } from 'claude-code'
 import { report } from './compare.ts'
-import { extractRecord, firingsOf, keyFrom, pushMark, ROW_GREP, tailFact, transcriptRows } from './extract.ts'
-import type { Cut, EvalRecord, LineMark } from './extract.ts'
-import { judgeRequest, MINUTES_SENTENCE, transcriptFindArgv } from './judge/judge.ts'
-import type { MinutesGap } from './judge/judge.ts'
+import { extractRecord, firingsOf, keyFrom, pushMark, turnAtFiring } from './extract.ts'
+import type { EvalRecord, LineMark } from './extract.ts'
+import { judgeRequest, transcriptFindArgv } from './judge/judge.ts'
+import { readPlan } from './judge/plan-io.ts'
 import { pool } from './judge/shared/pool.ts'
-import type { TranscriptRow } from './judge/shared/typed.ts'
-import { ARMS, callsOf, gradesFrom, parseArgs, runRecordOf } from './score.ts'
+import { callsOf, gradesFrom, parseArgs, runRecordOf } from './score.ts'
 import type { Arm, Call, RunRecord } from './score.ts'
 
 // Dev-only commands that measure the stop judge on the production model path ($.model.complete,
@@ -14,7 +13,7 @@ import type { Arm, Call, RunRecord } from './score.ts'
 
 const JUDGE = 'eval-judge'
 const EXTRACT = 'eval-extract'
-const JUDGE_USAGE = `/${JUDGE} --key <grade-key.json | records.jsonl> --ids <ids file> --graders <dir of grade-out-*.jsonl | one grades file> --out <run.jsonl> [--arms off,on] [--repeats 2] [--workers 4]`
+const JUDGE_USAGE = `/${JUDGE} --key <grade-key.json | records.jsonl> --ids <ids file> --graders <dir of grade-out-*.jsonl | one grades file> --out <run.jsonl> [--candidate <prompt file>] [--repeats 2] [--workers 4]`
 const EXTRACT_USAGE = `/${EXTRACT} --log <stop-judge.log> --out <records.jsonl>`
 const DEFAULT_WORKERS = 4
 const DEFAULT_REPEATS = 2
@@ -57,13 +56,6 @@ async function transcriptOf($: EngineInterface, home: string, session: string | 
     ?.trim()
 }
 
-async function sessionRows($: EngineInterface, home: string, session: string | null): Promise<TranscriptRow[] | null> {
-  const path = await transcriptOf($, home, session)
-  if (path === undefined) return null
-  const { text, code } = await stdoutOf($, ['grep', '-a', '-E', ROW_GREP, path])
-  return code === 0 || code === 1 ? transcriptRows(text) : null
-}
-
 // Every line of the transcript with its byte offset, so the judge's tail at any firing can be
 // cut again; a line split between two pieces is carried to the next.
 async function sessionMarks($: EngineInterface, home: string, session: string | null): Promise<LineMark[] | null> {
@@ -96,70 +88,39 @@ async function gradeTexts($: EngineInterface, path: string): Promise<string[]> {
   return texts
 }
 
-// A record's minutes fact, the same for both arms' calls: computed once, before any call.
-type Fact = { gap: MinutesGap | null; cut: Cut | null; hasTranscript: boolean }
-
-async function factOf(r: EvalRecord | undefined, marksOf: (session: string | null) => Promise<LineMark[] | null>): Promise<Fact> {
-  if (r === undefined) return { gap: null, cut: null, hasTranscript: false }
-  const marks = await marksOf(r.session)
-  // The fact production sends at this firing: from the tail it read then, not the whole file.
-  const fact = marks === null ? null : tailFact(marks, r.ts)
-  return { gap: fact?.gap ?? null, cut: fact?.cut ?? null, hasTranscript: marks !== null }
-}
-
 type Judged = { record: RunRecord; usage: unknown; prompt: string }
 
-async function judgeOne($: EngineInterface, call: Call, r: EvalRecord | undefined, fact: Fact): Promise<Judged> {
-  if (r === undefined) return { record: runRecordOf(call, '', { isAnswered: false, reason: 'not in key' }, 0, null), usage: null, prompt: '' }
-  if (r.final === null) return { record: runRecordOf(call, r.outcome, { isAnswered: false, reason: 'no final message' }, 0, fact.gap), usage: null, prompt: '' }
-  const request = judgeRequest(r.final, r.opening, r.context_users, fact.gap, call.arm === 'on')
+async function judgeOne($: EngineInterface, call: Call, r: EvalRecord | undefined, candidate: string | null): Promise<Judged> {
+  const none = { operatorText: '', opening: '' }
+  if (r === undefined) return { record: runRecordOf(call, '', { isAnswered: false, reason: 'not in key' }, 0, none), usage: null, prompt: '' }
+  if (r.final === null) return { record: runRecordOf(call, r.outcome, { isAnswered: false, reason: 'no final message' }, 0, none), usage: null, prompt: '' }
+  const request = call.arm === 'candidate' && candidate !== null ? judgeRequest(r.input, candidate) : judgeRequest(r.input)
   const startedAt = await $.clock.now()
   const reply = await $.model.complete(request)
   const ms = (await $.clock.now()) - startedAt
-  return { record: runRecordOf(call, r.outcome, reply, ms, fact.gap), usage: reply.usage, prompt: request.prompt }
-}
-
-function armsOf(value: string | undefined): Arm[] | null {
-  const words = (value ?? ARMS.join(',')).split(',').map(w => w.trim())
-  const arms = ARMS.filter(arm => words.includes(arm))
-  return arms.length === words.length && arms.length > 0 ? arms : null
+  return { record: runRecordOf(call, r.outcome, reply, ms, { operatorText: r.operator_text, opening: r.opening }), usage: reply.usage, prompt: request.prompt }
 }
 
 async function evalJudge($: EngineInterface, args: string): Promise<Answer> {
   const a = parseArgs(args)
   const workers = a.workers === undefined ? DEFAULT_WORKERS : Number(a.workers)
   const repeats = a.repeats === undefined ? DEFAULT_REPEATS : Number(a.repeats)
-  const arms = armsOf(a.arms)
   const isCount = (n: number) => Number.isInteger(n) && n >= 1
-  if (!a.key || !a.ids || !a.graders || !a.out || !isCount(workers) || !isCount(repeats) || arms === null) return { text: JUDGE_USAGE, exitCode: 2 }
+  if (!a.key || !a.ids || !a.graders || !a.out || !isCount(workers) || !isCount(repeats) || a.candidate === 'true') return { text: JUDGE_USAGE, exitCode: 2 }
   const key = keyFrom(await readText($, a.key))
   const ids = (await readText($, a.ids))
     .split('\n')
     .map(l => l.trim())
     .filter(l => l !== '')
   const grades = gradesFrom(await gradeTexts($, a.graders))
-  const home = (await $.env.get('HOME')) ?? ''
-  // One read per session, shared by its records and by lanes reading it at once; each line keeps
-  // its bytes and time, and only a typed row whole.
-  const sessions = new Map<string, Promise<LineMark[] | null>>()
-  const marksOf = (session: string | null) => {
-    const k = session ?? ''
-    let marks = sessions.get(k)
-    if (marks === undefined) {
-      marks = sessionMarks($, home, session)
-      sessions.set(k, marks)
-    }
-    return marks
-  }
-  const factList = await pool(ids, workers, id => factOf(key[id], marksOf))
-  const facts = new Map(ids.map((id, i) => [id, factList[i]!]))
-  const judged = await pool(callsOf(ids, arms, repeats), workers, call => judgeOne($, call, key[call.id], facts.get(call.id)!))
+  const candidate = a.candidate === undefined ? null : await readText($, a.candidate)
+  const arms: Arm[] = candidate === null ? ['base'] : ['base', 'candidate']
+  const judged = await pool(callsOf(ids, arms, repeats), workers, call => judgeOne($, call, key[call.id], candidate))
   await writeLines(
     $,
     a.out,
     judged.map(({ record, usage, prompt }) => JSON.stringify({ ...record, usage, prompt })),
   )
-  const cuts = (cut: Cut) => factList.filter(f => f.cut === cut).length
   return {
     text: [
       report(
@@ -169,8 +130,7 @@ async function evalJudge($: EngineInterface, args: string): Promise<Answer> {
         arms,
         repeats,
       ),
-      `minutes cut at the judge's read: ${cuts('answer')} | at the log stamp: ${cuts('stamp')} | no transcript: ${factList.filter(f => !f.hasTranscript).length}`,
-      `system prompt: plugins/stop-judge/hooks/prompt.ts PROMPT${arms.includes('on') ? `; on adds the line "${MINUTES_SENTENCE}" and, in the user message, "Minutes since the operator's last typed message: [more than ]<n>"` : ''}`,
+      `system prompt: plugins/stop-judge/hooks/prompt.ts PROMPT${candidate === null ? '' : `; candidate: ${a.candidate}`}`,
       `written ${a.out}`,
     ].join('\n'),
   }
@@ -184,8 +144,13 @@ async function evalExtract($: EngineInterface, args: string): Promise<Answer> {
   const records = new Map<string, EvalRecord>()
   // Session by session, so one transcript's rows are held at a time.
   for (const session of new Set(firings.map(f => f.firing.session))) {
-    const rows = await sessionRows($, home, session)
-    for (const f of firings) if (f.firing.session === session) records.set(f.id, extractRecord(f.id, f.firing, rows))
+    const marks = await sessionMarks($, home, session)
+    for (const f of firings) {
+      if (f.firing.session !== session) continue
+      const at = turnAtFiring(f.firing, marks)
+      // The plan as it reads now, not as it read at the firing.
+      records.set(f.id, extractRecord(f.id, f.firing, at, at === null ? null : await readPlan($, at.turn, home)))
+    }
   }
   const out = firings.map(f => records.get(f.id)!)
   await writeLines(
@@ -206,7 +171,7 @@ async function answer(name: string, work: Promise<Answer>): Promise<Answer> {
 
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
-    await $.command.register({ name: JUDGE, description: 'Dev: run the stop judge over graded firings and score it', argumentHint: '--key --ids --graders --out [--arms] [--repeats] [--workers]' })
+    await $.command.register({ name: JUDGE, description: 'Dev: run the stop judge over graded firings and score it', argumentHint: '--key --ids --graders --out [--candidate] [--repeats] [--workers]' })
     await $.command.register({ name: EXTRACT, description: 'Dev: rebuild judged-stop records from a stop-judge firing log', argumentHint: '--log --out' })
     return next(e)
   })

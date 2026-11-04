@@ -6,7 +6,7 @@
   <a href="LICENSE"><img src="https://img.shields.io/github/license/federbenjamin/feder-plugins" alt="License"></a>
 </p>
 
-A [Claude Code](https://docs.anthropic.com/en/docs/claude-code) plugin for people who want the agent to keep working. When a turn ends, a small model (haiku) reads the messages that framed the turn and the agent's final message, and decides whether the agent was right to hand control back. When it was not (it ended on "want me to run the tests?", or on a step it could have taken), the plugin sends the agent a short reminder as if you had typed it, and the agent carries on.
+A [Claude Code](https://docs.anthropic.com/en/docs/claude-code) plugin for people who want the agent to keep working. When a turn ends, a small model (haiku) reads the recent conversation and the agent's final message and answers fixed questions about the next step the message leaves open: what blocks it, whether you held or forbade it, how big it is, how hard to undo. Plain code decides from those answers. When nothing holds the step (the agent ended on "want me to run the tests?", or on a step it could have taken), the plugin sends the agent a short reminder as if you had typed it, and the agent carries on.
 
 ## Install
 
@@ -21,12 +21,46 @@ It starts in the next session.
 ## How it works
 
 - **Nothing blocks.** The judge runs after the turn has ended; the reminder lands a few seconds later.
-- **The reminder is a user-style prompt.** It reads `STOP JUDGE — <reason>.` and the agent answers it like any message from you. It carries no rule text and does not tell the agent what to do.
-- **Once per prompt.** After one reminder the judge stays quiet until you type again. A reminder is never sent while there is text in your prompt box: you are answering.
-- **Headless runs too.** `claude -p` sessions are judged as well; an unattended run is where a caught early stop pays most.
-- **Passes without a model call** for subagent turns, interrupted turns, a keepalive ping turn, and a turn with no final text.
-- **No per-user text.** The judge reads one fixed prompt and nothing from your files. Measured with `tools/eval` over 190 graded firings (22 that should have continued, 168 that were right to stop), two repeats: that fixed prompt blocked 10 and 13 of 168 right stops and caught 9 and 10 of 22 early ones. The `undone` case (a final message that admits a check it could have run) came after that measurement. It was checked on 41 hand-labelled firings: 11 that admitted a doable check left undone, and 30 that mentioned one but were right to stop. Against the prompt without the case, two repeats each, it caught 9 of 22 tries where the old prompt caught 4, and wrongly blocked 6 of 60 where the old prompt blocked none. That is too small a set to call either difference past noise. An earlier harness found per-user rules no better. A "continue" counts only at confidence 0.7 or above.
-- **Minutes since you last wrote.** The request also states the whole minutes since your last typed message (when the transcript tail the judge reads holds none, "more than" the minutes since the tail's oldest row), and the prompt says how to read a long gap (unattended work, lean continue). `MINUTES_FACT` in `hooks/judge.ts` is the one switch; with it off the request is the measured text alone. Shipped value: off. A paired run of `tools/eval` (fact off and on, same records, same path, two repeats) measured the earlier wording, which also said "short gap: an active discussion, lean stop", as a trade, not a gain: it cut false blocks from 10–13 to 5–6 of 168 and catches from 9–10 to 4–6 of 22, both past the run's noise (sign tests p=0.012 and p=0.039), almost all of it at gaps under 5 minutes. The "long gap, lean continue" half is unmeasured: no graded firing that should have continued had a gap of 30 minutes or more.
+- **The reminder is a user-style prompt.** It reads `STOP JUDGE — nothing holds it: <the step>.` and the agent answers it like any message from you. It carries no rule text and does not tell the agent what to do.
+- **Once per prompt.** After one reminder the judge stays quiet until you type again. A reminder is never sent while there is text in your prompt box: you are answering. Nor is one sent once a newer turn has started, since it would queue behind that turn and land on work it was never about.
+- **Headless runs too.** A `claude -p` agent in a repo or worktree is judged; an unattended run is where a caught early stop pays most. A `claude -p` run started in a temporary folder is a script's and passes without a model call (`pass-scripted`).
+- **Passes without a model call** for subagent turns, interrupted turns, a keepalive ping turn, a scripted run, and a turn with no final text.
+
+## How it decides
+
+Haiku reports; it never decides. The fixed instructions in `hooks/prompt.ts` ask it to find the step and answer about it, and `hooks/decide.ts` reads the answers in this order. The first that holds is a stop:
+
+| Reason logged | When |
+| --- | --- |
+| `no step left open` | The final message only reports or answers |
+| `blocked: <what>` | A background job, a refused call, or something only you can do |
+| `operator holds it` | A quote of yours says you are deciding |
+| `operator asked for a proposal` | The message that opened the turn asks for a proposal or for thoughts |
+| `operator forbade it` | A quote of yours forbids this kind of action |
+| `instructions conflict` | A plan or message says two different things about the step |
+| `operator choice open` | The step depends on a pick you have not made |
+| `new work` | Nothing in the request or the work gives a reason for it |
+| `design open` | It changes behaviour someone relies on, above low effort, with no stated risk and cost |
+| `high effort` | Hours of work or more |
+| `hard to undo` | It cannot be taken back, or it reaches someone else |
+
+With none of them, the reason is `nothing holds it`, and the reminder goes.
+
+A quote counts only when its words are in what you typed, ignoring case and punctuation, so an agent's own "say go" holds nothing. The proposal check is plain code on the opening message alone, with any `<pasted_content>` block removed; your next message clears it. It would also hold "go ahead with the proposal".
+
+**What it reads and sends.** From the transcript's last 8 MB, to haiku through Claude Code's own model connection, at each judged turn: both sides of the last eight exchanges (400 characters a side), up to four older messages of yours (your first, and the latest three that ask to be consulted, 600 characters each), the message that opened the turn (3,000), facts code reads from the rows (background jobs not yet reported, tool calls refused this turn), the turn's tool calls by name and arguments (the last 30, with a failed call's error), up to two things the agent said along the way, the first 3,000 characters of a plan-like Markdown file under your home folder that the turn names, and the final message (the last 4,000). The judge reads no other file of yours.
+
+**Measured.** Replayed over saved turns, two or three tries each, against the judge this one replaced, with each nudge counted (a nudge is the judge telling the agent to keep working):
+
+| Nudged | Old judge | This judge | Wanted |
+| --- | --- | --- | --- |
+| 32 tuning cases: should stop | 24/45 (53%) | 11/45 (24%) | Fewer |
+| 32 tuning cases: should continue | 22/48 (46%) | 40/48 (83%) | More |
+| 25 fresh random turns | 2/50 | 4/50 | Fewer |
+
+The tuning cases shaped the questions, and the proposal check rests on 2 of them. The fresh sample is the row that does not favour this judge; its 4 nudges are 2 tries on each of 2 cases. These replays came before the live path: they have not yet been compared with live firings, which is what the capture is for.
+
+**Cost.** About 2,500 tokens of fixed instructions are marked for the prompt cache, so a call within five minutes of another pays them at the cache-read price; a typical call also sends about 2,500 tokens of its own, and spends about 180 output tokens. `maxTokens` is 1024. On a model that cannot turn thinking off, the engine adds 2,048 tokens of room for thinking on top of that cap, and thinking counts in `output_tokens`, so a call can report more than its cap: replies with about 180 tokens of text reached 955 in testing.
 
 ## Usage
 
@@ -50,26 +84,46 @@ Every turn the judge sees appends one line to `~/.claude/stopstopping/logs/stop-
 <utc> <outcome> session=<id> ms=<n> reason=<text>
 ```
 
+On a judged turn the reason is `<decision's reason>; step: <the step>; why: <haiku's words>`.
+
 | Outcome | Meaning |
 | --- | --- |
-| `continue` | The judge was sure the stop was early; the reminder was sent |
-| `stop` | The stop was right |
-| `stop-lowconf` | The judge said "continue" below 0.7 confidence (or without one); nothing sent |
+| `continue` | Nothing held the step; the reminder was sent |
+| `stop` | A stop reason held; the line's reason names it |
 | `pass-off` | `/stop-judge off` |
 | `pass-subagent` | A subagent's turn |
 | `pass-aborted` | The turn was interrupted or failed rather than answered |
 | `pass-nested` | `STOP_JUDGE_NESTED` was set |
+| `pass-scripted` | A `claude -p` run started in a temporary folder |
 | `pass-nudged` | A reminder was already sent for your last prompt |
 | `pass-keepalive` | The turn answered a keepalive ping |
 | `pass-notext` | No final message, or the session's transcript was not found |
-| `pass-typing` | There was text in your prompt box |
+| `pass-typing` | Nothing held the step, and there was text in your prompt box |
+| `pass-late` | Nothing held the step, and a newer turn had started; the reminder was dropped |
 | `pass-timeout` | The model call was cut or ran past 20 seconds |
-| `pass-error` | The call failed or its reply held no verdict |
+| `pass-error` | The call failed, or its reply held no answers |
 
 Read it back:
 
 ```
 awk '{print $2}' ~/.claude/stopstopping/logs/stop-judge.log | sort | uniq -c
+```
+
+How often each stop reason fired:
+
+```
+awk '$2 == "stop"' ~/.claude/stopstopping/logs/stop-judge.log | sed -E 's/.* reason=([^;]*);.*/\1/' | sort | uniq -c
+```
+
+## Capture
+
+Every turn that reached the model appends one JSON line to `~/.claude/stopstopping/stop-judge-captures/<session id>.jsonl`: `at`, `turnId`, the exact `input` sent and `inputChars`, the `plan` it attached, the raw `reply`, the parsed `answers`, the `quotes` (`gate` and `ban`, each the `quote` and whether `isOperators`), the `decision` (`decision` and `why`), the `outcome` and `reason` of the firing line, `ms`, the token `usage` and `usd`. The fixed instructions are not repeated: they are `hooks/prompt.ts` at the installed version. `outcome` differs from `decision` when a gate stopped a nudge (`pass-late`, `pass-typing`). A line holds your words and the agent's, stays on your machine, and is never pruned: delete the folder whenever you like.
+
+Read it back:
+
+```
+jq -c '{at, outcome, why: .decision.why, step: .answers.step, usage}' ~/.claude/stopstopping/stop-judge-captures/<session id>.jsonl
+cat ~/.claude/stopstopping/stop-judge-captures/*.jsonl | jq -s 'map(.usage) | {calls: length, input: (map(.input_tokens) | add), cached: (map(.cache_read_input_tokens) | add), written: (map(.cache_creation_input_tokens) | add), output: (map(.output_tokens) | add)}'
 ```
 
 ## Settings
@@ -129,7 +183,11 @@ In the file, every bullet ends in one or two of your quotes (at most 200 charact
 | `hooks/register.ts` | the hooks: the judge on `turn.complete`, the `/stop-judge` command, the context log at session start |
 | `hooks/derive-run.ts` | `/stop-judge derive`: the scan, the confirm, and the detached reader and synthesis loop (`startDerive`) |
 | `hooks/status.ts` | the status line, written by the command and by a derive run |
-| `hooks/judge.ts`, `hooks/prompt.ts` | the judge's rows, request, verdict and gates; the fixed prompt |
+| `hooks/config.ts` | the judge's constants: the request, the input's limits, the patterns |
+| `hooks/prompt.ts` | the fixed instructions |
+| `hooks/input.ts`, `hooks/plan-io.ts` | the user message built from the transcript tail; reading the plan it names |
+| `hooks/decide.ts` | the answers in a reply, the quote check, the decision order |
+| `hooks/judge.ts` | the rows that end a turn, the request, the gates, the capture's shape |
 | `hooks/settings.ts` | the stored setting, the command grammar, the status texts |
 | `hooks/derive.ts`, `hooks/derive-prompts.ts`, `hooks/decisions.ts` | the derive pipeline, its prompts, and the `DECISIONS.md` format |
 | `hooks/shared/` | generated copies of the repo's `shared/` (the row filter, the firing log and its one append, the event predicates and the main-turn tracker, the settings reader and command grammar, `pool`) |
