@@ -33,6 +33,7 @@ Everything the plugins write for you to read lives under `~/.claude/stopstopping
 - `session-logs/`: the session logs and their template
 - `handoffs/`: handoff documents
 - `session-summaries/`: one file per session of session-summary's calls, what each read and wrote
+- `stop-judge-captures/`: one file per session of the stop judge's calls, what each was sent and what came of it
 - `session-summary/`: the live file links and their server, only while `/session-summary links` is on
 
 ## Logs

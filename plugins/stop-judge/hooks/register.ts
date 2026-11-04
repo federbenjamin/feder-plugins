@@ -1,18 +1,25 @@
 import type { EngineInterface, Register } from 'claude-code'
 import { decisionsPath, parseDecisions, rulesOnly } from './decisions.ts'
 import { startDerive } from './derive-run.ts'
-import { framingAndPrior, guardOutcome, judgeOutcome, judgeRequest, minutesFact, nudgeText, parseRows, splitTurn, TAIL_BYTES, transcriptFindArgv } from './judge.ts'
+import { TAIL_BYTES } from './config.ts'
+import { judgeOutcome } from './decide.ts'
+import type { Judged } from './decide.ts'
+import { buildInput, readTurn } from './input.ts'
+import { captureLine, capturePath, guardOutcome, isNudgeLate, isScriptedRun, judgeRequest, nudgeText, parseRows, splitTurn, transcriptFindArgv } from './judge.ts'
+import { readPlan } from './plan-io.ts'
 import { COMMAND, SETTINGS_KEY, settingsFrom, statusText, stopJudgeCommand, USAGE } from './settings.ts'
-import { PERSON_ORIGINS } from './shared/events.ts'
+import { mainTurnEnded, mainTurnStarted, PERSON_ORIGINS } from './shared/events.ts'
+import type { MainTurn } from './shared/events.ts'
 import { countOutcomes, logPath } from './shared/firing.ts'
-import { record, stateDirs } from './shared/record.ts'
+import { PRICES, usageUsd } from './shared/pricing.ts'
+import { appendLine, record, stateDirs } from './shared/record.ts'
 import { showStatus } from './status.ts'
 import type { StatusState } from './status.ts'
 
-// Judges every main-loop turn that ends on an answer: a haiku call reads the operator's framing
-// messages and the agent's final message; a "continue" it is sure of goes back to the agent as a
-// user-style prompt, once per operator prompt. Nothing blocks the stop. Pure logic is in judge.ts.
-// `/stop-judge derive` runs in derive-run.ts.
+// Judges every main-loop turn that ends on an answer: haiku answers fixed questions about the next
+// step, code decides from the answers, and a "continue" goes back to the agent as a user-style
+// prompt, once per operator prompt. Nothing blocks the stop. Pure logic is in input.ts, decide.ts
+// and judge.ts. `/stop-judge derive` runs in derive-run.ts.
 
 const DAY_MS = 86_400_000
 
@@ -54,6 +61,8 @@ async function decisionsInfo($: EngineInterface, dir: string): Promise<{ lines: 
 
 type State = StatusState & {
   nudgedThisPrompt: boolean
+  mainTurn: MainTurn | undefined
+  lastEndedTurn: string | undefined
   transcript: { id: string; path: string } | undefined
   isInteractive: boolean
 }
@@ -69,7 +78,24 @@ async function transcriptPath($: EngineInterface, state: State, home: string): P
   return state.transcript?.path
 }
 
-async function judge($: EngineInterface, state: State, e: { agentId?: string; reason: string; answer: string }): Promise<void> {
+// What becomes of a reply: only a "continue" can reach the agent, and only with no newer turn and
+// nothing in the prompt box.
+async function deliver($: EngineInterface, state: State, turnId: string, judged: Judged): Promise<{ outcome: string; reason: string }> {
+  const { reason } = judged
+  if (judged.outcome !== 'continue') return { outcome: judged.outcome, reason }
+  if (isNudgeLate({ isTurnRunning: state.mainTurn !== undefined, lastEnded: state.lastEndedTurn, judged: turnId })) return { outcome: 'pass-late', reason }
+  if ((await $.prompt.read()).text.trim() !== '') return { outcome: 'pass-typing', reason }
+  state.nudgedThisPrompt = true
+  try {
+    await $.prompt.submit({ text: nudgeText(judged.nudge), asUser: true })
+    return { outcome: 'continue', reason }
+  } catch (error) {
+    state.nudgedThisPrompt = false
+    return { outcome: 'pass-error', reason: error instanceof Error ? error.message : 'nudge failed' }
+  }
+}
+
+async function judge($: EngineInterface, state: State, e: { agentId?: string; reason: string; answer: string; turnId: string }): Promise<void> {
   const gates = {
     isOff: settingsFrom(await $.store.get(SETTINGS_KEY)).isOff,
     agentId: e.agentId,
@@ -81,29 +107,47 @@ async function judge($: EngineInterface, state: State, e: { agentId?: string; re
   const early = guardOutcome({ ...gates, openingKind: 'none', opening: '', final: 'unread' })
   if (early) return record($, COMMAND, early, '')
 
-  const { home } = await stateDirs($)
+  const { home, dir } = await stateDirs($)
   const path = await transcriptPath($, state, home)
   if (path === undefined) return record($, COMMAND, 'pass-notext', 'transcript not found')
+  if (isScriptedRun(state.isInteractive, path)) return record($, COMMAND, 'pass-scripted', '')
   const rows = parseRows(await transcriptTail($, path))
-  const { final, opening, openingKind, prior } = splitTurn(rows, e.answer || undefined)
+  const { final, opening, openingKind } = splitTurn(rows, e.answer || undefined)
   const late = guardOutcome({ ...gates, openingKind, opening, final })
   if (late) return record($, COMMAND, late, '')
 
+  const turn = readTurn(rows, final)
+  const plan = await readPlan($, turn, home)
+  const input = buildInput(turn, plan)
   const startedAt = await $.clock.now()
-  const reply = await $.model.complete(judgeRequest(final, opening, framingAndPrior(prior), minutesFact(rows, new Date(startedAt))))
-  const ms = (await $.clock.now()) - startedAt
-  const decision = judgeOutcome(reply)
-  if (decision.outcome !== 'continue') return record($, COMMAND, decision.outcome, decision.reason, ms)
-
-  if ((await $.prompt.read()).text.trim() !== '') return record($, COMMAND, 'pass-typing', decision.reason, ms)
-  state.nudgedThisPrompt = true
+  const reply = await $.model.complete(judgeRequest(input))
+  const endedAt = await $.clock.now()
+  const ms = endedAt - startedAt
+  const judged = judgeOutcome(reply, { operatorText: turn.operatorText, opening })
+  const { outcome, reason } = await deliver($, state, e.turnId, judged)
+  await record($, COMMAND, outcome, reason, ms)
+  if (dir === '') return
   try {
-    await $.prompt.submit({ text: nudgeText(decision.reason), asUser: true })
-  } catch (error) {
-    state.nudgedThisPrompt = false
-    throw error
+    const line = captureLine({
+      at: new Date(endedAt).toISOString(),
+      turnId: e.turnId,
+      input,
+      inputChars: input.length,
+      plan: plan?.path ?? null,
+      reply: reply.isAnswered ? reply.text : null,
+      answers: judged.answers,
+      quotes: judged.quotes,
+      decision: judged.decision,
+      outcome,
+      reason,
+      ms,
+      usage: reply.usage,
+      usd: usageUsd(reply.usage, PRICES.haiku),
+    })
+    await appendLine($, capturePath(dir, await $.session.id()), line)
+  } catch {
+    // the capture is for reading back; the turn is already judged
   }
-  await record($, COMMAND, 'continue', decision.reason, ms)
 }
 
 async function isContextOff($: EngineInterface, dir: string): Promise<boolean> {
@@ -123,10 +167,12 @@ async function logContext($: EngineInterface): Promise<void> {
 }
 
 export const register: Register = on => {
-  const state: State = { nudgedThisPrompt: false, transcript: undefined, isInteractive: false, derive: undefined, statusCalls: 0 }
+  const state: State = { nudgedThisPrompt: false, mainTurn: undefined, lastEndedTurn: undefined, transcript: undefined, isInteractive: false, derive: undefined, statusCalls: 0 }
 
   on('session.start', async ($, e, next) => {
     state.nudgedThisPrompt = false
+    state.mainTurn = undefined
+    state.lastEndedTurn = undefined
     state.transcript = undefined
     state.isInteractive = e.isInteractive
     await showStatus($, state)
@@ -181,7 +227,14 @@ export const register: Register = on => {
     return next(e)
   })
 
+  on('turn.start', async ($, e, next) => {
+    state.mainTurn = mainTurnStarted(state.mainTurn, e)
+    return next(e)
+  })
+
   on('turn.complete', async ($, e, next) => {
+    state.mainTurn = mainTurnEnded(state.mainTurn, e)
+    if (!e.agentId) state.lastEndedTurn = e.turnId
     try {
       await judge($, state, e)
     } catch (error) {
@@ -192,6 +245,8 @@ export const register: Register = on => {
 
   on('session.end', async ($, e, next) => {
     state.nudgedThisPrompt = false
+    state.mainTurn = undefined
+    state.lastEndedTurn = undefined
     state.transcript = undefined
     state.derive?.controller.abort()
     return next(e)

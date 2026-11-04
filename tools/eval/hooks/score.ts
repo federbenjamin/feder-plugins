@@ -1,12 +1,12 @@
-import { confidenceOf, judgeOutcome } from './judge/judge.ts'
-import type { JudgeReply, MinutesGap } from './judge/judge.ts'
+import { judgeOutcome } from './judge/decide.ts'
+import type { JudgeReply, Said } from './judge/decide.ts'
 import { isRecord } from './judge/shared/typed.ts'
 
 // One model call of a run, the graders' labels, and the command's arguments.
 
-// `off`: the round-3 request alone. `on`: the same request with the minutes fact.
-export type Arm = 'off' | 'on'
-export const ARMS: readonly Arm[] = ['off', 'on']
+// `base`: the shipped prompt. `candidate`: the prompt under test, on the same inputs.
+export type Arm = 'base' | 'candidate'
+export const ARMS: readonly Arm[] = ['base', 'candidate']
 
 export type Call = { id: string; arm: Arm; repeat: number }
 
@@ -14,14 +14,10 @@ export type RunRecord = Call & {
   live: string
   new: 'stop' | 'continue' | null
   new_outcome: string
-  conf: number | null
-  shape: string | null
   reason: string
   text: string
   ms: number
   error: string
-  minutes_since_operator: number | null
-  is_lower_bound: boolean
 }
 
 export type Grade = { id: string; verdict: 'stop' | 'continue'; case: string; confidence: string }
@@ -36,22 +32,13 @@ export function callsOf(ids: readonly string[], arms: readonly Arm[], repeats: n
   return calls
 }
 
-// The production path's outcome for one reply (judge.ts's judgeOutcome): what the judge would
-// have logged. `gap` is the record's minutes fact, kept on both arms' calls.
-export function runRecordOf(call: Call, live: string, reply: JudgeReply, ms: number, gap: MinutesGap | null): RunRecord {
-  const base = { ...call, live, ms, text: reply.isAnswered ? reply.text : '', minutes_since_operator: gap?.minutes ?? null, is_lower_bound: gap?.isLowerBound ?? false }
-  const { outcome, reason, verdict } = judgeOutcome(reply)
-  if (verdict === null) return { ...base, new: null, new_outcome: outcome, conf: null, shape: null, reason: '', error: reason }
-  const shape = verdict.fields.shape
-  return {
-    ...base,
-    new: verdict.verdict,
-    new_outcome: outcome,
-    conf: confidenceOf(verdict.fields),
-    shape: typeof shape === 'string' ? shape : null,
-    reason: verdict.reason,
-    error: outcome === 'pass-error' ? reason : '',
-  }
+// The production path's outcome for one reply (decide.ts's judgeOutcome): what the judge would
+// have logged, before the gates that need a live session (the prompt box, a newer turn).
+export function runRecordOf(call: Call, live: string, reply: JudgeReply, ms: number, said: Said): RunRecord {
+  const base = { ...call, live, ms, text: reply.isAnswered ? reply.text : '' }
+  const { outcome, reason, decision } = judgeOutcome(reply, said)
+  if (decision === null) return { ...base, new: null, new_outcome: outcome, reason: '', error: reason }
+  return { ...base, new: decision.decision, new_outcome: outcome, reason, error: '' }
 }
 
 // grade-out-*.jsonl texts in order; a later file's line for an id wins.

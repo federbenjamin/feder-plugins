@@ -26,7 +26,7 @@ export type Job = {
 
 export const JOBS: readonly Job[] = [
   ...PARTS.map(p => ({ name: `shared -> ${p}`, from: 'shared', to: `plugins/${p}/hooks/shared`, plugin: `plugins/${p}`, owns: true })),
-  { name: 'judge -> eval', from: 'plugins/stop-judge/hooks', to: 'tools/eval/hooks/judge', plugin: 'tools/eval', files: ['judge.ts', 'prompt.ts'], owns: true },
+  { name: 'judge -> eval', from: 'plugins/stop-judge/hooks', to: 'tools/eval/hooks/judge', plugin: 'tools/eval', files: ['config.ts', 'decide.ts', 'input.ts', 'judge.ts', 'plan-io.ts', 'prompt.ts'], owns: true },
   { name: 'judge shared -> eval', from: 'plugins/stop-judge/hooks/shared', to: 'tools/eval/hooks/judge/shared', plugin: 'tools/eval' },
   { name: 'hooks_ts -> session-summary', from: 'plugins/morning-report/scripts', to: 'plugins/session-summary/scripts', plugin: 'plugins/session-summary', files: ['hooks_ts.py'] },
 ]
