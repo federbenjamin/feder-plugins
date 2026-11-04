@@ -43,7 +43,7 @@ function resolvedPath(path: string, cwd: string, home: string): string | undefin
 }
 
 // One start per run of path characters, so a long token costs one pass.
-const PATH = /(?<![\w.\/~@+-])((?:~|\.{0,2})?\/?[\w.@+-]+(?:\/[\w.@+-]+)*\.[a-zA-Z]\w{0,4})(?![\w\/-])/g
+const PATH = /(?<![\w.\/~@+…-])((?:~|\.{0,2})?\/?[\w.@+-]+(?:\/[\w.@+-]+)*\.[a-zA-Z]\w{0,4})(?![\w\/-])/g
 
 // The path-looking strings in text or a command, oldest first. A name with no folder is too often
 // not a file (`node.js`, `e.g`), so it has to be a document's.

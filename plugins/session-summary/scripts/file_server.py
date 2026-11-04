@@ -101,9 +101,9 @@ def handler_for(shares_path, log_path):
             self.send_response(404)
             self.send_header("Content-Length", "0")
             self.send_header("Cache-Control", "no-store")
+            self.record(404)
             self.end_headers()
             self.close_connection = True
-            self.record(404)
 
         # A malformed request or another method gets the same answer as an unknown token.
         def send_error(self, code, message=None, explain=None):
@@ -133,8 +133,8 @@ def handler_for(shares_path, log_path):
                 # A served page runs apart from this origin, so it cannot reach another file's link.
                 if "html" in kind or "svg" in kind:
                     self.send_header("Content-Security-Policy", "sandbox allow-scripts")
-                self.end_headers()
                 self.record(200)
+                self.end_headers()
                 if with_body:
                     try:
                         shutil.copyfileobj(f, self.wfile, CHUNK_BYTES)

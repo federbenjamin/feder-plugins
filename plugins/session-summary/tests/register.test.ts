@@ -201,8 +201,9 @@ test('an interactive session opens the pane, which says so while it has no summa
 test('an interactive session restores its synthetic capture into the pane', async ($, on) => {
   const capture = `${JSON.stringify({ at: '2026-10-23T11:58:00.000Z', soFar: 'Earlier work', now: 'Resume it', files: [PLAN], status: 'running', source: 'messages', variant: 'edit' })}\n`
   const w = world(on, { capture })
+  w.files.set(`/tmp/project/${PLAN}`, 'plan')
   await start($)
-  expect(w.reads).toEqual([CAPTURE])
+  expect(w.reads[0]).toBe(CAPTURE)
   expect(w.commands).toEqual([PLUGIN])
   expect(await paneTexts($)).toEqual(['● NOW', '2m ago', 'Resume it', 'SO FAR', 'Earlier work', 'FILES', LINKED_PLAN])
 })
@@ -1037,4 +1038,14 @@ test('a prompt from a plugin makes no prompt call', async ($, on) => {
   await step($)
   await w.clock.settle()
   expect(w.requests).toEqual([])
+})
+
+test('a resume leaves out a listed path with no file, and keeps one that has a file', async ($, on) => {
+  const capture = `${JSON.stringify({ at: '2026-10-23T11:58:00.000Z', title: 'T', soFar: 'S', now: 'N', files: [PLAN, '/build/ship.md'], status: 'running', source: 'messages', variant: 'edit' })}\n`
+  const w = world(on, { capture })
+  w.files.set(`/tmp/project/${PLAN}`, 'plan')
+  await start($)
+  const texts = await paneTexts($)
+  expect(texts).toContain(LINKED_PLAN)
+  expect(texts.join(' ')).not.toContain('ship.md')
 })
