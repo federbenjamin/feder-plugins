@@ -46,7 +46,7 @@ export const registerPane: Register = on => {
     const height = paneHeight({ placement: e.props.placement, bodyRows: e.props.scroll.bodyRows, estimated: estimated + (copy === null ? 0 : CONCISE_GAP_ROWS + copy.rows.length) })
     return (
       <Box flexDirection="column" {...(height === undefined ? {} : { height })}>
-        <Box flexDirection="column" flexGrow={1} flexShrink={1} overflow="hidden">
+        <Box flexDirection="column" flexShrink={1} overflow="hidden">
           {view === null ? (
             <Text dimColor>No summary yet.</Text>
           ) : (
@@ -70,30 +70,34 @@ export const registerPane: Register = on => {
           )}
         </Box>
         {copy !== null && (
-          <Box flexDirection="column" flexShrink={0} marginTop={1} paddingLeft={2}>
-            {copy.rows.map((row, i) => (
-              <Box flexDirection="row" columnGap={1}>
-                <Box flexGrow={1} flexShrink={1}>
-                  {row.kind === 'head' ? (
-                    <Box flexDirection="row" flexGrow={1} justifyContent="space-between">
-                      <Box flexShrink={1}>
-                        <Button key={`summary-${row.id}`} plain dimColor onPress={() => void update($, conciseAtom, c => toggleEntry(c, row.id))}>
-                          <Text bold>{row.label}</Text>
-                        </Button>
+          <Box flexDirection="column" flexShrink={0} marginTop={1}>
+            <Text dimColor>{'─'.repeat(Math.max(1, e.props.bodyColumns))}</Text>
+            <Box flexDirection="column" flexShrink={0} paddingLeft={2}>
+              {copy.rows.map((row, i) => (
+                <Box flexDirection="row" columnGap={1}>
+                  <Box flexGrow={1} flexShrink={1}>
+                    {row.kind === 'head' ? (
+                      <Box flexDirection="row" flexGrow={1} justifyContent="space-between">
+                        <Box flexShrink={1}>
+                          <Button key={`summary-${row.id}`} plain dimColor onPress={() => void update($, conciseAtom, c => toggleEntry(c, row.id))}>
+                            <Text bold>{row.label}</Text>
+                          </Button>
+                        </Box>
+                        <Box flexShrink={0} marginLeft={1}>
+                          <Text dimColor>{row.age}</Text>
+                        </Box>
                       </Box>
-                      <Box flexShrink={0} marginLeft={1}>
-                        <Text dimColor>{row.age}</Text>
-                      </Box>
-                    </Box>
-                  ) : (
-                    <Text dimColor wrap="truncate-end">{row.text === '' ? ' ' : row.text}</Text>
-                  )}
+                    ) : (
+                      <Text dimColor wrap="truncate-end">{row.text === '' ? ' ' : row.text}</Text>
+                    )}
+                  </Box>
+                  {copy.bar[i] !== undefined && <Text dimColor={copy.bar[i] === '│'}>{copy.bar[i]}</Text>}
                 </Box>
-                {copy.bar[i] !== undefined && <Text dimColor={copy.bar[i] === '│'}>{copy.bar[i]}</Text>}
-              </Box>
-            ))}
+              ))}
+            </Box>
           </Box>
         )}
+        <Box flexGrow={1} />
         {rows.length > 0 && (
           <Box flexDirection="column" flexShrink={0} marginTop={1} paddingLeft={2}>
             <Text dimColor bold>{filesHeader(offset, docs.length)}</Text>

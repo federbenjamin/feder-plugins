@@ -54,8 +54,8 @@ export const CONCISE_ENTRIES_MAX = 200
 export const CONCISE_VARIANT = 'concise'
 // A rewrite can run as long as the response: a reply that reaches maxTokens is marked as cut off.
 export const CONCISE_REQUEST = { model: 'sonnet', maxTokens: 8_000, effort: 'low', timeoutMs: 120_000 } as const
-// The section's rows above its first summary: its gap.
-export const CONCISE_GAP_ROWS = 1
+// The section's rows above its first summary: its gap and its rule.
+export const CONCISE_GAP_ROWS = 2
 // The columns its text gives up: the indent the pane's other blocks have, and a gap and scrollbar mark as FILES has.
 export const CONCISE_TEXT_INSET = 4
 export const CONCISE_BAR_COLUMNS = 2 // the scrollbar and its gap, part of the inset

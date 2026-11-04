@@ -190,25 +190,25 @@ test('summaries list newest first, a blank row between open ones, a collapsed on
 })
 
 test('a section exactly as tall as the room is not windowed', () => {
-  // bodyRows 20 - 1 above - 1 gap = 18 rows of room: the header and 17 lines
-  const v = view(concise({ text: lines(17) }), 20)
+  // bodyRows 20 - 1 above - 2 gap and rule = 17 rows of room: the header and 16 lines
+  const v = view(concise({ text: lines(16) }), 20)
   expect(v.window).toBeNull()
-  expect(v.rows).toHaveLength(18)
+  expect(v.rows).toHaveLength(17)
 })
 
 test('an overlong section shows exactly the room\'s rows, one scrollbar mark per row, and no position text', () => {
   const v = view(concise(), 20)
-  expect(v.window).toEqual({ rows: 18, maxOffset: 13 })
+  expect(v.window).toEqual({ rows: 17, maxOffset: 14 })
   expect(v.rows[0]).toEqual(head(1, `▾ ${CONCISE_LABEL}`, 'just now'))
-  expect(v.rows.slice(1)).toEqual(Array.from({ length: 17 }, (_, i) => text(`line ${i + 1}`)))
-  expect(v.bar).toHaveLength(18)
+  expect(v.rows.slice(1)).toEqual(Array.from({ length: 16 }, (_, i) => text(`line ${i + 1}`)))
+  expect(v.bar).toHaveLength(17)
   expect(v.bar[0]).toBe('█')
   expect(v.bar.at(-1)).toBe('│')
 })
 
 test('scrolling moves the window over the one flattened list: the header scrolls out with the top', () => {
-  const v = view(concise({}, { offset: 13 }), 20)
-  expect(v.rows[0]).toEqual(text('line 13'))
+  const v = view(concise({}, { offset: 14 }), 20)
+  expect(v.rows[0]).toEqual(text('line 14'))
   expect(v.rows.at(-1)).toEqual(text('line 30'))
   expect(v.bar[0]).toBe('│')
   expect(v.bar.at(-1)).toBe('█')
@@ -216,17 +216,17 @@ test('scrolling moves the window over the one flattened list: the header scrolls
 
 test('the window runs across a summary boundary into the next summary\'s header', () => {
   const c: Concise = { ...EMPTY_CONCISE, responses: 1, entries: [entry({ id: 2, text: lines(10), responses: 1 }), entry({ id: 1, text: lines(10), responses: 0, isOpen: false })] }
-  // section: head, 10 lines, blank, head = 13 rows; room = 12 - 1 above - 1 gap = 10, which is over CONCISE_MIN_ROWS
-  const v = view({ ...c, offset: 3 }, 12)
-  expect(v.window).toEqual({ rows: 10, maxOffset: 3 })
-  expect(v.rows[0]).toEqual(text('line 3'))
+  // section: head, 10 lines, blank, head = 13 rows; room = 12 - 1 above - 2 gap and rule = 9, which is over CONCISE_MIN_ROWS
+  const v = view({ ...c, offset: 4 }, 12)
+  expect(v.window).toEqual({ rows: 9, maxOffset: 4 })
+  expect(v.rows[0]).toEqual(text('line 4'))
   expect(v.rows.at(-2)).toEqual(text(''))
   expect(v.rows.at(-1)).toEqual(head(1, '▸ SUMMARY · 1 RESPONSE OLD', 'just now'))
 })
 
 test('an offset past the end clamps to the last full window, and a negative one to the first', () => {
   const end = view(concise({}, { offset: 999 }), 20)
-  expect(end.rows[0]).toEqual(text('line 13'))
+  expect(end.rows[0]).toEqual(text('line 14'))
   expect(end.rows.at(-1)).toEqual(text('line 30'))
   expect(view(concise({}, { offset: -4 }), 20).rows[0]!.kind).toBe('head')
 })
@@ -238,7 +238,7 @@ test('with little room left by the texts, the section still keeps CONCISE_MIN_RO
 })
 
 test('FILES keeps its rows however short the pane: the section gives way, to one row at least', () => {
-  expect(view(concise(), 12, { aboveRows: 12, fileRows: 7 }).rows).toHaveLength(4)
+  expect(view(concise(), 12, { aboveRows: 12, fileRows: 7 }).rows).toHaveLength(3)
   expect(view(concise(), 6, { aboveRows: 12, fileRows: 7 }).rows).toHaveLength(1)
 })
 

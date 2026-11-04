@@ -8,7 +8,7 @@ A [Claude Code](https://docs.anthropic.com/en/docs/claude-code) plugin for peopl
 - **Now**: one sentence on the most recent task.
 - **Files**: the files the session produced for you to read, as the haiku call judges them, plus anything sent to you, newest first.
 
-`/summarize` adds a fourth: shorter copies of the agent's responses, low in the pane just above the files, so "say it again, more concisely" costs the session's context nothing.
+`/summarize` adds a fourth: shorter copies of the agent's responses, directly under the texts, so "say it again, more concisely" costs the session's context nothing.
 
 Experimental: it is not part of the `stopstopping` bundle.
 
@@ -48,7 +48,7 @@ Claude Code decides where a pane goes. In the fullscreen layout (`"tui": "fullsc
 
 ## /summarize
 
-`/summarize` shows shorter copies of the agent's responses between the pane's texts and `FILES`, newest first, drawn like the pane's other blocks: dim and indented, each under its own header with its age at the right. A separate model call writes each one, so the copies never reach the session's context (only the typed command line is recorded).
+`/summarize` shows shorter copies of the agent's responses directly under the pane's texts, below a rule like the one under the title, newest first, drawn like the pane's other blocks: dim and indented, each under its own header with its age at the right. Spare rows fall between them and `FILES`, which stays at the bottom. A separate model call writes each one, so the copies never reach the session's context (only the typed command line is recorded).
 
 | Command | What it does |
 |---|---|

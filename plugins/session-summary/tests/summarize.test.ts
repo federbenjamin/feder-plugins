@@ -99,8 +99,8 @@ const start = ($: Engine, isInteractive = true) => $.session.start({ cwd: '/tmp/
 const summarize = ($: Engine) => $.command.run({ command: CONCISE_COMMAND, args: '', origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 120 } })
 const conciseRequests = (w: World) => w.requests.filter(r => r.system === CONCISE_SYSTEM)
 const logLines = (w: World) => (w.files.get(LOG) ?? '').split('\n').filter(Boolean)
-// Blank rows and scrollbar marks are not what a test reads.
-const isContent = (text: string) => text !== ' ' && !/^[█│]$/.test(text)
+// Blank rows, scrollbar marks and the section's rule are not what a test reads.
+const isContent = (text: string) => text !== ' ' && !/^[█│]$/.test(text) && !/^─+$/.test(text)
 const paneTexts = async ($: Engine, scroll = PANE.scroll) => {
   const ui = await $.ui.mount({ plugin: PLUGIN, surface: 'terminal', component: 'Pane', requestId: PLUGIN, props: { ...PANE, scroll } })
   const texts = (await ui.findAll({ type: 'Text' })).map(t => t.text).filter(isContent)
@@ -161,6 +161,30 @@ test('the section is placed under the timer\'s texts once a summary exists', asy
   expect(texts.at(-1)).toBe('A shorter copy.')
 })
 
+test('the pane draws the texts, then the rule, then the first summary header, then FILES', async ($, on) => {
+  const w = world(on)
+  const files = Array.from({ length: 3 }, (_, i) => `/tmp/project/doc${i}.md`)
+  for (const file of files) w.files.set(file, '')
+  w.files.set(`${DIR}/session-summaries/${ID}.jsonl`, `${JSON.stringify({ at: new Date(T0).toISOString(), soFar: 'Earlier work', now: 'Resume it', files, status: 'running', source: 'messages', variant: 'edit' })}\n`)
+  w.replies.push(said('A shorter copy.'))
+  await start($)
+  await summarize($)
+  await w.clock.settle()
+  const ui = await $.ui.mount({ plugin: PLUGIN, surface: 'terminal', component: 'Pane', requestId: PLUGIN, props: PANE })
+  // Unfiltered by isContent: the rule is the point.
+  const texts = (await ui.findAll({ type: 'Text' })).map(t => t.text).filter(t => t !== ' ' && !/^[█│]$/.test(t))
+  await ui.unmount()
+  const rule = texts.findIndex(t => /^─+$/.test(t))
+  const header = texts.findIndex(t => t.startsWith(SECTION))
+  const filesAt = texts.findIndex(t => t.startsWith('FILES'))
+  expect(texts.indexOf('SO FAR')).toBeGreaterThanOrEqual(0)
+  expect(texts.indexOf('SO FAR')).toBeLessThan(rule)
+  expect(rule).toBeGreaterThan(-1)
+  expect(header).toBe(rule + 1)
+  expect(filesAt).toBeGreaterThan(header)
+  expect(texts.filter(t => /^─+$/.test(t))).toHaveLength(1)
+})
+
 test('a ui.scroll over an overlong section moves the section and leaves the top rows unchanged', async ($, on) => {
   const w = world(on)
   w.replies.push(said(lines(40)))
@@ -169,11 +193,11 @@ test('a ui.scroll over an overlong section moves the section and leaves the top 
   await w.clock.settle()
   const ui = await $.ui.mount({ plugin: PLUGIN, surface: 'terminal', component: 'Pane', requestId: PLUGIN, props: PANE })
   const texts = async () => (await ui.findAll({ type: 'Text' })).map(t => t.text).filter(isContent)
-  // The header and 40 lines are one list of 41 rows in a window of 18.
+  // The header and 40 lines are one list of 41 rows in a window of 17.
   const before = await texts()
   expect(before.slice(0, 3)).toEqual(['No summary yet.', SECTION, 'just now'])
   expect(before.at(3)).toBe('line 1')
-  expect(before.at(-1)).toBe('line 17')
+  expect(before.at(-1)).toBe('line 16')
 
   expect(await scroll($, 5)).toEqual({})
   const after = await texts()
@@ -181,16 +205,16 @@ test('a ui.scroll over an overlong section moves the section and leaves the top 
   // The header scrolls out with the rows above it.
   expect(after).not.toContain(SECTION)
   expect(after[1]).toBe('line 5')
-  expect(after.at(-1)).toBe('line 22')
+  expect(after.at(-1)).toBe('line 21')
   expect(after).toHaveLength(before.length - 1)
   // The plugin took the scroll: the engine's own never saw it.
   expect(w.engineScrolls).toEqual([])
 
-  // A page key asks for the pane's 20 rows; the section's window is 18.
+  // A page key asks for the pane's 20 rows; the section's window is 17.
   await scroll($, 20)
-  expect((await texts())[1]).toBe('line 23')
+  expect((await texts())[1]).toBe('line 22')
   await scroll($, 500)
-  expect((await texts())[1]).toBe('line 23')
+  expect((await texts())[1]).toBe('line 24')
   expect((await texts()).at(-1)).toBe('line 40')
   await scroll($, -500)
   expect((await texts())[1]).toBe(SECTION)
