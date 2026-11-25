@@ -131,7 +131,10 @@ test('a tool call reads as what it did, marked when it runs in the background', 
   expect(lines(['Bash', { command: 'y'.repeat(200) }])).toBe(`Bash: ${'y'.repeat(100)}`)
   expect(lines(['Edit', { file_path: 'a.ts', old_string: 'secret' }])).toBe('Edit: a.ts')
   expect(lines(['NotebookEdit', { notebook_path: 'n.ipynb' }])).toBe('NotebookEdit: n.ipynb')
-  expect(lines(['Agent', { description: 'Look around', prompt: 'long' }])).toBe('Agent: Look around (in background)')
+  expect(lines(['Agent', { description: 'Look around', prompt: 'long' }])).toBe('Agent: Look around')
+  const agent = (status: string) => readTurn([typed('go'), uses('a', 'Agent', { description: 'Look around' }), result('a', 'text', {}, { toolUseResult: { status, agentId: 'x' } }), says(FINAL)], FINAL).actions[0]
+  expect(agent('async_launched')).toBe('Agent: Look around (in background)')
+  expect(agent('completed')).toBe('Agent: Look around')
   expect(lines(['Skill', { skill: 'build' }])).toBe('Skill: build')
   expect(lines(['Grep', { pattern: 'x' }])).toBe('Grep: {"pattern":"x"}')
   expect(lines(['Grep', { pattern: 'z'.repeat(200) }])).toHaveLength('Grep: '.length + 80)
@@ -142,6 +145,13 @@ test('a failed call says why, and the time is left out when a row has none', () 
   expect(readTurn(rows, FINAL).actions[0]).toBe(`Bash: false — FAILED: ${'exit 1 '.repeat(30).trim().slice(0, 90)}`)
   const untimed: TranscriptRow[] = [{ type: 'assistant', message: { content: [{ type: 'text', text: FINAL }] } }]
   expect(buildInput(readTurn(untimed, FINAL), null)).toContain('0 tool calls.\n')
+})
+
+test('a final row not yet in the file, with an untimed row last, keeps the pending jobs and the minutes', () => {
+  const rows = [typed('go', 0), uses('job', 'Bash', { command: 'make', description: 'Build the app', run_in_background: true }, 1), result('job', 'started', {}, { toolUseResult: { backgroundTaskId: 'task-1' } }), { type: 'data-flow-records' }]
+  const turn = readTurn(rows, FINAL)
+  expect(turn.pending).toEqual(['Build the app'])
+  expect(turn.minutes).toBe(1)
 })
 
 test('a job started in the background stays pending until something closes it', () => {

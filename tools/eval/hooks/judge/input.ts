@@ -48,7 +48,7 @@ const opensTurn = (row: TranscriptRow): boolean => row.type === 'user' && !row.i
 
 const isToolAgent = (name: unknown): boolean => name === 'Agent' || name === 'Task'
 
-function actionLine(block: Record<string, unknown>): string {
+function actionLine(block: Record<string, unknown>, isBackground: boolean): string {
   const name = typeof block.name === 'string' ? block.name : '?'
   const input = isRecord(block.input) ? block.input : {}
   let what: string
@@ -57,7 +57,7 @@ function actionLine(block: Record<string, unknown>): string {
   else if (isToolAgent(name)) what = flat(input.description).slice(0, INPUT_LIMITS.actionChars)
   else if (name === 'Skill') what = String(input.skill ?? '')
   else what = flat(JSON.stringify(input)).slice(0, INPUT_LIMITS.otherToolChars)
-  return `${name}: ${what}${input.run_in_background || isToolAgent(name) ? ' (in background)' : ''}`
+  return `${name}: ${what}${isBackground ? ' (in background)' : ''}`
 }
 
 const resultText = (block: Record<string, unknown>): string => flat(contentText(block.content))
@@ -133,6 +133,13 @@ export function readTurn(rows: readonly TranscriptRow[], final: string): Turn {
   for (const row of rows.slice(openAt, end + 1)) {
     for (const block of blocksOf(row)) if (block.type === 'tool_result' && block.is_error) errors.set(block.tool_use_id, resultText(block).slice(0, INPUT_LIMITS.errorChars))
   }
+  // An agent call is in the background only when its result says it was launched, not finished.
+  const launched = new Set<unknown>()
+  for (const row of rows.slice(openAt, end + 1)) {
+    const result = row.toolUseResult
+    if (!isRecord(result) || result.status !== 'async_launched') continue
+    for (const block of blocksOf(row)) if (block.type === 'tool_result') launched.add(block.tool_use_id)
+  }
   const actions: string[] = []
   const along: string[] = []
   for (const row of rows.slice(openAt, end)) {
@@ -140,12 +147,15 @@ export function readTurn(rows: readonly TranscriptRow[], final: string): Turn {
     for (const block of blocksOf(row)) {
       if (block.type !== 'tool_use') continue
       const error = errors.get(block.id)
-      actions.push(actionLine(block) + (error === undefined ? '' : ` — FAILED: ${error}`))
+      const isBackground = Boolean(isRecord(block.input) && block.input.run_in_background) || launched.has(block.id)
+      actions.push(actionLine(block, isBackground) + (error === undefined ? '' : ` — FAILED: ${error}`))
     }
     const text = assistantText(row)
     if (text.trim() !== '') along.push(text)
   }
-  const endAt = timeOf(rows[Math.min(end, rows.length - 1)])
+  // The turn's end: the final row's time, or the last timed row when the final is not in the file
+  // yet. Some row types carry no timestamp, and a time that is not a number drops every job.
+  const endAt = timeOf(rows.slice(0, end + 1).findLast(r => !Number.isNaN(timeOf(r))))
   const gapMs = endAt - timeOf(rows[openAt])
   return {
     older: framing(exchanges.slice(0, -INPUT_LIMITS.window).map(e => e.operator)),
