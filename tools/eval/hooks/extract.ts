@@ -1,5 +1,5 @@
 import { TAIL_BYTES } from './judge/config'
-import { buildInput, readTurn } from './judge/input'
+import { buildInput, readTurn, SECTIONS } from './judge/input'
 import type { Turn } from './judge/input'
 import { assistantText, splitTurn } from './judge/judge'
 import { parseFiringLine } from './judge/shared/firing'
@@ -127,7 +127,39 @@ export function extractRecord(id: string, firing: FiringLine, at: { turn: Turn; 
   return { ...base, final: at.turn.final, opening: at.opening, operator_text: at.turn.operatorText, input: buildInput(at.turn, plan) }
 }
 
+// A section's body: from its heading to the last `to`, or to the end.
+const between = (text: string, from: string, to?: string): string => {
+  const start = text.indexOf(`${from}\n\n`)
+  if (start === -1) return ''
+  const rest = text.slice(start + from.length + 2)
+  const stop = to === undefined ? -1 : rest.lastIndexOf(to)
+  return (stop === -1 ? rest : rest.slice(0, stop)).trim()
+}
+
+// A line of the judge's capture file as a record: the exact input of a live turn, with the
+// operator's words read back out of its sections. The id is `T` and the turn id's first 8.
+export function captureRecord(v: unknown): EvalRecord | null {
+  if (!isRecord(v) || typeof v.turnId !== 'string' || typeof v.input !== 'string' || typeof v.outcome !== 'string') return null
+  const input = v.input
+  const head = input.slice(0, Math.max(0, input.indexOf(SECTIONS.facts)))
+  const opening = between(head, SECTIONS.opening)
+  const typed = [...between(head, SECTIONS.recent, SECTIONS.opening).matchAll(/^Operator: ([\s\S]*?)(?=\n\nAgent: )/gm)].map(m => m[1])
+  const older = head.includes(SECTIONS.older) ? between(head, SECTIONS.older, head.includes(SECTIONS.recent) ? SECTIONS.recent : SECTIONS.opening) : ''
+  return {
+    id: `T${v.turnId.slice(0, 8)}`,
+    ts: typeof v.at === 'string' ? v.at : null,
+    session: null,
+    outcome: v.outcome,
+    judge_reason: typeof v.reason === 'string' ? v.reason : '',
+    final: between(input, SECTIONS.final, SECTIONS.end),
+    opening,
+    operator_text: [older, ...typed, opening].join('\n'),
+    input,
+  }
+}
+
 function recordOf(v: unknown): EvalRecord | null {
+  if (isRecord(v) && typeof v.id !== 'string') return captureRecord(v)
   if (!isRecord(v) || typeof v.id !== 'string' || typeof v.outcome !== 'string') return null
   const text = (x: unknown) => (typeof x === 'string' ? x : null)
   return {
@@ -143,8 +175,8 @@ function recordOf(v: unknown): EvalRecord | null {
   }
 }
 
-// The key by id, from either shape: a JSON object of records by id (a grading key), or the
-// JSON lines /eval-extract writes.
+// The key by id, from any shape: a JSON object of records by id (a grading key), the JSON lines
+// /eval-extract writes, or the lines of a judge capture file.
 export function keyFrom(text: string): Record<string, EvalRecord> {
   const key: Record<string, EvalRecord> = {}
   let whole: unknown

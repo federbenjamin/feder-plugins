@@ -122,11 +122,14 @@ awk '$2 == "stop"' ~/.claude/stopstopping/logs/stop-judge.log | sed -E 's/.* rea
 
 Every turn that reached the model appends one JSON line to `~/.claude/stopstopping/stop-judge-captures/<session id>.jsonl`: `at`, `turnId`, the exact `input` sent and `inputChars`, the `plan` it attached, the raw `reply`, the parsed `answers`, the `quotes` (`gate` and `ban`, each the `quote` and whether `isOperators`), the `decision` (`decision` and `why`), the `outcome` and `reason` of the firing line, `ms`, the token `usage` and `usd`. The fixed instructions are not repeated: they are `hooks/prompt.ts` at the installed version. `outcome` differs from `decision` when a gate stopped a nudge (`pass-late`, `pass-typing`). A line holds your words and the agent's, stays on your machine, and is never pruned: delete the folder whenever you like.
 
+A reminder that was sent gets a second, short line at the end of the turn it started: `at`, the `turnId` of the turn it answered, `followup` (`interrupted` when you cut that turn short, `worked` when the agent made tool calls, `answered` when it only replied) and `toolCalls`. An interruption is the one sure sign of a wrong reminder; work done is not proof of a right one, since an agent obeys a wrong reminder too.
+
 Read it back:
 
 ```
 jq -c '{at, outcome, why: .decision.why, step: .answers.step, usage}' ~/.claude/stopstopping/stop-judge-captures/<session id>.jsonl
-cat ~/.claude/stopstopping/stop-judge-captures/*.jsonl | jq -s 'map(.usage) | {calls: length, input: (map(.input_tokens) | add), cached: (map(.cache_read_input_tokens) | add), written: (map(.cache_creation_input_tokens) | add), output: (map(.output_tokens) | add)}'
+cat ~/.claude/stopstopping/stop-judge-captures/*.jsonl | jq -r 'select(.followup) | .followup' | sort | uniq -c
+cat ~/.claude/stopstopping/stop-judge-captures/*.jsonl | jq -s 'map(select(.usage) | .usage) | {calls: length, input: (map(.input_tokens) | add), cached: (map(.cache_read_input_tokens) | add), written: (map(.cache_creation_input_tokens) | add), output: (map(.output_tokens) | add)}'
 ```
 
 ## Settings
