@@ -15,7 +15,7 @@ Or one plugin: the same command with `dialog-timeout`, `cache-keepalive`, `stop-
 - **[dialog-timeout](plugins/dialog-timeout/README.md)** ends a turn left on a permission prompt or question for 30 minutes and tells the agent you are away (`/afk`).
 - **[cache-keepalive](plugins/cache-keepalive/README.md)** keeps an idle session's prompt cache warm with a short ping, and ends on a handoff.
 - **[stop-judge](plugins/stop-judge/README.md)** judges each early stop and nudges the agent to carry on; `/stop-judge derive` writes a `DECISIONS.md` of your own rules from your sessions.
-- **[session-log](plugins/session-log/README.md)** keeps one markdown log per session, pruned at compaction, and ships the handoff and finish-session skills.
+- **[session-log](plugins/session-log/README.md)** keeps one log per session through tools the agent calls, records what the session did, and ships the handoff and finish-session skills.
 - **[session-summary](plugins/session-summary/README.md)** keeps a pane beside the chat that says what the session is about, what it is doing now, and which files to open, written by a haiku call while a turn runs (`/session-summary`). Experimental; not in the bundle.
 - **[morning-report](plugins/morning-report/README.md)** writes `status.md` each night from your sessions, one block per stream (its repo, what landed, what is left, who it waits on), and `patterns.md`, a dated catalog of what went well and what did not against a list you set (`/morning-setup`). Not in the bundle; its files live in its own data folder.
 - **[stall-notice](plugins/stall-notice/README.md)** tells the session when a subagent's tool call has been running for 5 minutes. Not in the bundle.
@@ -30,7 +30,7 @@ Everything the plugins write for you to read lives under `~/.claude/stopstopping
 - `last-run.json`: the measured cost per turn of the last derive run, written by `/stop-judge derive` for the next estimate
 - `context-off`: an empty flag file `/stop-judge context off` writes (removed by `context on`); while it exists the session-start hook does not print `DECISIONS.md`
 - `logs/`: one log per plugin
-- `session-logs/`: the session logs and their template
+- `session-logs/`: each session's log, a store and the view written from it
 - `handoffs/`: handoff documents
 - `session-summaries/`: one file per session of session-summary's calls, what each read and wrote
 - `stop-judge-captures/`: one file per session of the stop judge's calls, what each was sent and what came of it

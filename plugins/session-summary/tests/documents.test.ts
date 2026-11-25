@@ -1,7 +1,8 @@
 import { expect, test } from 'claude-code/testing'
 import type { Doc } from '../types'
 import { FILE_CANDIDATE_CHECKS_MAX, FILE_CANDIDATES_MAX, RECENT_FILE_MS } from '../hooks/config'
-import { hasNewTop, filesScrollbar, absolutePath, capturedDocuments, clampOffset, documentsFrom, fileCandidates, fileLabel, fileRow, filesHeader, isDocumentPath, isOverFiles, isRecentFile, judgeablePaths, judgedDocuments, mergeDocuments, pathsIn, shownDocuments } from '../hooks/documents'
+import { hasNewTop, filesScrollbar, capturedDocuments, clampOffset, documentsFrom, fileCandidates, fileLabel, fileRow, filesHeader, isDocumentPath, isOverFiles, isRecentFile, judgeablePaths, judgedDocuments, mergeDocuments, pathsIn, shownDocuments } from '../hooks/documents'
+import { absolutePath } from '../hooks/shared/text'
 import { estimatedRows, paneHeight } from '../hooks/summary'
 
 const CWD = '/repo'

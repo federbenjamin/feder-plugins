@@ -2,6 +2,7 @@ import type { SessionMessage } from 'claude-code'
 import type { Doc } from '../types'
 import { DOCUMENT_EXTENSIONS, FILE_CANDIDATE_CHECKS_MAX, FILE_CANDIDATES_MAX, FILES_ROWS, RECENT_FILE_MS } from './config'
 import { isSecretPath, shareUrl } from './links'
+import { absolutePath, touchedBy } from './shared/text'
 import { isRecord } from './shared/typed'
 
 // The documents list's pure side, newest touch first: which paths the summary call may judge, what
@@ -23,17 +24,6 @@ function isWithheldPath(path: string): boolean {
   return isSecretPath(path) || NOT_DOCUMENTS.test(path)
 }
 
-// An absolute path with its `.` and `..` folded, so one file is one row and the secret filter reads it whole.
-export function absolutePath(path: string, cwd: string): string {
-  const full = path.startsWith('/') ? path : `${cwd}/${path}`
-  const kept: string[] = []
-  for (const part of full.split('/')) {
-    if (part === '..') kept.pop()
-    else if (part !== '' && part !== '.') kept.push(part)
-  }
-  return `/${kept.join('/')}`
-}
-
 const isFullPath = (path: string): boolean => path.startsWith('/') || path.startsWith('~/')
 
 // Undefined for a `~` path with no HOME to expand it from.
@@ -49,14 +39,6 @@ const PATH = /(?<![\w.\/~@+…-])((?:~|\.{0,2})?\/?[\w.@+-]+(?:\/[\w.@+-]+)*\.[a
 // not a file (`node.js`, `e.g`), so it has to be a document's.
 export function pathsIn(text: string): string[] {
   return [...text.matchAll(PATH)].map(m => m[1]!).filter(p => p.includes('/') || isDocumentPath(p))
-}
-
-// The paths one tool use touches: a Write or Edit's file, a SendUserFile's files.
-function touchedBy(tool: string, input: unknown): string[] {
-  if (!isRecord(input)) return []
-  if (tool === 'Write' || tool === 'Edit') return typeof input.file_path === 'string' && input.file_path !== '' ? [input.file_path] : []
-  if (tool === 'SendUserFile' && Array.isArray(input.files)) return input.files.filter((f): f is string => typeof f === 'string' && f !== '')
-  return []
 }
 
 type Touch = { count: number; isSent: boolean }

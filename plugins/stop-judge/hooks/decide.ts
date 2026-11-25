@@ -1,5 +1,5 @@
 import { PASTED_BLOCK, PROPOSAL_ASK } from './config'
-import { isRecord } from './shared/typed'
+import { isOperatorQuote, isRecord } from './shared/typed'
 
 // What a model reply comes to: the answers it holds, whether its quotes are the operator's own
 // words, and the decision the answers make. Code decides from the reported answers first; Haiku's
@@ -19,19 +19,6 @@ export function parseAnswers(text: string): Answers | null {
   } catch {
     return null
   }
-}
-
-const norm = (t: string): string =>
-  t
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, ' ')
-    .trim()
-
-// A quote counts only when its words are in what the operator typed: an agent's "say go" fails.
-export function isOperatorQuote(quote: unknown, operatorText: string): boolean {
-  if (typeof quote !== 'string') return false
-  const q = norm(quote)
-  return q !== '' && norm(operatorText).includes(q)
 }
 
 // What the operator's words hold a step by: all they typed, for the quotes, and the message that

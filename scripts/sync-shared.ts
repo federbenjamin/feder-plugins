@@ -48,7 +48,7 @@ export function literalChecks(): { literal: string; file: string }[] {
     { literal: SIBLING_TEXTS.keepalivePing, file: 'plugins/cache-keepalive/hooks/keepalive.ts' },
     { literal: SIBLING_TEXTS.keepaliveLast, file: 'plugins/cache-keepalive/hooks/keepalive.ts' },
     { literal: SIBLING_TEXTS.afk, file: 'plugins/dialog-timeout/hooks/register.ts' },
-    { literal: directiveText('${LOG}', '${TPL}'), file: 'plugins/session-log/scripts/directive.sh' },
+    { literal: directiveText('${LOG}'), file: 'plugins/session-log/scripts/directive.sh' },
   ]
 }
 
