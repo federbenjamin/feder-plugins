@@ -22,7 +22,7 @@ export const PASTED_BLOCK = /<pasted_content\b[^>]*>[\s\S]*?<\/pasted_content>/g
 // What the user message holds.
 export const INPUT_LIMITS = {
   window: 8, // exchanges of both sides before the opening
-  operatorClip: 400,
+  operatorClip: 2000,
   agentClip: 400,
   openingClip: 3000,
   finalChars: 4000,

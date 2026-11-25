@@ -39,11 +39,16 @@ async function readText($: EngineInterface, path: string): Promise<string> {
   return text
 }
 
-// JSON lines out through `tee`, for the same cap on `$.fs.write`; the empty write makes the folders.
+// JSON lines out. `$.fs.write` takes up to 4 MiB; a larger text goes through `tee`. The engine
+// refuses a `$.process.run` whose stdin names a Claude Code settings file, which a record's
+// transcript text may, so `tee` is only for what `$.fs.write` cannot take.
+const FS_WRITE_MAX = 4 * 1024 * 1024
+
 async function writeLines($: EngineInterface, path: string, lines: readonly string[]): Promise<void> {
+  const text = lines.length === 0 ? '' : `${lines.join('\n')}\n`
+  if (new TextEncoder().encode(text).length <= FS_WRITE_MAX) return $.fs.write(path, text)
   await $.fs.write(path, '')
-  if (lines.length === 0) return
-  const { exitCode } = await $.process.run(['tee', path], { stdin: `${lines.join('\n')}\n` })
+  const { exitCode } = await $.process.run(['tee', path], { stdin: text })
   if (exitCode !== 0) throw new Error(`cannot write ${path}`)
 }
 
@@ -115,12 +120,15 @@ async function evalJudge($: EngineInterface, args: string): Promise<Answer> {
   const grades = gradesFrom(await gradeTexts($, a.graders))
   const candidate = a.candidate === undefined ? null : await readText($, a.candidate)
   const arms: Arm[] = candidate === null ? ['base'] : ['base', 'candidate']
-  const judged = await pool(callsOf(ids, arms, repeats), workers, call => judgeOne($, call, key[call.id], candidate))
-  await writeLines(
-    $,
-    a.out,
-    judged.map(({ record, usage, prompt }) => JSON.stringify({ ...record, usage, prompt })),
-  )
+  // Each call's line is saved as it returns, under `<out>.calls/`: a run that fails later, at
+  // the last write or the report, keeps every reply it paid for.
+  const lineOf = ({ record, usage, prompt }: Judged) => JSON.stringify({ ...record, usage, prompt })
+  const judged = await pool(callsOf(ids, arms, repeats), workers, async call => {
+    const one = await judgeOne($, call, key[call.id], candidate)
+    await $.fs.write(`${a.out}.calls/${call.id}-${call.arm}-${call.repeat}.json`, `${lineOf(one)}\n`)
+    return one
+  })
+  await writeLines($, a.out, judged.map(lineOf))
   return {
     text: [
       report(
