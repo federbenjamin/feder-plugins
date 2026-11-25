@@ -13,7 +13,7 @@ import type { Arm, Call, RunRecord } from './score'
 
 const JUDGE = 'eval-judge'
 const EXTRACT = 'eval-extract'
-const JUDGE_USAGE = `/${JUDGE} --key <grade-key.json | records.jsonl> --ids <ids file> --graders <dir of grade-out-*.jsonl | one grades file> --out <run.jsonl> [--candidate <prompt file>] [--repeats 2] [--workers 4]`
+const JUDGE_USAGE = `/${JUDGE} --key <grade-key.json | records.jsonl> --ids <ids file> --graders <dir of grade-out-*.jsonl | one grades file> --out <run.jsonl> [--candidate <prompt file>] [--candidate-model <model>] [--repeats 2] [--workers 4]`
 const EXTRACT_USAGE = `/${EXTRACT} --log <stop-judge.log> --out <records.jsonl>`
 const DEFAULT_WORKERS = 4
 const DEFAULT_REPEATS = 2
@@ -95,11 +95,15 @@ async function gradeTexts($: EngineInterface, path: string): Promise<string[]> {
 
 type Judged = { record: RunRecord; usage: unknown; prompt: string }
 
-async function judgeOne($: EngineInterface, call: Call, r: EvalRecord | undefined, candidate: string | null): Promise<Judged> {
+// The candidate arm: another prompt, another model, or both, against the shipped request.
+type Candidate = { prompt: string | null; model: string | null }
+
+async function judgeOne($: EngineInterface, call: Call, r: EvalRecord | undefined, candidate: Candidate | null): Promise<Judged> {
   const none = { operatorText: '', opening: '' }
   if (r === undefined) return { record: runRecordOf(call, '', { isAnswered: false, reason: 'not in key' }, 0, none), usage: null, prompt: '' }
   if (r.final === null) return { record: runRecordOf(call, r.outcome, { isAnswered: false, reason: 'no final message' }, 0, none), usage: null, prompt: '' }
-  const request = call.arm === 'candidate' && candidate !== null ? judgeRequest(r.input, candidate) : judgeRequest(r.input)
+  const shipped = judgeRequest(r.input)
+  const request = call.arm === 'candidate' && candidate !== null ? { ...(candidate.prompt === null ? shipped : judgeRequest(r.input, candidate.prompt)), model: candidate.model ?? shipped.model } : shipped
   const startedAt = await $.clock.now()
   const reply = await $.model.complete(request)
   const ms = (await $.clock.now()) - startedAt
@@ -111,14 +115,15 @@ async function evalJudge($: EngineInterface, args: string): Promise<Answer> {
   const workers = a.workers === undefined ? DEFAULT_WORKERS : Number(a.workers)
   const repeats = a.repeats === undefined ? DEFAULT_REPEATS : Number(a.repeats)
   const isCount = (n: number) => Number.isInteger(n) && n >= 1
-  if (!a.key || !a.ids || !a.graders || !a.out || !isCount(workers) || !isCount(repeats) || a.candidate === 'true') return { text: JUDGE_USAGE, exitCode: 2 }
+  if (!a.key || !a.ids || !a.graders || !a.out || !isCount(workers) || !isCount(repeats) || a.candidate === 'true' || a['candidate-model'] === 'true') return { text: JUDGE_USAGE, exitCode: 2 }
   const key = keyFrom(await readText($, a.key))
   const ids = (await readText($, a.ids))
     .split('\n')
     .map(l => l.trim())
     .filter(l => l !== '')
   const grades = gradesFrom(await gradeTexts($, a.graders))
-  const candidate = a.candidate === undefined ? null : await readText($, a.candidate)
+  const candidate: Candidate | null =
+    a.candidate === undefined && a['candidate-model'] === undefined ? null : { prompt: a.candidate === undefined ? null : await readText($, a.candidate), model: a['candidate-model'] ?? null }
   const arms: Arm[] = candidate === null ? ['base'] : ['base', 'candidate']
   // Each call's line is saved as it returns, under `<out>.calls/`: a run that fails later, at
   // the last write or the report, keeps every reply it paid for.
@@ -138,7 +143,7 @@ async function evalJudge($: EngineInterface, args: string): Promise<Answer> {
         arms,
         repeats,
       ),
-      `system prompt: plugins/stop-judge/hooks/prompt.ts PROMPT${candidate === null ? '' : `; candidate: ${a.candidate}`}`,
+      `system prompt: plugins/stop-judge/hooks/prompt.ts PROMPT${candidate === null ? '' : `; candidate: ${a.candidate ?? 'the same prompt'}${candidate.model === null ? '' : ` on ${candidate.model}`}`}`,
       `written ${a.out}`,
     ].join('\n'),
   }
@@ -179,7 +184,7 @@ async function answer(name: string, work: Promise<Answer>): Promise<Answer> {
 
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
-    await $.command.register({ name: JUDGE, description: 'Dev: run the stop judge over graded firings and score it', argumentHint: '--key --ids --graders --out [--candidate] [--repeats] [--workers]' })
+    await $.command.register({ name: JUDGE, description: 'Dev: run the stop judge over graded firings and score it', argumentHint: '--key --ids --graders --out [--candidate] [--candidate-model] [--repeats] [--workers]' })
     await $.command.register({ name: EXTRACT, description: 'Dev: rebuild judged-stop records from a stop-judge firing log', argumentHint: '--log --out' })
     return next(e)
   })

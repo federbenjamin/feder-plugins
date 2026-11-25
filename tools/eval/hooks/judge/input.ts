@@ -192,17 +192,27 @@ export function planOf(existing: readonly string[]): string | null {
   return existing.slice(-INPUT_LIMITS.maxDocs).findLast(p => PLAN_PATH.test(p)) ?? null
 }
 
+// The section headings of the user message. The eval tool reads a captured input back by them.
+export const SECTIONS = {
+  older: '## Older operator messages, oldest first',
+  recent: '## Recent conversation, oldest first',
+  opening: '## Operator message that opened the turn',
+  facts: '## Facts read from the transcript',
+  final: "## Agent's final message",
+  end: 'One JSON line.',
+} as const
+
 export function buildInput(turn: Turn, plan: { path: string; body: string } | null): string {
   let user = ''
-  if (turn.older.length > 0) user += `## Older operator messages, oldest first\n\n${turn.older.map(u => head(u, INPUT_LIMITS.framingClip)).join('\n\n---\n\n')}\n\n`
-  if (turn.recent.length > 0) user += `## Recent conversation, oldest first\n\n${turn.recent.map(e => `Operator: ${head(e.operator, INPUT_LIMITS.operatorClip)}\n\nAgent: ${tail(e.agent, INPUT_LIMITS.agentClip) || '(no text)'}`).join('\n\n')}\n\n`
-  user += `## Operator message that opened the turn\n\n${head(turn.opening, INPUT_LIMITS.openingClip) || '(none captured)'}\n\n`
-  user += `## Facts read from the transcript\n\nBackground jobs not yet reported: ${turn.pending.join('; ') || 'none'}\nTool calls refused this turn: ${turn.refused.join('; ') || 'none'}\n\n`
+  if (turn.older.length > 0) user += `${SECTIONS.older}\n\n${turn.older.map(u => head(u, INPUT_LIMITS.framingClip)).join('\n\n---\n\n')}\n\n`
+  if (turn.recent.length > 0) user += `${SECTIONS.recent}\n\n${turn.recent.map(e => `Operator: ${head(e.operator, INPUT_LIMITS.operatorClip)}\n\nAgent: ${tail(e.agent, INPUT_LIMITS.agentClip) || '(no text)'}`).join('\n\n')}\n\n`
+  user += `${SECTIONS.opening}\n\n${head(turn.opening, INPUT_LIMITS.openingClip) || '(none captured)'}\n\n`
+  user += `${SECTIONS.facts}\n\nBackground jobs not yet reported: ${turn.pending.join('; ') || 'none'}\nTool calls refused this turn: ${turn.refused.join('; ') || 'none'}\n\n`
   const shown = turn.actions.slice(-INPUT_LIMITS.maxActions)
   user += `## What the agent did this turn\n\n${turn.actions.length} tool calls${turn.minutes === null ? '' : ` over ${turn.minutes} minutes`}.\n`
   if (turn.actions.length > shown.length) user += `(the last ${shown.length} of them)\n`
   user += `${shown.map(a => `- ${a}\n`).join('')}\n`
   if (turn.along.length > 0) user += `What it said along the way, the latest last:\n\n${turn.along.slice(-INPUT_LIMITS.alongTheWay).map(m => tail(m, INPUT_LIMITS.alongClip)).join('\n\n')}\n\n`
   if (plan) user += `## Plan document ${plan.path}, its opening\n\n${plan.body.slice(0, INPUT_LIMITS.planChars)}\n\n`
-  return `${user}## Agent's final message\n\n${turn.final.slice(-INPUT_LIMITS.finalChars)}\n\nOne JSON line.`
+  return `${user}${SECTIONS.final}\n\n${turn.final.slice(-INPUT_LIMITS.finalChars)}\n\n${SECTIONS.end}`
 }
