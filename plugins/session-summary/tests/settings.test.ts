@@ -25,6 +25,8 @@ test('each documented command selects exactly one action', () => {
   expect(summaryCommand('')).toEqual({ kind: 'open' })
   expect(summaryCommand(' ON ')).toEqual({ kind: 'on' })
   expect(summaryCommand('off')).toEqual({ kind: 'off' })
+  expect(summaryCommand('pause')).toEqual({ kind: 'pause' })
+  expect(summaryCommand('Resume')).toEqual({ kind: 'resume' })
   expect(summaryCommand('show')).toEqual({ kind: 'show' })
   expect(summaryCommand('NOW')).toEqual({ kind: 'now' })
   expect(summaryCommand('usage')).toEqual({ kind: 'usage' })
@@ -41,7 +43,7 @@ test('partial, extended, and invalid commands reach usage instead of a nearby ac
   for (const args of ['on now', 'now please', 'first', 'first 0', 'first -1', 'first 1.5', 'every 3 later', 'source', 'source log', 'variant', 'variant missing', 'links', 'links maybe', 'nonsense']) {
     expect(summaryCommand(args)).toEqual({ kind: 'usage' })
   }
-  expect(USAGE).toBe('/session-summary [on|off|first <seconds>|every <seconds>|source messages|session-log|variant <name>|links on|off|show|now]')
+  expect(USAGE).toBe('/session-summary [on|off|pause|resume|first <seconds>|every <seconds>|source messages|session-log|variant <name>|links on|off|show|now]')
 })
 
 test('a populated report preserves summary details, settings, usage, and capture location', () => {
@@ -49,6 +51,7 @@ test('a populated report preserves summary details, settings, usage, and capture
     summary: { title: 'Audit', lastPrompt: 'You asked for an audit.', soFar: 'audit complete', now: 'add tests', at: 2_520_000, status: 'ended', source: 'session-log', variant: 'brief' },
     documents: ['src/a.ts', 'src/b.ts'],
     settings: { isOff: true, firstSeconds: 45, everySeconds: 300, source: 'session-log', variant: 'brief', linksBase: 'https://host.example:1' },
+    isPaused: true,
     calls: { count: 4, input: 12, output: 3, cached: 8, usd: 0.123456 },
     capturePath: '/state/session-summaries/s1.jsonl',
     now: 3_780_000,
@@ -59,7 +62,7 @@ test('a populated report preserves summary details, settings, usage, and capture
     'Now: add tests',
     'Files: src/a.ts, src/b.ts',
     'updated: 21 min ago (ended)',
-    'settings: off · first 45s · every 300s · source session-log · variant brief',
+    'settings: off · paused in this session · first 45s · every 300s · source session-log · variant brief',
     'links: on https://host.example:1',
     'this session: 4 calls · in 12 · out 3 · cached 8 · $0.1235',
     'capture: /state/session-summaries/s1.jsonl',
@@ -71,6 +74,7 @@ test('a report without a summary or state directory makes each unavailable value
     summary: { title: '', lastPrompt: '', soFar: '', now: '', at: 0, status: 'running', source: 'messages', variant: 'edit' },
     documents: [],
     settings: defaults,
+    isPaused: false,
     calls: { count: 0, input: 0, output: 0, cached: 0, usd: 0 },
     capturePath: null,
     now: 1_000_000,

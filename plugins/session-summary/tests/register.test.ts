@@ -310,6 +310,33 @@ test('switched off, a running turn makes no call', async ($, on) => {
   expect(logLines(w)).toEqual([])
 })
 
+test('paused, this session makes no call while the shared setting stays on, and resume brings calls back', async ($, on) => {
+  const w = world(on)
+  await start($)
+  expect((await run($, 'pause')).text).toBe('pause: no summary calls in this session')
+  expect((await run($, 'show')).text).toContain('settings: on · paused in this session · ')
+  await turnStart($)
+  await step($)
+  await w.clock.advance(700_000)
+  await complete($)
+  await w.clock.settle()
+  expect(w.requests).toEqual([])
+  expect((await run($, 'resume')).text).toBe('resume: summary calls resume in this session')
+  await turnStart($)
+  await w.clock.advance(120_000)
+  expect(statuses(w)).toEqual(['running'])
+})
+
+test('a pause ends with the session: the next session.start makes calls again', async ($, on) => {
+  const w = world(on)
+  await start($)
+  await run($, 'pause')
+  await start($)
+  await turnStart($)
+  await w.clock.advance(90_000)
+  expect(statuses(w)).toEqual(['running'])
+})
+
 test('source session-log with no log file logs log-missing and reads the messages', async ($, on) => {
   const w = world(on, { settings: { source: 'session-log' } })
   await start($)
