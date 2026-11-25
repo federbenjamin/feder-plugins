@@ -1,8 +1,8 @@
 # session-log
 
-<p align="center"><strong>One markdown session log per Claude Code session, pruned at compaction, with the handoff and finish-session skills</strong></p>
+<p align="center"><strong>One log per Claude Code session, kept through six tools and a recorder, with the handoff and finish-session skills</strong></p>
 
-A [Claude Code](https://docs.anthropic.com/en/docs/claude-code) plugin that gives every session one log the agent keeps as it works: what it did, what is left, and what was decided. The log is the memory that survives compaction, and the source the `handoff` skill reads.
+A [Claude Code](https://docs.anthropic.com/en/docs/claude-code) plugin that gives every session one log: what it did, what is left, and what was decided. The agent never edits a file. It records through tools the plugin owns, and the plugin itself notes what the session did. The log is the memory that survives compaction, and the source the `handoff` skill reads.
 
 ## Install
 
@@ -14,29 +14,72 @@ claude plugin install session-log --marketplace federbenjamin/feder-plugins
 
 ## How it works
 
-At every session start the plugin rewrites `session-logs/TEMPLATE.md` under `~/.claude/stopstopping/` (`STOPSTOPPING_DIR` replaces the folder), and a SessionStart command hook tells the agent, in one line:
+Each session has two files under `~/.claude/stopstopping/session-logs/` (`STOPSTOPPING_DIR` replaces the folder):
 
-```
-SESSION LOG — keep <dir>/session-logs/<session-id>.md in the format of <dir>/session-logs/TEMPLATE.md; each section comment says what goes in it. Missing: create it from the template at the first real request, or copy the log a handoff doc names. Present: read it before other work; it is the memory across compaction. Append as things happen, never rewrite a line, and update it before ending a multi-step turn. Main session only.
-```
+- `<session-id>.jsonl`, the store: one event per line, append-only. The plugin is its only writer.
+- `<session-id>.md`, the view: rewritten from the store after every write. A hand edit to it is lost at the next write.
 
-The template has three sections, each with a comment saying what goes in it:
+At every session start, headless runs included, the plugin registers six tools, listed in front of the agent with no search step:
 
-| Section | Line shape |
+| Tool | Input | Does |
+| --- | --- | --- |
+| `todo_add` | `text`, optional `tag` | Adds an open todo and returns its id (`t1`) |
+| `todo_close` | `id`, optional `note` | Closes it |
+| `decide` | `pick`, `over` (one or more), `reason`, optional `replaces`, optional `by_session` | Records one choice the agent made; `by_session` marks a ruling another session relayed |
+| `ruling` | `quote`, `meaning`, optional `key` and `value`, optional `replaces` | Records the operator's own words; with `key` and `value` it sets a session limit |
+| `note` | `text` | Records a finding or a reason that lives nowhere else |
+| `log_read` | optional `session` | Returns the view, for this session or another session's id |
+
+A SessionStart command hook tells the agent about them in one line, and after a compaction or a resume prints the view below that line, so open todos and standing rulings come back without a read call.
+
+### When a tool refuses or writes nothing
+
+- A call from a subagent is refused. Subagents keep no log.
+- `todo_close` on an id already closed replies `already closed`. An unknown id is an error that names the open ids.
+- `decide` with no alternative in `over`, or no `reason`, is refused.
+- `ruling` is refused when its quote is not in what the operator typed in this session. The plugin keeps each typed prompt for this check (a prompt from the terminal or a bridge, and a headless run's opening prompt; a prompt past 8,000 characters is kept as its two ends). The same quote recorded twice writes nothing the second time.
+- `log_read` for a session with no store returns that session's `.md` as it is, so a log kept before the tools stays readable.
+
+### What the plugin records itself
+
+After a tool call of the main session succeeds, a recorder notes what it did. No model call is made.
+
+| It records | From |
 | --- | --- |
-| Work log | `- HH:MMZ <fact> (<sha>)` |
-| Todo | `- [ ] <task>`, flipped to `- [x]` when done |
-| Decisions | `- <date> [user] <ruling>: "<their words>"` for words said in this session; `- <date> [agent] <pick> over <A>, <B>`, with ` -- <reason>` when not obvious; a line that ends `replaces: "<quote>"` supersedes the earlier one |
+| A file written | A `Write`, `Edit` or `NotebookEdit` call |
+| A commit, with its sha and subject | A Bash command that runs `git commit`, `git revert` or `git cherry-pick`, read from its output |
+| A push | A Bash command that runs `git push` |
+| A pull request opened or merged | A Bash command that runs `gh pr create` or `gh pr merge` |
 
-## What moves at compaction
+It records nothing for a failed call, a subagent's call, a write to the log's own files, or a command that only mentions those words inside a quoted string, a heredoc or a comment.
 
-When the main conversation is compacted, the plugin appends the line `- HH:MMZ compacted` to the Work log and moves lines to `<session-id>.archive.md` beside the log, under the same headings:
+### The view
 
-- every Work-log line above the previous `compacted` line (a line stays in the log across exactly one compaction);
-- every `- [x]` Todo line;
-- every Decisions line a later line supersedes with `replaces: "<quote>"`. A quote that matches none or several earlier lines moves nothing and is logged as a warning.
+```
+# Session log — <session-id>
 
-A `- [ ]` Todo line and any Decisions line nothing replaces never move. The archive is written before the log, so a crash between the two leaves a line in both places, never in neither. After a compaction the directive carries a second line, `SESSION LOG PRUNE — moved <k> lines → <archive>`.
+## Work log
+
+- 2026-11-25 22:41Z commit 7b51b15 add the parser
+- files written (14, newest 10): src/parse.ts ×3, …
+
+## Todo
+
+- [ ] t2 wire the parser into the CLI
+
+## Decisions
+
+- 2026-11-25 [agent] a hand-written parser over a parser generator -- the grammar has four rules (d1)
+- 2026-11-25 [user] no new dependencies: "don't add packages for this" (r1)
+tunable: retries=2 (was default)
+- 2026-11-25 note: the fixture file is generated; edit its source (n1)
+```
+
+A closed todo leaves the view, and so does a decision or ruling that a later one names in `replaces`. The store keeps both.
+
+### A log kept by hand
+
+A session whose `.md` exists with no store was kept by hand, before the tools. At that session's first write the plugin moves the file to `<session-id>.legacy.md`, once, and the view names it.
 
 ## Skills
 
@@ -51,7 +94,16 @@ Every firing appends one line to `~/.claude/stopstopping/logs/session-log.log`:
 <utc> <outcome> session=<id> ms=<n> reason=<text>
 ```
 
-Outcomes: `template` (the template was written), `prune` (a compaction moved lines; the reason holds the count and the archive path), `prune-warning` (an unusable `replaces:` quote), `prune-skipped` (no log yet, or the log lacks one of the three sections), `prune-failed` (a read or write failed; the log is as it was). Every compaction of the main conversation logs exactly one of `prune`, `prune-skipped` and `prune-failed`, and the directive prints the moved count only when that compaction's line is a `prune`.
+| Outcome | When |
+| --- | --- |
+| `tools` | A session started; the reason counts the tools registered and names any refused |
+| `todo-add`, `todo-close`, `decide`, `ruling`, `note` | That tool wrote, or replied without writing; the reason is its reply |
+| `read` | `log_read` answered; the reason names the session, and `none` when it has no log |
+| `refused` | A tool call was refused; the reason names the tool and why |
+| `typed` | A typed prompt was kept for the quote check |
+| `did` | The recorder wrote; the reason lists what (`file`, `commit`, `push`, `pr.create`, `pr.merge`) |
+| `legacy` | A hand-kept `.md` was moved aside |
+| `failed` | A read or write failed; nothing was recorded for that call |
 
 Read it back:
 

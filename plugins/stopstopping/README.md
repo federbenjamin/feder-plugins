@@ -5,7 +5,7 @@ Installs four plugins that keep an agent working instead of stopping to ask. Thi
 - **dialog-timeout** ends a turn left on a permission prompt or question for 30 minutes and tells the agent you are away (`/afk`).
 - **cache-keepalive** keeps an idle session's prompt cache warm with a short ping, and ends on a handoff.
 - **stop-judge** judges each early stop and nudges the agent to carry on; `/stop-judge derive` writes a `DECISIONS.md` of your own rules from your sessions.
-- **session-log** keeps one markdown session log per session, pruned at compaction, and ships the handoff and finish-session skills.
+- **session-log** keeps one log per session through tools the agent calls, records what the session did, and ships the handoff and finish-session skills.
 
 ## Install
 

@@ -110,3 +110,16 @@ export function typedText(row: TranscriptRow, opts: { sdk: boolean }): string | 
   const text = (content ?? '').trim()
   return isTypedText(text) ? text : null
 }
+
+const norm = (t: string): string =>
+  t
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+
+// A quote counts only when its words are in what the operator typed: an agent's "say go" fails.
+export function isOperatorQuote(quote: unknown, operatorText: string): boolean {
+  if (typeof quote !== 'string') return false
+  const q = norm(quote)
+  return q !== '' && norm(operatorText).includes(q)
+}

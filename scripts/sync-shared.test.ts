@@ -42,7 +42,7 @@ test('every literal check is mandatory: a missing file or a changed text is bloc
   assert.ok(syncProblems(copyWithout('plugins/session-log/scripts/directive.sh')).blocked.includes('missing plugins/session-log/scripts/directive.sh (literal check)'))
   const dir = copyWithout()
   writeFileSync(join(dir, 'plugins/session-log/scripts/directive.sh'), '#!/usr/bin/env bash\nprintf "%s\\n" "SESSION LOG — something else"\n')
-  assert.ok(syncProblems(dir).blocked.some(p => p.startsWith('literal "SESSION LOG — keep ${LOG} in the format of ${TPL};')))
+  assert.ok(syncProblems(dir).blocked.some(p => p.startsWith('literal "SESSION LOG — the session-log plugin keeps')))
 })
 
 test('a generated fixture that differs from its source module drifts', () => {

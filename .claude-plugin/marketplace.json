@@ -24,7 +24,7 @@
     {
       "name": "session-log",
       "source": "./plugins/session-log",
-      "description": "Keeps one markdown session log per session, pruned at compaction; ships the handoff and finish-session skills",
+      "description": "Keeps one log per session through tools the agent calls, and records what the session did; ships the handoff and finish-session skills",
       "category": "productivity"
     },
     {
