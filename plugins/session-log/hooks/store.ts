@@ -115,5 +115,3 @@ export const openTodos = (state: LogState): Todo[] => state.todos.filter(t => !t
 
 // The decisions, rulings and notes nothing later replaces.
 export const standing = (state: LogState): Entry[] => state.entries.filter(e => !state.replaced.has(e.id))
-
-export const typedText = (state: LogState): string => state.typed.join('\n')

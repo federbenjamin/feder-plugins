@@ -1,5 +1,5 @@
 import { expect, test } from 'claude-code/testing'
-import { foldStore, nextId, openTodos, standing, storeLine, typedText } from '../hooks/store'
+import { foldStore, nextId, openTodos, standing, storeLine } from '../hooks/store'
 import type { LogEvent } from '../hooks/store'
 import { stateOf } from './world'
 
@@ -47,8 +47,4 @@ test('a file written twice is one path with count 2, and moves to newest', async
     ['/a', 2],
   ])
   expect(s.did).toEqual([])
-})
-
-test('typed prompts join with a newline for the quote check', async () => {
-  expect(typedText(stateOf({ t: 'typed', text: 'one' }, { t: 'typed', text: 'two' }))).toBe('one\ntwo')
 })

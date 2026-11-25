@@ -2,9 +2,10 @@ import { sessionLogPath, sessionLogsDir } from './shared/firing'
 
 // Where a session's log files sit, and the directive the SessionStart hook prints.
 
-export function logPaths(dir: string, sessionId: string): { view: string; store: string; legacy: string } {
+// `incoming` is the store as it is being written, moved over `store` once it is whole.
+export function logPaths(dir: string, sessionId: string): { view: string; store: string; incoming: string; legacy: string } {
   const base = sessionLogsDir(dir)
-  return { view: sessionLogPath(dir, sessionId), store: `${base}/${sessionId}.jsonl`, legacy: `${base}/${sessionId}.legacy.md` }
+  return { view: sessionLogPath(dir, sessionId), store: `${base}/${sessionId}.jsonl`, incoming: `${base}/${sessionId}.jsonl.tmp`, legacy: `${base}/${sessionId}.legacy.md` }
 }
 
 // scripts/directive.sh prints this sentence; scripts/sync-shared.ts checks the two agree.

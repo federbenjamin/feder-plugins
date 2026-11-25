@@ -1,5 +1,5 @@
 import { isOperatorQuote, isRecord } from './shared/typed'
-import { nextId, openTodos, standing, typedText } from './store'
+import { nextId, openTodos, standing } from './store'
 import type { LogEvent, LogState } from './store'
 
 // What each writing tool does to the store: the events it appends and the reply the agent reads,
@@ -72,12 +72,15 @@ export function callTool(state: LogState, tool: WriteTool, input: unknown, now: 
       const value = text(i.value)
       if (quote === '' || meaning === '') return { refuse: "ruling needs quote (the operator's exact words) and meaning (what they rule)" }
       if ((key === '') !== (value === '')) return { refuse: 'ruling takes key and value together, for a session limit' }
-      if (!isOperatorQuote(quote, typedText(state))) {
+      // One prompt holds the whole quote: words from two prompts are not something they said.
+      if (!state.typed.some(prompt => isOperatorQuote(quote, prompt))) {
         return { refuse: 'ruling refused: the quote is not in what the operator typed in this session. Quote their exact words; for a ruling another session relayed, use decide with by_session.' }
       }
-      const same = state.entries.find(e => e.t === 'ruling' && isOperatorQuote(quote, e.quote) && isOperatorQuote(e.quote, quote) && (e.key ?? '') === key && (e.value ?? '') === value)
-      if (same !== undefined) return { events: [], reply: `already recorded as ${same.id}` }
       const replaces = text(i.replaces)
+      // A repeat of a ruling that still stands writes nothing. One that replaces a line is new:
+      // the operator may be saying again what a later line overturned.
+      const same = replaces !== '' ? undefined : standing(state).find(e => e.t === 'ruling' && isOperatorQuote(quote, e.quote) && isOperatorQuote(e.quote, quote) && (e.key ?? '') === key && (e.value ?? '') === value)
+      if (same !== undefined) return { events: [], reply: `already recorded as ${same.id}` }
       const problem = replacesProblem(state, replaces)
       if (problem !== undefined) return { refuse: problem }
       const id = nextId(state, 'r')

@@ -16,7 +16,7 @@ claude plugin install session-log --marketplace federbenjamin/feder-plugins
 
 Each session has two files under `~/.claude/stopstopping/session-logs/` (`STOPSTOPPING_DIR` replaces the folder):
 
-- `<session-id>.jsonl`, the store: one event per line, append-only. The plugin is its only writer.
+- `<session-id>.jsonl`, the store: one event per line, append-only. The plugin is its only writer; each write goes to `<session-id>.jsonl.tmp` and is moved into place, so a cut write leaves the last whole store.
 - `<session-id>.md`, the view: rewritten from the store after every write. A hand edit to it is lost at the next write.
 
 At every session start, headless runs included, the plugin registers six tools, listed in front of the agent with no search step:
@@ -37,21 +37,29 @@ A SessionStart command hook tells the agent about them in one line, and after a 
 - A call from a subagent is refused. Subagents keep no log.
 - `todo_close` on an id already closed replies `already closed`. An unknown id is an error that names the open ids.
 - `decide` with no alternative in `over`, or no `reason`, is refused.
-- `ruling` is refused when its quote is not in what the operator typed in this session. The plugin keeps each typed prompt for this check (a prompt from the terminal or a bridge, and a headless run's opening prompt; a prompt past 8,000 characters is kept as its two ends). The same quote recorded twice writes nothing the second time.
+- `ruling` is refused when its quote is not in what the operator typed in this session. The plugin keeps each typed prompt for this check (a prompt from the terminal or a bridge, and a headless run's prompts; a prompt past 2,000 characters is kept as its two ends), and the quote must sit inside one prompt. The check proves the words were typed, not what they meant: it matches on the letters, so a quote cut out of a longer sentence passes. A ruling that repeats one still standing writes nothing.
 - `log_read` for a session with no store returns that session's `.md` as it is, so a log kept before the tools stays readable.
 
 ### What the plugin records itself
 
-After a tool call of the main session succeeds, a recorder notes what it did. No model call is made.
+After a tool call of the main session returns, a recorder notes what it did. No model call is made.
 
 | It records | From |
 | --- | --- |
 | A file written | A `Write`, `Edit` or `NotebookEdit` call |
-| A commit, with its sha and subject | A Bash command that runs `git commit`, `git revert` or `git cherry-pick`, read from its output |
+| A commit, with its sha and subject | A Bash command that runs `git commit`, `git revert` or `git cherry-pick`; read from its output, or from the repository when the commit was quiet |
 | A push | A Bash command that runs `git push` |
-| A pull request opened or merged | A Bash command that runs `gh pr create` or `gh pr merge` |
+| A pull request opened | A Bash command that runs `gh pr create` |
+| A pull request merged | A Bash command that runs `gh pr merge` and merges now; `--auto` only arms a later merge and records nothing |
 
-It records nothing for a failed call, a subagent's call, a write to the log's own files, or a command that only mentions those words inside a quoted string, a heredoc or a comment.
+It records nothing for:
+
+- a failed call, except the commits a failed shell line's output names (one part can fail after another committed);
+- a subagent's call, or a write to the log's own files;
+- a command that only mentions those words inside a quoted string, a heredoc or a comment;
+- a rehearsal or a step that makes nothing (`--dry-run`, `revert --no-commit`, `cherry-pick --abort`, `gh pr create --web`);
+- a shell line sent to the background: its call returns before it runs, so a push made that way is not in the log;
+- a commit, push or merge made inside a script the session runs, or by `git merge` or `git pull`.
 
 ### The view
 
@@ -103,6 +111,7 @@ Every firing appends one line to `~/.claude/stopstopping/logs/session-log.log`:
 | `typed` | A typed prompt was kept for the quote check |
 | `did` | The recorder wrote; the reason lists what (`file`, `commit`, `push`, `pr.create`, `pr.merge`) |
 | `legacy` | A hand-kept `.md` was moved aside |
+| `view-failed` | The events were stored and the view could not be rewritten; the next write renders them |
 | `failed` | A read or write failed; nothing was recorded for that call |
 
 Read it back:

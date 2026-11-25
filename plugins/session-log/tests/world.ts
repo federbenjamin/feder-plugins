@@ -23,10 +23,11 @@ export type ToolReply = { result?: unknown; isError?: boolean; deny?: string }
 // The engine beneath the plugin: a file system held in `files` (tee appends to it, `mv -n` moves),
 // a mock clock and env, the tools `tool.register` was given, and one terminal `tool.call` handler
 // whose reply a test sets in `state.next` (what the real tool would answer the recorder's `next(e)`).
+// `state.newest` is git's newest commit per folder, as `git -C <dir> log -1` prints it; a folder not in it is no repo.
 export function world(on: On, files: Record<string, string> = {}) {
   const clock = mock.clock(on, { now: T0 })
   mock.env(on, { STOPSTOPPING_DIR: DIR, HOME: '/home/u' })
-  const state = { id: ID, next: { result: 'ok' } as ToolReply, writes: [] as string[], runs: [] as string[][], registered: [] as { name: string; isDeferred?: boolean }[] }
+  const state = { id: ID, next: { result: 'ok' } as ToolReply, writes: [] as string[], runs: [] as string[][], registered: [] as { name: string; isDeferred?: boolean }[], newest: {} as Record<string, string> }
   on('session.id', async () => ({ value: state.id }))
   on('session.cwd', async () => ({ value: CWD }))
   on('fs.exists', async (_$, e) => ({ value: e.path in files }))
@@ -39,9 +40,17 @@ export function world(on: On, files: Record<string, string> = {}) {
   on('process.run', async (_$, e) => {
     state.runs.push([...e.argv])
     if (e.argv[0] === 'tee') files[e.argv[2]!] = (files[e.argv[2]!] ?? '') + (e.init?.stdin ?? '')
-    if (e.argv[0] === 'mv' && e.argv[1] === '-n') {
-      files[e.argv[3]!] = files[e.argv[2]!] ?? ''
-      delete files[e.argv[2]!]
+    if (e.argv[0] === 'mv') {
+      const [from, to] = e.argv.slice(-2) as [string, string]
+      const isKept = e.argv[1] === '-n' && to in files // `mv -n` leaves both files when the target exists
+      if (!isKept && from in files) {
+        files[to] = files[from]!
+        delete files[from]
+      }
+    }
+    if (e.argv[0] === 'git' && e.argv[1] === '-C') {
+      const line = state.newest[e.argv[2]!]
+      return { value: { exitCode: line === undefined ? 128 : 0, stdout: line ?? '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
     }
     return { value: { exitCode: 0, stdout: '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
   })

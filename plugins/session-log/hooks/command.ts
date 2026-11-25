@@ -4,22 +4,60 @@
 
 const SEPARATORS = new Set(['\n', ';', '&', '|', '(', ')'])
 // Words that stand before a program without being one.
-const PREFIXES = new Set(['{', '}', '!', 'if', 'then', 'else', 'elif', 'do', 'while', 'until', 'time', 'env', 'command', 'exec', 'sudo', 'nohup'])
+const PREFIXES = new Set(['{', '}', '!', 'if', 'then', 'else', 'elif', 'do', 'while', 'until', 'time', 'env', 'command', 'exec', 'sudo', 'nohup', 'caffeinate'])
+// Wrappers that take options and one leading value (a duration, a priority) before the program.
+const VALUE_PREFIXES = new Set(['timeout', 'gtimeout', 'nice'])
 const ASSIGNMENT = /^[A-Za-z_]\w*=/
+const HEREDOC = /^<<-?[ \t]*(?:'([^']*)'|"([^"]*)"|\\?([^\s;&|()<>]+))/
 
-// The index just past the `)` that closes a `$(` opened before `from`.
+// The index just past the line that closes a heredoc whose body starts at `from`.
+function heredocEnd(s: string, from: number, delimiter: string): number {
+  let i = from
+  for (;;) {
+    const end = s.indexOf('\n', i)
+    const line = s.slice(i, end === -1 ? s.length : end)
+    i = end === -1 ? s.length : end + 1
+    if (line.trim() === delimiter || end === -1) return i
+  }
+}
+
+// The index just past the `"` that closes a string opened before `from`. A `$(` inside it opens a
+// command of its own, whose quotes are not this string's.
+function stringEnd(s: string, from: number): number {
+  let i = from
+  while (i < s.length && s[i] !== '"') {
+    if (s[i] === '\\') i += 2
+    else if (s[i] === '$' && s[i + 1] === '(') i = substitutionEnd(s, i + 2)
+    else i++
+  }
+  return i + 1
+}
+
+// The index just past the `)` that closes a `$(` opened before `from`, past the quotes and heredoc
+// bodies inside it.
 function substitutionEnd(s: string, from: number): number {
   let depth = 1
   let i = from
+  const heredocs: string[] = []
   while (i < s.length && depth > 0) {
     const c = s[i]!
-    if (c === '\\') i++
+    if (c === '\\') i += 2
     else if (c === "'") {
       const end = s.indexOf("'", i + 1)
-      i = end === -1 ? s.length : end
-    } else if (c === '(') depth++
-    else if (c === ')') depth--
-    i++
+      i = end === -1 ? s.length : end + 1
+    } else if (c === '"') i = stringEnd(s, i + 1)
+    else if (c === '<' && s[i + 1] === '<' && s[i + 2] !== '<') {
+      const m = HEREDOC.exec(s.slice(i))
+      if (m) heredocs.push(m[1] ?? m[2] ?? m[3]!)
+      i += m ? m[0].length : 2
+    } else if (c === '\n') {
+      i++
+      for (const delimiter of heredocs.splice(0)) i = heredocEnd(s, i, delimiter)
+    } else {
+      if (c === '(') depth++
+      else if (c === ')') depth--
+      i++
+    }
   }
   return i
 }
@@ -51,15 +89,9 @@ export function simpleCommands(command: string): string[][] {
       word = (word ?? '') + s.slice(i + 1, stop)
       i = stop + 1
     } else if (c === '"') {
-      let j = i + 1
-      let inner = ''
-      while (j < s.length && s[j] !== '"') {
-        if (s[j] === '\\' && j + 1 < s.length) j++
-        inner += s[j]
-        j++
-      }
-      word = (word ?? '') + inner
-      i = j + 1
+      const end = stringEnd(s, i + 1)
+      word = (word ?? '') + s.slice(i + 1, end - 1)
+      i = end
     } else if (c === '$' && s[i + 1] === '(') {
       const end = substitutionEnd(s, i + 2)
       word = (word ?? '') + s.slice(i, end)
@@ -74,13 +106,9 @@ export function simpleCommands(command: string): string[][] {
       i = end === -1 ? s.length : end
     } else if (c === '<' && s[i + 1] === '<' && s[i + 2] !== '<') {
       endWord()
-      const m = /^<<-?[ \t]*(?:'([^']*)'|"([^"]*)"|\\?([^\s;&|()<>]+))/.exec(s.slice(i))
-      if (m) {
-        heredocs.push(m[1] ?? m[2] ?? m[3]!)
-        i += m[0].length
-      } else {
-        i += 2
-      }
+      const m = HEREDOC.exec(s.slice(i))
+      if (m) heredocs.push(m[1] ?? m[2] ?? m[3]!)
+      i += m ? m[0].length : 2
     } else if (c === '<' || c === '>') {
       endWord()
       i++
@@ -91,17 +119,8 @@ export function simpleCommands(command: string): string[][] {
     } else if (SEPARATORS.has(c)) {
       endCommand()
       i++
-      if (c === '\n') {
-        // Each heredoc opened on the line just ended: its body runs to its delimiter's own line.
-        for (const delimiter of heredocs.splice(0)) {
-          for (;;) {
-            const end = s.indexOf('\n', i)
-            const line = s.slice(i, end === -1 ? s.length : end)
-            i = end === -1 ? s.length : end + 1
-            if (line.trim() === delimiter || end === -1) break
-          }
-        }
-      }
+      // Each heredoc opened on the line just ended: its body runs to its delimiter's own line.
+      if (c === '\n') for (const delimiter of heredocs.splice(0)) i = heredocEnd(s, i, delimiter)
     } else {
       word = (word ?? '') + c
       i++
@@ -114,6 +133,15 @@ export function simpleCommands(command: string): string[][] {
 // A simple command from its program on: assignments and the words that only introduce it dropped.
 export function programWords(words: readonly string[]): string[] {
   let at = 0
-  while (at < words.length && (ASSIGNMENT.test(words[at]!) || PREFIXES.has(words[at]!))) at++
+  for (;;) {
+    const w = words[at]
+    if (w === undefined) break
+    if (ASSIGNMENT.test(w) || PREFIXES.has(w)) at++
+    else if (VALUE_PREFIXES.has(w)) {
+      at++
+      while (words[at]?.startsWith('-')) at++
+      if (/^\d/.test(words[at] ?? '')) at++
+    } else break
+  }
   return words.slice(at)
 }

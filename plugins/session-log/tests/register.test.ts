@@ -197,6 +197,18 @@ test("the plugin's own tools record no did event", async ($, on) => {
   expect(w.events().map(e => e.t)).toEqual(['todo.add'])
 })
 
+test("a quiet commit's sha and subject are read from git in its folder; with no answer the commit is kept without them", async ($, on) => {
+  const w = world(on)
+  w.state.newest['/work/repo'] = '5d6e7f8\tquiet one\n'
+  w.state.next = { result: '' }
+  await other($, 'Bash', { command: 'git commit -q -m "quiet one"' })
+  await other($, 'Bash', { command: 'cd /not/a/repo && git commit -q -m lost' })
+  expect(w.events().map(({ at: _, ...e }) => e)).toEqual([
+    { t: 'did', kind: 'commit', sha: '5d6e7f8', subject: 'quiet one' },
+    { t: 'did', kind: 'commit', sha: '', subject: '' },
+  ])
+})
+
 test('a Bash command that only mentions git commit, git push or gh pr create in a string or heredoc records nothing', async ($, on) => {
   const w = world(on)
   w.state.next = { result: '[main 1a2b3c4] x\nmain -> main\nhttps://github.com/o/r/pull/1' }
@@ -218,9 +230,10 @@ test('the recorder passes the real result through unchanged', async ($, on) => {
   expect((await other($, 'Write', { file_path: '/a.ts' })).result).toBe('wrote it')
 })
 
-test('the store never goes through a process: a text naming a settings file is recorded like any other', async ($, on) => {
+test("the store's text never goes to a process: a text naming a settings file is recorded like any other", async ($, on) => {
   const w = world(on)
   expect((await call($, 'note', { text: 'the fix was one line in ~/.claude/settings.json' })).result).toBe('recorded n1')
   expect(w.events().map(e => e.t)).toEqual(['note'])
-  expect(w.state.runs.filter(argv => argv.includes(paths.store))).toEqual([])
+  expect(w.state.runs.filter(argv => argv.includes(paths.store))).toEqual([['mv', paths.incoming, paths.store]])
+  expect(w.files[paths.incoming]).toBeUndefined()
 })

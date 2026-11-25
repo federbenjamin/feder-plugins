@@ -4,13 +4,14 @@ import type { WriteTool } from './calls'
 import { PLUGIN, SESSION_ID_RE, TYPED_CHARS_MAX } from './config'
 import { appendEvents, loadSession, readLog } from './io'
 import type { Loaded } from './io'
-import { didFacts, isRecorded, outputText } from './recorder'
+import { commitFrom, didFacts, isRecorded, NEWEST_COMMIT, outputText } from './recorder'
+import type { FoundFact } from './recorder'
 import { renderView } from './render'
 import { PERSON_ORIGINS } from './shared/events'
 import { sessionLogsDir } from './shared/firing'
 import { record, stateDirs } from './shared/record'
 import { clip } from './shared/text'
-import type { LogEvent } from './store'
+import type { DidFact, LogEvent } from './store'
 import { calledAs, OWN_TOOLS, READ_TOOL, TOOLS } from './tools'
 
 // Keeps each main session's log: `session.start` registers the six tools, a `tool.call` hook per
@@ -43,13 +44,29 @@ async function sessionOf($: EngineInterface, k: Keeper): Promise<Loaded | undefi
   return k.loaded
 }
 
+// Stores the events. A view that could not be rewritten is logged and no failure of the call: the
+// events are stored, and the next write renders them.
 async function append($: EngineInterface, s: Loaded, events: readonly LogEvent[]): Promise<void> {
-  if ((await appendEvents($, s, events)) === 'legacy') await record($, PLUGIN, 'legacy', 'the hand-kept log was moved aside')
+  const done = await appendEvents($, s, events)
+  if (done.legacy) await record($, PLUGIN, 'legacy', 'the hand-kept log was moved aside')
+  if (done.viewError !== undefined) await record($, PLUGIN, 'view-failed', done.viewError)
 }
 
 async function refuse($: EngineInterface, tool: string, why: string, startedAt: number): Promise<{ deny: string }> {
   await record($, PLUGIN, 'refused', `${tool}: ${why}`, Date.now() - startedAt)
   return { deny: why }
+}
+
+// A found fact as the store keeps it. A quiet commit's sha and subject are read from git in the
+// folder it was made in; when git does not answer, the commit is kept without them.
+async function resolved($: EngineInterface, { dir, ...fact }: FoundFact): Promise<DidFact> {
+  if (fact.kind !== 'commit' || fact.sha !== '' || dir === undefined) return fact
+  try {
+    const out = await $.process.run(['git', '-C', dir, ...NEWEST_COMMIT])
+    return { ...fact, ...(out.exitCode === 0 ? commitFrom(out.stdout) : undefined) }
+  } catch {
+    return fact
+  }
 }
 
 async function now($: EngineInterface): Promise<Date> {
@@ -74,7 +91,7 @@ export const register: Register = on => {
   })
 
   on('prompt.submit', async ($, e, next) => {
-    if (isOperatorOrigin(e.origin.kind) && e.text.trim() !== '') {
+    if (isOperatorOrigin(e.origin.kind) && !e.isMeta && e.text.trim() !== '') {
       try {
         await serial(k, async () => {
           const s = await sessionOf($, k)
@@ -120,16 +137,19 @@ export const register: Register = on => {
     })
   }
 
-  // The recorder: after a call of the main session's succeeded, what it did goes in the store.
+  // The recorder: after a call of the main session's ran, what it did goes in the store. A failed
+  // call is still read: recorder.ts takes from it only the commits its output names.
   on('tool.call', async ($, e, next) => {
     const result = await next(e)
-    if (e.agentId !== undefined || OWN_TOOLS.has(e.tool) || !isRecorded(e.tool) || result.deny !== undefined || result.isError) return result
+    if (e.agentId !== undefined || OWN_TOOLS.has(e.tool) || !isRecorded(e.tool) || result.deny !== undefined) return result
     try {
       await serial(k, async () => {
         const s = await sessionOf($, k)
         if (s === undefined) return
-        const facts = didFacts({ tool: e.tool, input: e, output: outputText(result) }, { cwd: await $.session.cwd(), ownDir: sessionLogsDir(s.dir) })
-        if (facts.length === 0) return
+        const found = didFacts({ tool: e.tool, input: e, output: outputText(result), isError: result.isError === true }, { cwd: await $.session.cwd(), ownDir: sessionLogsDir(s.dir) })
+        if (found.length === 0) return
+        const facts: DidFact[] = []
+        for (const f of found) facts.push(await resolved($, f))
         const at = (await now($)).toISOString()
         await append(
           $,
