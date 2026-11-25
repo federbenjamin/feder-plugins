@@ -81,10 +81,18 @@ test('an older message that both opens the session and asks to be consulted appe
   expect(readTurn(rows, FINAL).older).toEqual(['wait for me'])
 })
 
+test('a reply to a keepalive ping does not stand in for the answer the operator read', () => {
+  const ping = (minute: number): TranscriptRow => ({ type: 'user', timestamp: at(minute), message: { content: 'keepalive ping. Reply only: ok' }, origin: { kind: 'plugin', name: 'cache-keepalive', asUser: true }, promptSource: 'system' })
+  const rows = [typed('propose a plan, then wait', 0), uses('t1', 'Read', { file_path: 'a.md' }, 1), result('t1', 'text'), says('The plan: three steps.', 2), ping(3), says('ok', 3), ping(4), says('ok', 4), typed('what goes to subagents?', 5), says(FINAL, 6)]
+  const turn = readTurn(rows, FINAL)
+  expect(turn.recent).toEqual([{ operator: 'propose a plan, then wait', agent: 'The plan: three steps.' }])
+  expect(buildInput(turn, null)).not.toContain('Agent: ok')
+})
+
 test('each piece keeps to its limit, clipped at the end that matters', () => {
   const long = (c: string, n: number) => c.repeat(n)
   const rows = [
-    typed(long('o', 1000), 0),
+    typed(long('o', 2500), 0),
     says(long('a', 1000), 0),
     typed(long('p', 4000), 1),
     says(`early ${long('m', 1000)}`, 1),
@@ -94,7 +102,7 @@ test('each piece keeps to its limit, clipped at the end that matters', () => {
   ]
   const final = `head ${long('f', 5000)}`
   const input = buildInput(readTurn(rows, final), { path: '~/plan.md', body: long('b', 4000) })
-  expect(input).toContain(`Operator: ${long('o', 400)} […]\n\nAgent: […] ${long('a', 400)}\n\n`)
+  expect(input).toContain(`Operator: ${long('o', 2000)} […]\n\nAgent: […] ${long('a', 400)}\n\n`)
   expect(input).toContain(`that opened the turn\n\n${long('p', 3000)} […]\n\n`)
   expect(input).not.toContain('early')
   expect(input).toContain(`[…] ${long('n', 300)}\n\n[…] `)

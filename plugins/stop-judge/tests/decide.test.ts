@@ -25,6 +25,12 @@ test('nothing holding the step means continue', () => {
   expect(decide(CLEAR, SAID)).toEqual({ decision: 'continue', why: 'nothing holds it' })
 })
 
+test('with no fixed answer holding the step, the verdict decides; a reply without one keeps going', () => {
+  expect(decide({ ...CLEAR, verdict: 'stop' }, SAID)).toEqual({ decision: 'stop', why: 'judged to wait' })
+  expect(why({ verdict: ' Continue ' })).toBe('nothing holds it')
+  expect(why({ verdict: 'stop', effort: 'high' })).toBe('high effort')
+})
+
 test('each answer stops for its own reason', () => {
   expect(why({ step: 'none' })).toBe('no step left open')
   expect(why({ step: '  ' })).toBe('no step left open')

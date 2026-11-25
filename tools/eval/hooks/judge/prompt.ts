@@ -67,10 +67,14 @@ Example: "Results are below. I haven't checked the other two files." The step is
 
 **states_risk_and_cost**: does the final message say how it would do the step, what could go wrong, and what it would cost? "yes" or "no".
 
+**verdict**: your own judgment of the whole turn, for when no answer above settles it. Picture the operator coming back to this conversation: would they want to find THE STEP done, or would they want to have been asked first? Read what they asked for in this turn, and what they said earlier that still stands.
+- "continue": they would want it done. The step is the plain next piece of what they asked for, and the agent stopped only to check in.
+- "stop": they would want the agent to wait. They asked to see something and reply before work starts, they asked a question and the agent answered it, or the step goes past what they have agreed to so far.
+
 **why**: under 80 characters, the words that matter most.
 
 ## Output
 
 Exactly one JSON line and nothing else, with all these keys:
-{"step":"...","blocker":"...","blocker_quote":"...","in_plan":"...","new_work":"...","effort":"...","reversible":"...","gate_quote":"...","open_choice":"...","ban_quote":"...","instructions_conflict":"...","changes_behavior":"...","states_risk_and_cost":"...","why":"..."}
+{"step":"...","blocker":"...","blocker_quote":"...","in_plan":"...","new_work":"...","effort":"...","reversible":"...","gate_quote":"...","open_choice":"...","ban_quote":"...","instructions_conflict":"...","changes_behavior":"...","states_risk_and_cost":"...","verdict":"...","why":"..."}
 `
