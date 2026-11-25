@@ -1,5 +1,5 @@
 import { expect, test } from 'claude-code/testing'
-import { guardOutcome, parseRows, splitTurn } from '../hooks/judge'
+import { guardOutcome, nudgeFollowUp, parseRows, splitTurn } from '../hooks/judge'
 import type { TranscriptRow } from '../hooks/shared/typed'
 
 const at = (minute: number) => `2026-10-20T12:${String(minute).padStart(2, '0')}:00.000Z`
@@ -71,4 +71,14 @@ test('a plugin keepalive opening is passed without judging the short reply', asy
 
   expect(turn.openingKind).toBe('plugin')
   expect(guardOutcome({ isOff: false, agentId: undefined, reason: 'answer', nested: false, nudgedThisPrompt: false, ...turn })).toBe('pass-keepalive')
+})
+
+test('what a nudge led to: cut short, work, or an answer alone, counted from the last nudge on', () => {
+  const nudge: TranscriptRow = { type: 'user', message: { content: 'STOP JUDGE — nothing holds it: Open the PR.' }, origin: { kind: 'plugin' } }
+  const call = assistant([{ type: 'tool_use', id: 't', name: 'Bash', input: {} }])
+  const said = assistant([{ type: 'text', text: 'Done.' }])
+  expect(nudgeFollowUp([typed('go', 1), call, said], 'answer')).toBe(null)
+  expect(nudgeFollowUp([typed('go', 1), call, nudge, said], 'answer')).toEqual({ followup: 'answered', toolCalls: 0 })
+  expect(nudgeFollowUp([nudge, call, nudge, call, call, said], 'answer')).toEqual({ followup: 'worked', toolCalls: 2 })
+  expect(nudgeFollowUp([nudge, call], 'aborted')).toEqual({ followup: 'interrupted', toolCalls: 1 })
 })

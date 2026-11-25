@@ -5,7 +5,7 @@ import { TAIL_BYTES } from './config'
 import { judgeOutcome } from './decide'
 import type { Judged } from './decide'
 import { buildInput, readTurn } from './input'
-import { captureLine, capturePath, guardOutcome, isNudgeLate, isScriptedRun, judgeRequest, nudgeText, parseRows, splitTurn, transcriptFindArgv } from './judge'
+import { captureLine, capturePath, guardOutcome, isNudgeLate, isScriptedRun, judgeRequest, nudgeFollowUp, nudgeText, parseRows, splitTurn, transcriptFindArgv } from './judge'
 import { readPlan } from './plan-io'
 import { COMMAND, SETTINGS_KEY, settingsFrom, statusText, stopJudgeCommand, USAGE } from './settings'
 import { mainTurnEnded, mainTurnStarted, PERSON_ORIGINS } from './shared/events'
@@ -61,6 +61,7 @@ async function decisionsInfo($: EngineInterface, dir: string): Promise<{ lines: 
 
 type State = StatusState & {
   nudgedThisPrompt: boolean
+  nudgedTurn: string | undefined // the turn a nudge answered, until the next turn's end reports on it
   mainTurn: MainTurn | undefined
   lastEndedTurn: string | undefined
   transcript: { id: string; path: string } | undefined
@@ -88,6 +89,7 @@ async function deliver($: EngineInterface, state: State, turnId: string, judged:
   state.nudgedThisPrompt = true
   try {
     await $.prompt.submit({ text: nudgeText(judged.nudge), asUser: true })
+    state.nudgedTurn = turnId
     return { outcome: 'continue', reason }
   } catch (error) {
     state.nudgedThisPrompt = false
@@ -95,7 +97,24 @@ async function deliver($: EngineInterface, state: State, turnId: string, judged:
   }
 }
 
+// The end of the first main turn after a nudge: one line in the capture saying what the nudge led to.
+async function reportNudge($: EngineInterface, state: State, reason: string): Promise<void> {
+  const turnId = state.nudgedTurn
+  state.nudgedTurn = undefined
+  if (turnId === undefined) return
+  try {
+    const { home, dir } = await stateDirs($)
+    const path = await transcriptPath($, state, home)
+    if (dir === '' || path === undefined) return
+    const led = nudgeFollowUp(parseRows(await transcriptTail($, path)), reason)
+    if (led) await appendLine($, capturePath(dir, await $.session.id()), captureLine({ at: new Date(await $.clock.now()).toISOString(), turnId, ...led }))
+  } catch {
+    // the capture is for reading back
+  }
+}
+
 async function judge($: EngineInterface, state: State, e: { agentId?: string; reason: string; answer: string; turnId: string }): Promise<void> {
+  if (!e.agentId) await reportNudge($, state, e.reason)
   const gates = {
     isOff: settingsFrom(await $.store.get(SETTINGS_KEY)).isOff,
     agentId: e.agentId,
@@ -167,10 +186,11 @@ async function logContext($: EngineInterface): Promise<void> {
 }
 
 export const register: Register = on => {
-  const state: State = { nudgedThisPrompt: false, mainTurn: undefined, lastEndedTurn: undefined, transcript: undefined, isInteractive: false, derive: undefined, statusCalls: 0 }
+  const state: State = { nudgedThisPrompt: false, nudgedTurn: undefined, mainTurn: undefined, lastEndedTurn: undefined, transcript: undefined, isInteractive: false, derive: undefined, statusCalls: 0 }
 
   on('session.start', async ($, e, next) => {
     state.nudgedThisPrompt = false
+    state.nudgedTurn = undefined
     state.mainTurn = undefined
     state.lastEndedTurn = undefined
     state.transcript = undefined

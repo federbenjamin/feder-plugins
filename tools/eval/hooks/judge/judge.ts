@@ -160,6 +160,29 @@ export type Capture = Pick<Judged, 'answers' | 'quotes' | 'decision'> & {
   usd: number
 }
 
-export function captureLine(c: Capture): string {
+// What became of a nudge, read at the end of the turn it started: the operator cut it short, the
+// agent went to work, or the agent only answered. An interruption is the one sure sign of a wrong
+// nudge; work done is not proof of a right one, since an agent obeys a wrong nudge too.
+export type FollowUp = { at: string; turnId: string; followup: 'interrupted' | 'worked' | 'answered'; toolCalls: number }
+
+const isNudgeRow = (row: TranscriptRow): boolean =>
+  row.type === 'user' &&
+  contentText(isRecord(row.message) ? row.message.content : undefined)
+    .trim()
+    .startsWith(NUDGE_PREFIX.trim())
+
+// null when the tail holds no nudge: nothing to report on.
+export function nudgeFollowUp(rows: readonly TranscriptRow[], reason: string): Pick<FollowUp, 'followup' | 'toolCalls'> | null {
+  const from = rows.findLastIndex(isNudgeRow)
+  if (from === -1) return null
+  let toolCalls = 0
+  for (const row of rows.slice(from + 1)) {
+    const content = row.type === 'assistant' && isRecord(row.message) ? row.message.content : undefined
+    if (Array.isArray(content)) toolCalls += content.filter(b => isRecord(b) && b.type === 'tool_use').length
+  }
+  return { followup: reason !== 'answer' ? 'interrupted' : toolCalls > 0 ? 'worked' : 'answered', toolCalls }
+}
+
+export function captureLine(c: Capture | FollowUp): string {
   return `${JSON.stringify(c)}\n`
 }
