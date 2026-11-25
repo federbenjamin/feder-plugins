@@ -1,9 +1,9 @@
 import type { Register } from 'claude-code'
-import { applyCommand, dialogTimeoutCommand, envMinutesFrom, sessionSetting, settingsFrom, SETTINGS_KEY } from './settings.ts'
-import type { Settings } from './settings.ts'
-import { mainTurnEnded, mainTurnStarted, PERSON_ORIGINS } from './shared/events.ts'
-import type { MainTurn } from './shared/events.ts'
-import { record } from './shared/record.ts'
+import { applyCommand, dialogTimeoutCommand, envMinutesFrom, sessionSetting, settingsFrom, SETTINGS_KEY } from './settings'
+import type { Settings } from './settings'
+import { mainTurnEnded, mainTurnStarted, PERSON_ORIGINS } from './shared/events'
+import type { MainTurn } from './shared/events'
+import { record } from './shared/record'
 
 // Ends a main turn that has sat on an open dialog (a permission prompt, an AskUserQuestion) for
 // the set minutes, then submits AFK_TEXT so the agent runs the afk skill and moves on. No tool

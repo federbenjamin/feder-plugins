@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
-import { DEFAULT_VARIANT, VARIANTS } from '../hooks/prompts.ts'
-import { buildRequest, keptLastPrompt, newestPrompt, parseFileVerdict, parseReply, seedDocuments, seedFromCapture, withQueued } from '../hooks/summary.ts'
+import { DEFAULT_VARIANT, VARIANTS } from '../hooks/prompts'
+import { buildRequest, keptLastPrompt, newestPrompt, parseFileVerdict, parseReply, seedDocuments, seedFromCapture, withQueued } from '../hooks/summary'
 
 const previous = { title: 'Boundary tests', lastPrompt: 'You asked for boundary tests.', soFar: 'Finished the setup.', now: 'Writing boundary tests.' }
 

@@ -1,8 +1,8 @@
 import type { Source, Summary } from '../types'
-import { EVERY_SECONDS, FIRST_SECONDS } from './config.ts'
-import { DEFAULT_VARIANT, isVariant } from './prompts.ts'
-import { isFlag, isOneOf, isPositiveInteger, parseCommand, positiveInteger, readSettings } from './shared/settings.ts'
-import type { Grammar } from './shared/settings.ts'
+import { EVERY_SECONDS, FIRST_SECONDS } from './config'
+import { DEFAULT_VARIANT, isVariant } from './prompts'
+import { isFlag, isOneOf, isPositiveInteger, parseCommand, positiveInteger, readSettings } from './shared/settings'
+import type { Grammar } from './shared/settings'
 
 // The /session-summary command's pure side: the stored settings, the grammar, the show text.
 

@@ -1,12 +1,12 @@
 import type { ModelUsage, SessionMessage } from 'claude-code'
 import type { Doc, Source, Summary, SummaryStatus } from '../types'
-import { FILES_ROWS, TOOL_LINE_CHARS } from './config.ts'
-import { documentsFrom } from './documents.ts'
-import type { FileVerdict } from './documents.ts'
-import { DEFAULT_VARIANT, isVariant, VARIANTS } from './prompts.ts'
-import { isSource } from './settings.ts'
-import { clip, toolInputHead } from './shared/text.ts'
-import { isRecord, isTypedText, SIBLING_TEXTS } from './shared/typed.ts'
+import { FILES_ROWS, TOOL_LINE_CHARS } from './config'
+import { documentsFrom } from './documents'
+import type { FileVerdict } from './documents'
+import { DEFAULT_VARIANT, isVariant, VARIANTS } from './prompts'
+import { isSource } from './settings'
+import { clip, toolInputHead } from './shared/text'
+import { isRecord, isTypedText, SIBLING_TEXTS } from './shared/typed'
 
 // The summary's pure side: when a tick calls, what the call reads, what it asks, how the reply
 // is read, the capture line and the pane's rows.
@@ -279,7 +279,7 @@ export function estimatedRows(view: PaneView | null, columns: number, fileCount:
 // A dock has its whole height to pin FILES to the bottom of. An inline frame fits its tree, so the
 // tree takes only what it needs, and is held to the room only when it would outgrow it: the engine
 // would scroll a taller one, FILES with it.
-export function paneHeight(r: { placement: 'dock' | 'inline'; bodyRows: number; estimated: number }): number | undefined {
+export function paneHeight(r: { placement: 'dock' | 'inline' | 'widget'; bodyRows: number; estimated: number }): number | undefined {
   if (r.placement === 'dock') return r.bodyRows
   return r.estimated > r.bodyRows ? r.bodyRows : undefined
 }

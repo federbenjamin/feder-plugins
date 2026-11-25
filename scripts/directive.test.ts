@@ -1,6 +1,6 @@
 // Runs plugins/session-log/scripts/directive.sh as the SessionStart hook does, against a fixture
 // state dir: a plugin test cannot start a process, so this is where the script meets log.ts.
-//   node --test scripts/*.test.ts
+//   node --import ./scripts/resolve-ts.ts --test scripts/*.test.ts
 import { spawnSync } from 'node:child_process'
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'

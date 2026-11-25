@@ -1,4 +1,4 @@
-import { DAY_MS, localDate, plural, type Session } from './pipeline.ts'
+import { DAY_MS, localDate, plural, type Session } from './pipeline'
 
 // The two files a nightly run writes for people and agents to read: the status (one block per
 // stream, carried from the previous status and moved by today's summaries) and the patterns

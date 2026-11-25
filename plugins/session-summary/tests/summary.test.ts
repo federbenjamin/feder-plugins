@@ -1,5 +1,5 @@
 import { expect, test } from 'claude-code/testing'
-import { formatLog, formatMessages, isBumpTurn, isDue } from '../hooks/summary.ts'
+import { formatLog, formatMessages, isBumpTurn, isDue } from '../hooks/summary'
 
 const STARTED = 1_000_000
 

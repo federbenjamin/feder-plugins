@@ -1,6 +1,6 @@
 import type { EngineInterface, ProcessRunResult } from 'claude-code'
-import type { JobNames } from './launchd.ts'
-import { stderrHead } from './text.ts'
+import type { JobNames } from './launchd'
+import { stderrHead } from './text'
 
 // The I/O half of a launchd job, for every plugin that installs one: load it, unload it, and the
 // one-line reads the install needs. launchd.ts holds the pure half.

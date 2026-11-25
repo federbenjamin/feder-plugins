@@ -1,4 +1,4 @@
-import { isRecord } from './typed.ts'
+import { isRecord } from './typed'
 
 // Both ends of a long message: the instruction is often at the top, the question at the bottom.
 export function clip(text: string, n: number): string {

@@ -1,7 +1,7 @@
 import type { EngineInterface, PluginOptions } from 'claude-code'
-import { pool } from './shared/pool.ts'
-import { isPermanent, retryDelayS } from './shared/retry.ts'
-import { stderrHead } from './shared/text.ts'
+import { pool } from './shared/pool'
+import { isPermanent, retryDelayS } from './shared/retry'
+import { stderrHead } from './shared/text'
 import {
   addUsage,
   batchSessions,
@@ -20,7 +20,7 @@ import {
   type Session,
   type Summary,
   type UsageByModel,
-} from './pipeline.ts'
+} from './pipeline'
 
 // The I/O both the nightly run and the setup share: the options, the data folder, the prompt
 // files, the extract, and the model calls with their retries.

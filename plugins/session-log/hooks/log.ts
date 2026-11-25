@@ -1,4 +1,4 @@
-import { sessionLogPath, sessionLogsDir } from './shared/firing.ts'
+import { sessionLogPath, sessionLogsDir } from './shared/firing'
 
 // The session log's pure side: section parsing, the compaction prune, the template and the
 // directive. No `$` here; register.ts does the file I/O.

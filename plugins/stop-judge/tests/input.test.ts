@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
-import { buildInput, expandHome, namedDocs, planOf, readTurn } from '../hooks/input.ts'
-import type { TranscriptRow } from '../hooks/shared/typed.ts'
+import { buildInput, expandHome, namedDocs, planOf, readTurn } from '../hooks/input'
+import type { TranscriptRow } from '../hooks/shared/typed'
 
 const at = (minute: number) => `2026-10-20T12:${String(minute).padStart(2, '0')}:00.000Z`
 const typed = (text: string, minute = 0): TranscriptRow => ({ type: 'user', timestamp: at(minute), message: { content: text }, origin: { kind: 'human' }, promptSource: 'typed' })

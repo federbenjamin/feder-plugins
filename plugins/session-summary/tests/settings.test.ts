@@ -1,5 +1,5 @@
 import { expect, test } from 'claude-code/testing'
-import { DEFAULT_SETTINGS, settingsFrom, showText, summaryCommand, USAGE } from '../hooks/settings.ts'
+import { DEFAULT_SETTINGS, settingsFrom, showText, summaryCommand, USAGE } from '../hooks/settings'
 
 const defaults = { isOff: false, firstSeconds: 90, everySeconds: 600, source: 'messages' as const, variant: 'edit', linksBase: '' }
 

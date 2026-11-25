@@ -1,6 +1,6 @@
 import type { EngineInterface } from 'claude-code'
-import { expandHome, namedDocs, planOf } from './input.ts'
-import type { Turn } from './input.ts'
+import { expandHome, namedDocs, planOf } from './input'
+import type { Turn } from './input'
 
 // The plan the turn names, as far as it exists and reads; a file over the read cap is left out.
 export async function readPlan($: EngineInterface, turn: Turn, home: string): Promise<{ path: string; body: string } | null> {

@@ -1,9 +1,9 @@
 import type { ModelUsage } from 'claude-code'
-import { JUDGE_REQUEST, NUDGE_SUBAGENT } from './config.ts'
-import type { Judged } from './decide.ts'
-import { PROMPT } from './prompt.ts'
-import { contentText, isRecord, parseRow, SIBLING_TEXTS, typedText } from './shared/typed.ts'
-import type { TranscriptRow } from './shared/typed.ts'
+import { JUDGE_REQUEST, NUDGE_SUBAGENT } from './config'
+import type { Judged } from './decide'
+import { PROMPT } from './prompt'
+import { contentText, isRecord, parseRow, SIBLING_TEXTS, typedText } from './shared/typed'
+import type { TranscriptRow } from './shared/typed'
 
 // The stop judge's pure side: the rows that end a turn, the request to the model, the gates around
 // a nudge, and the capture. input.ts builds the user message, decide.ts reads the reply, and

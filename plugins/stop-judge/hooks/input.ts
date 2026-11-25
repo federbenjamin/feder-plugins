@@ -1,7 +1,7 @@
-import { DOC_SKIP, FRAMING, INPUT_LIMITS, PLAN_PATH, REFUSED } from './config.ts'
-import { assistantText } from './judge.ts'
-import { contentText, isRecord, typedText } from './shared/typed.ts'
-import type { TranscriptRow } from './shared/typed.ts'
+import { DOC_SKIP, FRAMING, INPUT_LIMITS, PLAN_PATH, REFUSED } from './config'
+import { assistantText } from './judge'
+import { contentText, isRecord, typedText } from './shared/typed'
+import type { TranscriptRow } from './shared/typed'
 
 // The judge's user message, built from the transcript tail: the conversation, the facts code can
 // read from the rows, what the agent did this turn, the opening of a plan it named, and its final

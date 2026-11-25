@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 import type { ModelCompleteResult } from 'claude-code'
-import { addCall, firingReason, replyResult } from '../hooks/call.ts'
+import { addCall, firingReason, replyResult } from '../hooks/call'
 
 const previous = { title: 'Summary plugin', lastPrompt: '', soFar: 'Set the plugin up.', now: 'Writing tests.' }
 const usage = { input_tokens: 1200, output_tokens: 80, cache_read_input_tokens: 300, cache_creation_input_tokens: 40 }

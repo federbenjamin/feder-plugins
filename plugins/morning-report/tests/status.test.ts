@@ -1,5 +1,5 @@
 import { test, expect } from 'claude-code/testing'
-import type { Session } from '../hooks/pipeline.ts'
+import type { Session } from '../hooks/pipeline'
 import {
   applyDrops,
   carryForward,
@@ -21,7 +21,7 @@ import {
   upsertPatterns,
   watchFor,
   type StreamBlock,
-} from '../hooks/status.ts'
+} from '../hooks/status'
 
 const block = (name: string, lastTouched: string, extra: string[] = []): StreamBlock => ({
   name,

@@ -1,5 +1,5 @@
-import { tooManyFailed, type CallFailure } from './shared/retry.ts'
-import { parseCommand, type Grammar } from './shared/settings.ts'
+import { tooManyFailed, type CallFailure } from './shared/retry'
+import { parseCommand, type Grammar } from './shared/settings'
 
 // The run's pure side: the window and its state, the session batches, the summary outcome, the
 // extract's shape, the prompt fills, and the option and argument parsing. status.ts holds the

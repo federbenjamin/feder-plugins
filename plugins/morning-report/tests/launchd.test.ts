@@ -1,6 +1,6 @@
 import { test, expect } from 'claude-code/testing'
-import { REPORT_FIRES, REPORT_HOUR } from '../hooks/pipeline.ts'
-import { launchdNames, renderPlist } from '../hooks/launchd.ts'
+import { REPORT_FIRES, REPORT_HOUR } from '../hooks/pipeline'
+import { launchdNames, renderPlist } from '../hooks/launchd'
 
 test('launchd names use the portable label consistently across the plist, log, domain, and target', async () => {
   expect(launchdNames('/home/x', '501')).toEqual({

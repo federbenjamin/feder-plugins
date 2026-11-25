@@ -32,8 +32,8 @@ import {
   type Session,
   type Summary,
   type UsageByModel,
-} from '../hooks/pipeline.ts'
-import { stderrHead } from '../hooks/shared/text.ts'
+} from '../hooks/pipeline'
+import { stderrHead } from '../hooks/shared/text'
 
 const HOUR = 3600_000
 

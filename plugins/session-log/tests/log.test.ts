@@ -1,5 +1,5 @@
 import { expect, test } from 'claude-code/testing'
-import { compactSessionLog, directiveText, logPaths, replacesQuotes, templateText } from '../hooks/log.ts'
+import { compactSessionLog, directiveText, logPaths, replacesQuotes, templateText } from '../hooks/log'
 
 const at = new Date('2026-10-20T11:45:00.000Z')
 

@@ -1,7 +1,7 @@
 import { expect, test } from 'claude-code/testing'
 import type { Doc } from '../types'
-import { LINK_TTL_MS, LINKS_HTTPS_PORT, LINKS_LOCAL_PORT } from '../hooks/config.ts'
-import { adoptShares, isSecretPath, linksJobNames, linksPaths, LOCAL_TARGET, mergeShares, newToken, parseShares, REFUSED, renderLinksPlist, servePortHolder, shareUrl, sharesText, tailnetBase, wantedShares } from '../hooks/links.ts'
+import { LINK_TTL_MS, LINKS_HTTPS_PORT, LINKS_LOCAL_PORT } from '../hooks/config'
+import { adoptShares, isSecretPath, linksJobNames, linksPaths, LOCAL_TARGET, mergeShares, newToken, parseShares, REFUSED, renderLinksPlist, servePortHolder, shareUrl, sharesText, tailnetBase, wantedShares } from '../hooks/links'
 
 const NOW = 1_000
 const counter = () => {

@@ -1,9 +1,9 @@
 import type { Doc } from '../types'
-import { LINK_TTL_MS, LINKS_ACCESS_LOG, LINKS_HTTPS_PORT, LINKS_LABEL, LINKS_LOCAL_PORT } from './config.ts'
-import { logPath } from './shared/firing.ts'
-import { jobNames, plistText } from './shared/launchd.ts'
-import type { JobNames } from './shared/launchd.ts'
-import { isRecord } from './shared/typed.ts'
+import { LINK_TTL_MS, LINKS_ACCESS_LOG, LINKS_HTTPS_PORT, LINKS_LABEL, LINKS_LOCAL_PORT } from './config'
+import { logPath } from './shared/firing'
+import { jobNames, plistText } from './shared/launchd'
+import type { JobNames } from './shared/launchd'
+import { isRecord } from './shared/typed'
 
 // /session-summary links' pure side. The shares file is the contract with scripts/file_server.py,
 // which re-reads it per request; scripts/test_file_server.py runs these functions against that

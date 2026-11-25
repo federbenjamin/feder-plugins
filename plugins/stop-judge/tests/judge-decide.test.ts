@@ -1,7 +1,7 @@
 import { expect, test } from 'claude-code/testing'
-import { JUDGE_REQUEST } from '../hooks/config.ts'
-import { capturePath, guardOutcome, isNudgeLate, isScratchProject, isScriptedRun, judgeRequest, NUDGE_PREFIX, nudgeText, OUTCOMES, splitTurn, transcriptFindArgv } from '../hooks/judge.ts'
-import { PROMPT } from '../hooks/prompt.ts'
+import { JUDGE_REQUEST } from '../hooks/config'
+import { capturePath, guardOutcome, isNudgeLate, isScratchProject, isScriptedRun, judgeRequest, NUDGE_PREFIX, nudgeText, OUTCOMES, splitTurn, transcriptFindArgv } from '../hooks/judge'
+import { PROMPT } from '../hooks/prompt'
 
 const pluginOpening = (text: string) => ({
   type: 'user',

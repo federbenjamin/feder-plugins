@@ -1,4 +1,4 @@
-import { DEFAULT_LINE } from './decisions.ts'
+import { DEFAULT_LINE } from './decisions'
 
 // The two prompts of /stop-judge derive: a reader per batch of typed turns, then one synthesis.
 

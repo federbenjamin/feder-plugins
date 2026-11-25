@@ -1,4 +1,4 @@
-import { isRecord } from './typed.ts'
+import { isRecord } from './typed'
 
 // A slash command's pure side, shared by every plugin's command: the stored settings read back
 // field by field, and the args parsed into the plugin's own action. The hooks file applies it.

@@ -1,10 +1,10 @@
 // Writes the generated copies (a plugin cannot import across its folder, and a symlink is refused
 // by the loader): shared/ into each plugin, the judge into tools/eval, the Python tests' reader of
 // hooks/*.ts into session-summary, and the eval's sample fixtures from their one source.
-//   node scripts/sync-shared.ts           write every target
-//   node scripts/sync-shared.ts --check   write nothing; exit 1 on a drifted, missing or stale
-//                                         target, a missing source or plugin, or a sibling text
-//                                         that left its plugin
+// Run with `node --import ./scripts/resolve-ts.ts scripts/sync-shared.ts [--check]`:
+//   no flag   write every target
+//   --check   write nothing; exit 1 on a drifted, missing or stale target, a missing source or
+//             plugin, or a sibling text that left its plugin
 // Every job and check is mandatory: a source or plugin that is gone fails both modes.
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'

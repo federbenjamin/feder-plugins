@@ -1,8 +1,8 @@
 import type { SessionMessage } from 'claude-code'
 import type { Doc } from '../types'
-import { DOCUMENT_EXTENSIONS, FILE_CANDIDATE_CHECKS_MAX, FILE_CANDIDATES_MAX, FILES_ROWS, RECENT_FILE_MS } from './config.ts'
-import { isSecretPath, shareUrl } from './links.ts'
-import { isRecord } from './shared/typed.ts'
+import { DOCUMENT_EXTENSIONS, FILE_CANDIDATE_CHECKS_MAX, FILE_CANDIDATES_MAX, FILES_ROWS, RECENT_FILE_MS } from './config'
+import { isSecretPath, shareUrl } from './links'
+import { isRecord } from './shared/typed'
 
 // The documents list's pure side, newest touch first: which paths the summary call may judge, what
 // its verdict and a merge with the messages do to the list, and the rows the pane draws from it.

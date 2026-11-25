@@ -1,10 +1,10 @@
 import type { ModelCompleteResult, ModelUsage } from 'claude-code'
 import type { Source } from '../types'
-import { NO_VERDICT } from './documents.ts'
-import type { FileVerdict } from './documents.ts'
-import type { Calls } from './settings.ts'
-import { parseFileVerdict, parseReply, parseTask } from './summary.ts'
-import type { Previous, TaskVerdict } from './summary.ts'
+import { NO_VERDICT } from './documents'
+import type { FileVerdict } from './documents'
+import type { Calls } from './settings'
+import { parseFileVerdict, parseReply, parseTask } from './summary'
+import type { Previous, TaskVerdict } from './summary'
 
 // The summary call's decisions, apart from its I/O in register.ts: what a reply leaves, the
 // session's running totals, and the firing line's reason.

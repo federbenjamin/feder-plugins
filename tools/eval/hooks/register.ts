@@ -1,12 +1,12 @@
 import type { EngineInterface, Register } from 'claude-code'
-import { report } from './compare.ts'
-import { extractRecord, firingsOf, keyFrom, pushMark, turnAtFiring } from './extract.ts'
-import type { EvalRecord, LineMark } from './extract.ts'
-import { judgeRequest, transcriptFindArgv } from './judge/judge.ts'
-import { readPlan } from './judge/plan-io.ts'
-import { pool } from './judge/shared/pool.ts'
-import { callsOf, gradesFrom, parseArgs, runRecordOf } from './score.ts'
-import type { Arm, Call, RunRecord } from './score.ts'
+import { report } from './compare'
+import { extractRecord, firingsOf, keyFrom, pushMark, turnAtFiring } from './extract'
+import type { EvalRecord, LineMark } from './extract'
+import { judgeRequest, transcriptFindArgv } from './judge/judge'
+import { readPlan } from './judge/plan-io'
+import { pool } from './judge/shared/pool'
+import { callsOf, gradesFrom, parseArgs, runRecordOf } from './score'
+import type { Arm, Call, RunRecord } from './score'
 
 // Dev-only commands that measure the stop judge on the production model path ($.model.complete,
 // which prepends the CLI identity block to `system`). Pure logic is in score.ts and extract.ts.

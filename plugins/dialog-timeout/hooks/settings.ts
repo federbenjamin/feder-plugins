@@ -1,5 +1,5 @@
-import { isFlag, isPositiveInteger, parseCommand, positiveInteger, readSettings } from './shared/settings.ts'
-import type { Grammar } from './shared/settings.ts'
+import { isFlag, isPositiveInteger, parseCommand, positiveInteger, readSettings } from './shared/settings'
+import type { Grammar } from './shared/settings'
 
 // The /dialog-timeout command's pure side: the stored setting, the environment's override, the
 // grammar and the lines it prints.
