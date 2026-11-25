@@ -2,7 +2,8 @@ import { PASTED_BLOCK, PROPOSAL_ASK } from './config'
 import { isRecord } from './shared/typed'
 
 // What a model reply comes to: the answers it holds, whether its quotes are the operator's own
-// words, and the decision the answers make. Haiku reports; only this code decides.
+// words, and the decision the answers make. Code decides from the reported answers first; Haiku's
+// verdict is the last check.
 
 export type Answers = Record<string, unknown>
 
@@ -48,7 +49,8 @@ const low = (a: Answers, key: string): string =>
 
 export type Decision = { decision: 'stop' | 'continue'; why: string }
 
-// A stop reason wins; otherwise keep going. The order is the tested one.
+// A stop reason wins, in the tested order. When none of the fixed answers holds the step, the
+// model's own verdict on the whole turn decides; a reply without one keeps going.
 export function decide(a: Answers, said: Said): Decision {
   const stop = (why: string): Decision => ({ decision: 'stop', why })
   const blocker = low(a, 'blocker')
@@ -64,6 +66,7 @@ export function decide(a: Answers, said: Said): Decision {
   if (low(a, 'changes_behavior') === YES && low(a, 'states_risk_and_cost') !== YES && effort !== 'low') return stop('design open')
   if (effort === 'high' && low(a, 'in_plan') !== YES) return stop('high effort')
   if (low(a, 'reversible') === 'hard') return stop('hard to undo')
+  if (low(a, 'verdict') === 'stop') return stop('judged to wait')
   return { decision: 'continue', why: 'nothing holds it' }
 }
 

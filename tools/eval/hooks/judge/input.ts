@@ -1,5 +1,5 @@
 import { DOC_SKIP, FRAMING, INPUT_LIMITS, PLAN_PATH, REFUSED } from './config'
-import { assistantText } from './judge'
+import { assistantText, isKeepaliveRow } from './judge'
 import { contentText, isRecord, typedText } from './shared/typed'
 import type { TranscriptRow } from './shared/typed'
 
@@ -42,6 +42,9 @@ const blocksOf = (row: TranscriptRow): Record<string, unknown>[] => {
   const content = isRecord(row.message) ? row.message.content : undefined
   return Array.isArray(content) ? content.filter(isRecord) : []
 }
+
+// A user row that starts a turn: a prompt, whoever submitted it, not a tool's result.
+const opensTurn = (row: TranscriptRow): boolean => row.type === 'user' && !row.isMeta && !blocksOf(row).some(b => b.type === 'tool_result')
 
 const isToolAgent = (name: unknown): boolean => name === 'Agent' || name === 'Task'
 
@@ -113,12 +116,17 @@ export function readTurn(rows: readonly TranscriptRow[], final: string): Turn {
     if (text) said.push({ at, text })
   })
   const openAt = said.at(-1)?.at ?? 0
+  // The agent's last words between two operator messages. A reply to a keepalive ping is no part
+  // of the conversation: it would stand in for the answer the operator read.
   const lastAgent = (from: number, to: number): string => {
-    for (let k = to - 1; k > from; k--) {
-      const text = assistantText(rows[k]!)
-      if (text.trim() !== '') return text
+    let last = ''
+    let isPingTurn = false
+    for (let k = from + 1; k < to; k++) {
+      const row = rows[k]!
+      if (opensTurn(row)) isPingTurn = isKeepaliveRow(row)
+      else if (!isPingTurn && assistantText(row).trim() !== '') last = assistantText(row)
     }
-    return ''
+    return last
   }
   const exchanges = said.slice(0, -1).map((s, n) => ({ operator: s.text, agent: lastAgent(s.at, said[n + 1]!.at) }))
   const errors = new Map<unknown, string>()

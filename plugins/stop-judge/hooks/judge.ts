@@ -61,6 +61,13 @@ function pluginText(row: TranscriptRow): string | null {
   return text === '' || text.startsWith(NUDGE_PREFIX.trim()) ? null : text
 }
 
+const isKeepaliveText = (text: string): boolean => text.startsWith(SIBLING_TEXTS.keepalivePing) || text.startsWith(SIBLING_TEXTS.keepaliveLast)
+
+export function isKeepaliveRow(row: TranscriptRow): boolean {
+  const text = pluginText(row)
+  return text !== null && isKeepaliveText(text)
+}
+
 // The turn's final message and what started it: the newest typed or plugin-submitted user row
 // before the final assistant row. The gates read this; input.ts reads the conversation.
 export function splitTurn(rows: readonly TranscriptRow[], answer: string | undefined): { final: string; opening: string; openingKind: Opening } {
@@ -100,7 +107,7 @@ export function guardOutcome(g: {
   if (g.reason !== 'answer') return 'pass-aborted'
   if (g.nested) return 'pass-nested'
   if (g.nudgedThisPrompt) return 'pass-nudged'
-  if (g.openingKind === 'plugin' && (g.opening.startsWith(SIBLING_TEXTS.keepalivePing) || g.opening.startsWith(SIBLING_TEXTS.keepaliveLast))) return 'pass-keepalive'
+  if (g.openingKind === 'plugin' && isKeepaliveText(g.opening)) return 'pass-keepalive'
   if (g.final.trim() === '') return 'pass-notext'
   return null
 }

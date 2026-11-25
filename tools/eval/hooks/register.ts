@@ -39,11 +39,16 @@ async function readText($: EngineInterface, path: string): Promise<string> {
   return text
 }
 
-// JSON lines out through `tee`, for the same cap on `$.fs.write`; the empty write makes the folders.
+// JSON lines out. `$.fs.write` takes up to 4 MiB; a larger text goes through `tee`. The engine
+// refuses a `$.process.run` whose stdin names a Claude Code settings file, which a record's
+// transcript text may, so `tee` is only for what `$.fs.write` cannot take.
+const FS_WRITE_MAX = 4 * 1024 * 1024
+
 async function writeLines($: EngineInterface, path: string, lines: readonly string[]): Promise<void> {
+  const text = lines.length === 0 ? '' : `${lines.join('\n')}\n`
+  if (new TextEncoder().encode(text).length <= FS_WRITE_MAX) return $.fs.write(path, text)
   await $.fs.write(path, '')
-  if (lines.length === 0) return
-  const { exitCode } = await $.process.run(['tee', path], { stdin: `${lines.join('\n')}\n` })
+  const { exitCode } = await $.process.run(['tee', path], { stdin: text })
   if (exitCode !== 0) throw new Error(`cannot write ${path}`)
 }
 

@@ -6,7 +6,7 @@
   <a href="LICENSE"><img src="https://img.shields.io/github/license/federbenjamin/feder-plugins" alt="License"></a>
 </p>
 
-A [Claude Code](https://docs.anthropic.com/en/docs/claude-code) plugin for people who want the agent to keep working. When a turn ends, a small model (haiku) reads the recent conversation and the agent's final message and answers fixed questions about the next step the message leaves open: what blocks it, whether you held or forbade it, how big it is, how hard to undo. Plain code decides from those answers. When nothing holds the step (the agent ended on "want me to run the tests?", or on a step it could have taken), the plugin sends the agent a short reminder as if you had typed it, and the agent carries on.
+A [Claude Code](https://docs.anthropic.com/en/docs/claude-code) plugin for people who want the agent to keep working. When a turn ends, a small model (haiku) reads the recent conversation and the agent's final message and answers fixed questions about the next step the message leaves open: what blocks it, whether you held or forbade it, how big it is, how hard to undo. Plain code decides from those answers first; when none of them holds the step, haiku's own verdict on the whole turn decides. When nothing holds the step (the agent ended on "want me to run the tests?", or on a step it could have taken), the plugin sends the agent a short reminder as if you had typed it, and the agent carries on.
 
 ## Install
 
@@ -28,7 +28,7 @@ It starts in the next session.
 
 ## How it decides
 
-Haiku reports; it never decides. The fixed instructions in `hooks/prompt.ts` ask it to find the step and answer about it, and `hooks/decide.ts` reads the answers in this order. The first that holds is a stop:
+Code decides first, and haiku's judgment is the last check. The fixed instructions in `hooks/prompt.ts` ask it to find the step, answer about it, and give its own verdict on the whole turn. `hooks/decide.ts` reads the answers in this order. The first that holds is a stop:
 
 | Reason logged | When |
 | --- | --- |
@@ -43,12 +43,13 @@ Haiku reports; it never decides. The fixed instructions in `hooks/prompt.ts` ask
 | `design open` | It changes behaviour someone relies on, above low effort, with no stated risk and cost |
 | `high effort` | Hours of work or more, unless it comes from a plan you agreed to |
 | `hard to undo` | It cannot be taken back, or it reaches someone else |
+| `judged to wait` | None of the above, and haiku's verdict is that you would want to be asked first |
 
-With none of them, the reason is `nothing holds it`, and the reminder goes.
+With none of them, the reason is `nothing holds it`, and the reminder goes. A reply with no verdict counts as none.
 
 A quote counts only when its words are in what you typed, ignoring case and punctuation, so an agent's own "say go" holds nothing. The proposal check is plain code on the opening message alone, with any `<pasted_content>` block removed; your next message clears it. It would also hold "go ahead with the proposal".
 
-**What it reads and sends.** From the transcript's last 8 MB, to haiku through Claude Code's own model connection, at each judged turn: both sides of the last eight exchanges (400 characters a side), up to four older messages of yours (your first, and the latest three that ask to be consulted, 600 characters each), the message that opened the turn (3,000), facts code reads from the rows (background jobs not yet reported, tool calls refused this turn), the turn's tool calls by name and arguments (the last 30, with a failed call's error), up to two things the agent said along the way, the first 3,000 characters of a plan-like Markdown file under your home folder that the turn names, and the final message (the last 4,000). The judge reads no other file of yours.
+**What it reads and sends.** From the transcript's last 8 MB, to haiku through Claude Code's own model connection, at each judged turn: both sides of the last eight exchanges (2,000 characters of each message of yours, the last 400 of each reply, and no reply to a keepalive ping), up to four older messages of yours (your first, and the latest three that ask to be consulted, 600 characters each), the message that opened the turn (3,000), facts code reads from the rows (background jobs not yet reported, tool calls refused this turn), the turn's tool calls by name and arguments (the last 30, with a failed call's error), up to two things the agent said along the way, the first 3,000 characters of a plan-like Markdown file under your home folder that the turn names, and the final message (the last 4,000). The judge reads no other file of yours.
 
 **Measured.** Replayed over saved turns, two or three tries each, against the judge this one replaced, with each nudge counted (a nudge is the judge telling the agent to keep working):
 

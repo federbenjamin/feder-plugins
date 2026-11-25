@@ -201,7 +201,10 @@ function evalWorld(on: On, transcript: string, piece: number) {
   on('command.register', async (_$, e) => ({ value: { command: e.name } }))
   on('session.start', async (_$, e) => ({ cwd: e.cwd }))
   on('fs.stat', async () => ({ value: { kind: 'file' as const, size: 1, mtimeMs: T0, isLink: false } }))
-  on('fs.write', async () => ({ value: undefined }))
+  on('fs.write', async (_$, e) => {
+    w.written.push(e.text)
+    return { value: undefined }
+  })
   on('fs.exists', async () => ({ value: false }))
   on('process.run', async (_$, e) => {
     if (e.argv[0] === 'tee') w.written.push(e.init?.stdin ?? '')
