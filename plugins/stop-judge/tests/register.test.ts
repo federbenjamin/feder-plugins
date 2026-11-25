@@ -167,6 +167,17 @@ test('a second turn before the person writes logs pass-nudged; a person prompt r
   expect(w.submitted).toHaveLength(2)
 })
 
+test('the end of the turn after a nudge adds one capture line saying what the nudge led to, once', async ($, on) => {
+  const w = world(on)
+  await start($)
+  await complete($, { turnId: 'turn-1' })
+  w.rows = [...w.rows, user(`STOP JUDGE — nothing holds it: Open the PR.`, 1), { type: 'assistant', message: { content: [{ type: 'tool_use', id: 't', name: 'Bash', input: {} }] } }, assistant('Opened.')]
+  await complete($, { turnId: 'turn-2' })
+  await complete($, { turnId: 'turn-3' })
+  expect(w.captured).toHaveLength(2)
+  expect(JSON.parse(w.captured[1]!)).toEqual({ at: new Date(T0).toISOString(), turnId: 'turn-1', followup: 'worked', toolCalls: 1 })
+})
+
 test('text in the prompt box means the person is answering: pass-typing, no nudge, and the next turn may still nudge', async ($, on) => {
   const w = world(on)
   w.box = 'actually, wait'
