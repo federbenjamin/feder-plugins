@@ -237,3 +237,72 @@ test("the store's text never goes to a process: a text naming a settings file is
   expect(w.state.runs.filter(argv => argv.includes(paths.store))).toEqual([['mv', paths.incoming, paths.store]])
   expect(w.files[paths.incoming]).toBeUndefined()
 })
+
+test('a view write that fails after the store write is logged as view-failed, the call still succeeds, and the next view shows both events', async ($, on) => {
+  const w = world(on)
+  w.state.failWrite = paths.view
+  expect((await call($, 'todo_add', { text: 'one' })).result).toBe('added t1')
+  expect(w.events().map(e => e.t)).toEqual(['todo.add'])
+  expect(outcomes(w.firing())).toContain('view-failed')
+  expect(outcomes(w.firing())).not.toContain('failed')
+  w.state.failWrite = undefined
+  expect((await call($, 'todo_add', { text: 'two' })).result).toBe('added t2')
+  expect(w.files[paths.view]).toContain('t1 one')
+  expect(w.files[paths.view]).toContain('t2 two')
+})
+
+test('a store that cannot be written denies the call as not recorded, logs one failed line, and the id is not used up', async ($, on) => {
+  const w = world(on)
+  w.state.failWrite = paths.incoming
+  expect((await call($, 'todo_add', { text: 'one' })).deny).toMatch(/nothing was recorded/)
+  expect(outcomes(w.firing()).filter(o => o === 'failed')).toHaveLength(1)
+  expect(w.files[paths.store]).toBeUndefined()
+  w.state.failWrite = undefined
+  expect((await call($, 'todo_add', { text: 'one' })).result).toBe('added t1')
+})
+
+test('a store that cannot be moved into place denies the call as not recorded and leaves no store', async ($, on) => {
+  const w = world(on)
+  w.state.failMove = true
+  expect((await call($, 'todo_add', { text: 'one' })).deny).toMatch(/nothing was recorded/)
+  expect(w.files[paths.store]).toBeUndefined()
+  w.state.failMove = false
+  expect((await call($, 'todo_add', { text: 'one' })).result).toBe('added t1')
+})
+
+test('the first write is denied and the hand-kept .md left as it is when the .legacy.md target already exists', async ($, on) => {
+  const kept = '# hand kept log\n- [ ] old todo\n'
+  const w = world(on, { [paths.view]: kept, [paths.legacy]: 'an older legacy file' })
+  expect((await call($, 'todo_add', { text: 'new' })).deny).toMatch(/nothing was recorded/)
+  expect(w.files[paths.view]).toBe(kept)
+  expect(w.files[paths.legacy]).toBe('an older legacy file')
+  expect(w.files[paths.store]).toBeUndefined()
+})
+
+test('a prompt marked isMeta is not kept as typed, so a ruling quoting it is refused', async ($, on) => {
+  const w = world(on)
+  await $.prompt.submit({ ...typed('never run the migration'), isMeta: true } as never)
+  expect((await call($, 'ruling', { quote: 'never run the migration', meaning: 'm' })).deny).toContain('by_session')
+  expect(w.events().filter(e => e.t === 'typed')).toHaveLength(0)
+})
+
+test('the store goes to <id>.jsonl.tmp and is moved into place: no .tmp is left and the move is the only process call naming the store', async ($, on) => {
+  const w = world(on)
+  await call($, 'todo_add', { text: 'a' })
+  expect(paths.incoming).toBe(`${paths.store}.tmp`)
+  expect(w.state.writes).toContain(paths.incoming)
+  expect(w.files[paths.incoming]).toBeUndefined()
+  expect(w.files[paths.store]).toContain('todo.add')
+  expect(w.state.runs.filter(argv => argv.includes(paths.store))).toEqual([['mv', paths.incoming, paths.store]])
+})
+
+test('a ruling repeating one a later decision replaced, with replaces, is recorded and the view shows it instead of the decision', async ($, on) => {
+  const w = world(on)
+  await $.prompt.submit(typed('use sqlite for the cache'))
+  await call($, 'ruling', { quote: 'use sqlite', meaning: 'cache store' })
+  await call($, 'decide', { pick: 'postgres', over: ['sqlite'], reason: 'writers', replaces: 'r1' })
+  await $.prompt.submit(typed('no, use sqlite'))
+  expect((await call($, 'ruling', { quote: 'use sqlite', meaning: 'cache store', replaces: 'd1' })).result).toBe('recorded r2')
+  expect(w.files[paths.view]).toContain('(r2)')
+  expect(w.files[paths.view]).not.toContain('postgres')
+})

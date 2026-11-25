@@ -98,3 +98,21 @@ test('a store written from the events a call returned folds back to the same tod
   if (!('events' in r)) throw new Error('refused')
   expect(foldStore(r.events.map(storeLine).join('')).todos).toEqual([{ id: 't1', at: NOW.toISOString(), text: 'ship it' }])
 })
+
+// The operator says again what a later decision overturned: the repeat check must not see r1.
+test('a ruling that repeats an earlier ruling a later decision replaced, called with replaces naming that decision, is a new ruling', async () => {
+  const state = stateOf(
+    { t: 'typed', text: 'use sqlite for the cache' },
+    { t: 'typed', text: 'no, use sqlite' },
+    { t: 'ruling', id: 'r1', quote: 'use sqlite', meaning: 'cache store' },
+    { t: 'decision', id: 'd1', pick: 'postgres', over: ['sqlite'], reason: 'writers', replaces: 'r1' },
+  )
+  const r = callTool(state, 'ruling', { quote: 'use sqlite', meaning: 'cache store', replaces: 'd1' }, NOW)
+  expect(r).toEqual({ events: [{ t: 'ruling', at: NOW.toISOString(), id: 'r2', quote: 'use sqlite', meaning: 'cache store', replaces: 'd1' }], reply: 'recorded r2' })
+})
+
+test('a ruling quote must sit inside one typed prompt, not join the end of one to the start of the next', async () => {
+  const state = stateOf({ t: 'typed', text: 'is it ready? yes' }, { t: 'typed', text: 'merge nothing yet' })
+  expect('refuse' in callTool(state, 'ruling', { quote: 'yes merge', meaning: 'm' }, NOW)).toBe(true)
+  expect('events' in callTool(state, 'ruling', { quote: 'merge nothing', meaning: 'm' }, NOW)).toBe(true)
+})

@@ -23,16 +23,18 @@ export type ToolReply = { result?: unknown; isError?: boolean; deny?: string }
 // The engine beneath the plugin: a file system held in `files` (tee appends to it, `mv -n` moves),
 // a mock clock and env, the tools `tool.register` was given, and one terminal `tool.call` handler
 // whose reply a test sets in `state.next` (what the real tool would answer the recorder's `next(e)`).
+// `state.failWrite` names a path whose `fs.write` rejects; `state.failMove` makes `mv` exit 1 and move nothing. Both are off by default.
 // `state.newest` is git's newest commit per folder, as `git -C <dir> log -1` prints it; a folder not in it is no repo.
 export function world(on: On, files: Record<string, string> = {}) {
   const clock = mock.clock(on, { now: T0 })
   mock.env(on, { STOPSTOPPING_DIR: DIR, HOME: '/home/u' })
-  const state = { id: ID, next: { result: 'ok' } as ToolReply, writes: [] as string[], runs: [] as string[][], registered: [] as { name: string; isDeferred?: boolean }[], newest: {} as Record<string, string> }
+  const state = { id: ID, next: { result: 'ok' } as ToolReply, writes: [] as string[], runs: [] as string[][], registered: [] as { name: string; isDeferred?: boolean }[], newest: {} as Record<string, string>, failWrite: undefined as string | undefined, failMove: false }
   on('session.id', async () => ({ value: state.id }))
   on('session.cwd', async () => ({ value: CWD }))
   on('fs.exists', async (_$, e) => ({ value: e.path in files }))
   on('fs.read', async (_$, e) => ({ value: files[e.path] ?? '' }))
   on('fs.write', async (_$, e) => {
+    if (e.path === state.failWrite) throw new Error(`disk refused ${e.path}`)
     state.writes.push(e.path)
     files[e.path] = e.text
     return { value: undefined }
@@ -40,6 +42,7 @@ export function world(on: On, files: Record<string, string> = {}) {
   on('process.run', async (_$, e) => {
     state.runs.push([...e.argv])
     if (e.argv[0] === 'tee') files[e.argv[2]!] = (files[e.argv[2]!] ?? '') + (e.init?.stdin ?? '')
+    if (e.argv[0] === 'mv' && state.failMove) return { value: { exitCode: 1, stdout: '', stderr: 'mv: failed', isStdoutTruncated: false, isStderrTruncated: false } }
     if (e.argv[0] === 'mv') {
       const [from, to] = e.argv.slice(-2) as [string, string]
       const isKept = e.argv[1] === '-n' && to in files // `mv -n` leaves both files when the target exists

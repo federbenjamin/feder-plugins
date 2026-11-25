@@ -13,17 +13,17 @@ const object = (properties: Record<string, unknown>, required: readonly string[]
 export const TOOLS: readonly { name: ToolName; description: string; inputSchema: Record<string, unknown> }[] = [
   {
     name: 'todo_add',
-    description: 'Session log: add an open todo for work that will outlast this turn. Returns its id.',
+    description: 'Session log: add an open todo: work that will outlast this turn, or a question, confirmation or choice you are leaving with the operator. Returns its id.',
     inputSchema: object({ text: string, tag: { type: 'string', description: 'A label to group by, such as a branch' } }, ['text']),
   },
   {
     name: 'todo_close',
-    description: 'Session log: close a todo by id as soon as it is done or dropped.',
+    description: 'Session log: close a todo by id as soon as it is done, answered or dropped.',
     inputSchema: object({ id: string, note: { type: 'string', description: 'How it ended, when not plainly done' } }, ['id']),
   },
   {
     name: 'decide',
-    description: 'Session log: record one choice you made: what you picked, what you picked it over, and why.',
+    description: 'Session log: record one choice you made, when you make it: what you picked, what you picked it over, and why. One call per choice, small ones included: a later reader finds each why here and nowhere else.',
     inputSchema: object(
       {
         pick: string,
@@ -51,7 +51,7 @@ export const TOOLS: readonly { name: ToolName; description: string; inputSchema:
   },
   {
     name: 'note',
-    description: 'Session log: record a finding or a reason that lives nowhere else and a later reader will need.',
+    description: 'Session log: record a finding, a measurement or how you checked something, when it lives nowhere else and a later reader will need it.',
     inputSchema: object({ text: string }, ['text']),
   },
   {
