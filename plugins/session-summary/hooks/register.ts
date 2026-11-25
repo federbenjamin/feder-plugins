@@ -43,6 +43,7 @@ type State = {
   queued: Queued[] // the person's prompts sent mid-turn, newest last
   isListStale: boolean // a main model step ended since the documents list last read the messages: only a step adds tool uses
   isRefreshing: boolean
+  isPaused: boolean // /session-summary pause: no summary calls in this session only; kept across /clear, cleared at session.start
 }
 
 const noCalls = (): Calls => ({ count: 0, input: 0, output: 0, cached: 0, usd: 0 })
@@ -129,7 +130,7 @@ async function call($: EngineInterface, state: State, status: SummaryStatus, epo
     const id = await $.session.id()
     const { dir } = await stateDirs($)
     const settings = await settingsOf($)
-    if (settings.isOff && !isManual) return undefined
+    if ((settings.isOff || state.isPaused) && !isManual) return undefined
     variant = settings.variant
     const transcript = await $.session.messages()
     await refreshDocuments($, state, transcript)
@@ -268,7 +269,7 @@ async function summarize($: EngineInterface, state: State, status: SummaryStatus
 async function onTick($: EngineInterface, state: State): Promise<void> {
   const settings = await settingsOf($)
   const now = await $.clock.now()
-  if (!isDue({ now, turnStartedAt: state.mainTurn?.startedAt ?? 0, lastCallAt: state.lastCallAt, ...settings })) return
+  if (!isDue({ now, turnStartedAt: state.mainTurn?.startedAt ?? 0, lastCallAt: state.lastCallAt, ...settings, isOff: settings.isOff || state.isPaused })) return
   const turn = state.turn
   if (state.claimedTurn === turn) {
     await skipInflight($, settings)
@@ -284,10 +285,10 @@ async function onTick($: EngineInterface, state: State): Promise<void> {
   }
 }
 
-async function show($: EngineInterface, settings: Settings, calls: Calls): Promise<string> {
+async function show($: EngineInterface, settings: Settings, isPaused: boolean, calls: Calls): Promise<string> {
   const { dir } = await stateDirs($)
   const shown = dir === '' ? null : capturePath(dir, await $.session.id())
-  return showText({ summary: await readSummary($), documents: (await readDocuments($)).map(d => d.path), settings, calls, capturePath: shown, now: await $.clock.now() })
+  return showText({ summary: await readSummary($), documents: (await readDocuments($)).map(d => d.path), settings, isPaused, calls, capturePath: shown, now: await $.clock.now() })
 }
 
 export const register: Register = (on, options) => {
@@ -312,6 +313,7 @@ export const register: Register = (on, options) => {
     queued: [],
     isListStale: false,
     isRefreshing: false,
+    isPaused: false,
   }
   let tick: { cancel: () => void } | undefined
 
@@ -320,13 +322,14 @@ export const register: Register = (on, options) => {
     tick = undefined
     state.controller?.abort()
     reset(state)
+    state.isPaused = false
     state.isInteractive = e.isInteractive
     // Registered before the interactive gate, as stop-judge does, so the command answers in a
     // `claude -p` run too.
     await $.command.register({
       name: PLUGIN,
-      description: 'Open the session summary pane, or switch it on/off and set its cadence, input source, prompt and file links',
-      argumentHint: '[on|off|first <s>|every <s>|source messages|session-log|variant <name>|links on|off|show|now]',
+      description: 'Open the session summary pane, or switch it on/off everywhere or pause it here, and set its cadence, input source, prompt and file links',
+      argumentHint: '[on|off|pause|resume|first <s>|every <s>|source messages|session-log|variant <name>|links on|off|show|now]',
       immediate: true,
     })
     if (e.isInteractive) {
@@ -427,6 +430,10 @@ export const register: Register = (on, options) => {
       case 'on':
       case 'off':
         return save({ ...settings, isOff: action.kind === 'off' }, action.kind === 'off' ? 'off: no summary calls, in every session' : 'on: summary calls resume, in every session')
+      case 'pause':
+      case 'resume':
+        state.isPaused = action.kind === 'pause'
+        return { text: state.isPaused ? 'pause: no summary calls in this session' : 'resume: summary calls resume in this session' }
       case 'first':
         return save({ ...settings, firstSeconds: action.seconds }, `first ${action.seconds}s after a turn starts`)
       case 'every':
@@ -453,13 +460,13 @@ export const register: Register = (on, options) => {
         return { text }
       }
       case 'show':
-        return { text: await show($, settings, state.calls) }
+        return { text: await show($, settings, state.isPaused, state.calls) }
       // One call now, with the session's real status, outside the timer: the turn's own calls
       // keep their schedule.
       case 'now': {
         if (!state.isInteractive) return { text: 'now: no call; summaries run in interactive sessions only' }
         const outcome = await summarize($, state, state.mainTurn !== undefined ? 'running' : 'ended', 'manual')
-        return { text: `now: ${outcome ?? 'no call; the conversation reset'}\n${await show($, await settingsOf($), state.calls)}` }
+        return { text: `now: ${outcome ?? 'no call; the conversation reset'}\n${await show($, await settingsOf($), state.isPaused, state.calls)}` }
       }
       case 'usage':
         return { text: USAGE }

@@ -23,6 +23,8 @@ export type Action =
   | { kind: 'open' }
   | { kind: 'on' }
   | { kind: 'off' }
+  | { kind: 'pause' }
+  | { kind: 'resume' }
   | { kind: 'show' }
   | { kind: 'now' }
   | { kind: 'links-on' }
@@ -33,7 +35,7 @@ export type Action =
   | { kind: 'source'; source: Source }
   | { kind: 'variant'; variant: string }
 
-export const USAGE = '/session-summary [on|off|first <seconds>|every <seconds>|source messages|session-log|variant <name>|links on|off|show|now]'
+export const USAGE = '/session-summary [on|off|pause|resume|first <seconds>|every <seconds>|source messages|session-log|variant <name>|links on|off|show|now]'
 
 const seconds =
   (kind: 'first' | 'every') =>
@@ -44,7 +46,7 @@ const seconds =
 
 const GRAMMAR: Grammar<Action> = {
   empty: { kind: 'open' },
-  words: { on: { kind: 'on' }, off: { kind: 'off' }, show: { kind: 'show' }, now: { kind: 'now' } },
+  words: { on: { kind: 'on' }, off: { kind: 'off' }, pause: { kind: 'pause' }, resume: { kind: 'resume' }, show: { kind: 'show' }, now: { kind: 'now' } },
   valued: {
     first: seconds('first'),
     every: seconds('every'),
@@ -61,7 +63,7 @@ export function summaryCommand(args: string): Action {
 
 export type Calls = { count: number; input: number; output: number; cached: number; usd: number }
 
-export function showText(info: { summary: Summary; documents: readonly string[]; settings: Settings; calls: Calls; capturePath: string | null; now: number }): string {
+export function showText(info: { summary: Summary; documents: readonly string[]; settings: Settings; isPaused: boolean; calls: Calls; capturePath: string | null; now: number }): string {
   const { summary: s, settings: t, calls: c } = info
   const updated = s.at === 0 ? 'never' : `${Math.floor((info.now - s.at) / 60_000)} min ago (${s.status})`
   return [
@@ -71,7 +73,7 @@ export function showText(info: { summary: Summary; documents: readonly string[];
     `Now: ${s.now || '(none yet)'}`,
     `Files: ${info.documents.join(', ') || 'none'}`,
     `updated: ${updated}`,
-    `settings: ${t.isOff ? 'off' : 'on'} · first ${t.firstSeconds}s · every ${t.everySeconds}s · source ${t.source} · variant ${t.variant}`,
+    `settings: ${t.isOff ? 'off' : 'on'}${info.isPaused ? ' · paused in this session' : ''} · first ${t.firstSeconds}s · every ${t.everySeconds}s · source ${t.source} · variant ${t.variant}`,
     `links: ${t.linksBase === '' ? 'off' : `on ${t.linksBase}`}`,
     `this session: ${c.count} calls · in ${c.input} · out ${c.output} · cached ${c.cached} · $${c.usd.toFixed(4)}`,
     `capture: ${info.capturePath ?? '(no state dir)'}`,
