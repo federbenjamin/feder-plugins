@@ -3,6 +3,7 @@ import type { ModelCompleteRequest, On } from 'claude-code'
 import { extractRecord, firingsOf, keyFrom, pushMark, tailAt, turnAtFiring } from '../hooks/extract'
 import type { LineMark } from '../hooks/extract'
 import { JUDGE_REQUEST, TAIL_BYTES } from '../hooks/judge/config'
+import { buildInput, readTurn } from '../hooks/judge/input'
 import { parseRows } from '../hooks/judge/judge'
 import { PROMPT } from '../hooks/judge/prompt'
 
@@ -262,10 +263,35 @@ test('/eval-judge --candidate pairs the prompt file against the shipped prompt o
   expect(result.text).toContain('candidate: /in/candidate.txt')
 })
 
+test('/eval-judge --candidate-model sends the shipped prompt to another model in the candidate arm', async ($, on) => {
+  const w = evalWorld(on, TURN, 37)
+  await $.session.start({ cwd: '/tmp', surface: null, isInteractive: false })
+  const result = await $.command.run({ ...COMMAND, args: `${RUN_ARGS} --candidate-model opus --repeats 1` })
+  expect(w.requests.map(r => [r.model, r.system])).toEqual([[JUDGE_REQUEST.model, PROMPT], ['opus', PROMPT]])
+  expect(result.text).toContain('candidate: the same prompt on opus')
+})
+
+test('a capture line reads back as a record: the id from the turn, the operator\'s words without the agent\'s', () => {
+  const turn = readTurn([typed('wait for my go', 30), agent('A plan. Say go.', 20), typed('what goes to subagents?', 10), agent('Almost nothing. Waiting on your go.', 5)], 'Almost nothing. Waiting on your go.')
+  const input = buildInput(turn, { path: '~/plan.md', body: 'The plan.' })
+  const key = keyFrom(`${JSON.stringify({ at: '2026-11-25T22:06:21.852Z', turnId: '0eb2d225-261d-4071', input, outcome: 'continue', reason: 'nothing holds it; step: x' })}\n`)
+  expect(key.T0eb2d225).toEqual({
+    id: 'T0eb2d225',
+    ts: '2026-11-25T22:06:21.852Z',
+    session: null,
+    outcome: 'continue',
+    judge_reason: 'nothing holds it; step: x',
+    final: 'Almost nothing. Waiting on your go.',
+    opening: 'what goes to subagents?',
+    operator_text: '\nwait for my go\nwhat goes to subagents?',
+    input,
+  })
+})
+
 test('/eval-judge answers a bad flag with its usage and exit code 2, before any call', async ($, on) => {
   const w = evalWorld(on, TURN, 37)
   await $.session.start({ cwd: '/tmp', surface: null, isInteractive: false })
-  for (const flags of ['--candidate', '--repeats 0', '--repeats 1.5', '--repeats x']) {
+  for (const flags of ['--candidate', '--candidate-model', '--repeats 0', '--repeats 1.5', '--repeats x']) {
     const result = await $.command.run({ ...COMMAND, args: `${RUN_ARGS} ${flags}` })
     expect({ flags, code: result.exitCode, usage: (result.text ?? '').startsWith('/eval-judge --key') }).toEqual({ flags, code: 2, usage: true })
   }
