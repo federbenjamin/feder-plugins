@@ -120,12 +120,15 @@ async function evalJudge($: EngineInterface, args: string): Promise<Answer> {
   const grades = gradesFrom(await gradeTexts($, a.graders))
   const candidate = a.candidate === undefined ? null : await readText($, a.candidate)
   const arms: Arm[] = candidate === null ? ['base'] : ['base', 'candidate']
-  const judged = await pool(callsOf(ids, arms, repeats), workers, call => judgeOne($, call, key[call.id], candidate))
-  await writeLines(
-    $,
-    a.out,
-    judged.map(({ record, usage, prompt }) => JSON.stringify({ ...record, usage, prompt })),
-  )
+  // Each call's line is saved as it returns, under `<out>.calls/`: a run that fails later, at
+  // the last write or the report, keeps every reply it paid for.
+  const lineOf = ({ record, usage, prompt }: Judged) => JSON.stringify({ ...record, usage, prompt })
+  const judged = await pool(callsOf(ids, arms, repeats), workers, async call => {
+    const one = await judgeOne($, call, key[call.id], candidate)
+    await $.fs.write(`${a.out}.calls/${call.id}-${call.arm}-${call.repeat}.json`, `${lineOf(one)}\n`)
+    return one
+  })
+  await writeLines($, a.out, judged.map(lineOf))
   return {
     text: [
       report(

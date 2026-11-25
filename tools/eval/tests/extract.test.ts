@@ -224,7 +224,7 @@ function evalWorld(on: On, transcript: string, piece: number) {
 }
 
 const lines = (w: { written: string[] }) =>
-  w.written[0]!
+  w.written.at(-1)!
     .trim()
     .split('\n')
     .map(l => JSON.parse(l) as Record<string, unknown>)
@@ -240,6 +240,8 @@ test('/eval-judge with default flags sends the record\'s input through the shipp
   expect(w.requests[0]).toMatchObject({ ...JUDGE_REQUEST, systemBlocks: [{ text: PROMPT, cache: true }] })
   const written = lines(w)
   expect(written.map(l => `${String(l.arm)}${String(l.repeat)}`).sort()).toEqual(['base1', 'base2'])
+  // one write per call as it returns, then the whole run
+  expect(w.written.slice(0, -1).join('')).toBe(w.written.at(-1))
   for (const line of written) {
     expect(line.id).toBe('F0001')
     expect(line.prompt).toBe('THE INPUT')
