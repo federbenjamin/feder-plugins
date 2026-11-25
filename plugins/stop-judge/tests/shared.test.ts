@@ -1,13 +1,13 @@
 import { expect, test } from 'claude-code/testing'
 import type { EngineInterface } from 'claude-code'
-import { isConversationReplaced, PERSON_ORIGINS } from '../hooks/shared/events.ts'
-import { countOutcomes, firingLine, firingRecord, sessionLogPath, sessionLogsDir, stateDir } from '../hooks/shared/firing.ts'
-import { pool } from '../hooks/shared/pool.ts'
-import { PRICES, usageUsd } from '../hooks/shared/pricing.ts'
-import { appendLine, record, stateDirs } from '../hooks/shared/record.ts'
-import { isPermanent, retryDelayS, tooManyFailed } from '../hooks/shared/retry.ts'
-import { toolInputHead } from '../hooks/shared/text.ts'
-import { contentText, isTypedText, NOT_TYPED, parseRow, SIBLING_TEXTS, typedText } from '../hooks/shared/typed.ts'
+import { isConversationReplaced, PERSON_ORIGINS } from '../hooks/shared/events'
+import { countOutcomes, firingLine, firingRecord, sessionLogPath, sessionLogsDir, stateDir } from '../hooks/shared/firing'
+import { pool } from '../hooks/shared/pool'
+import { PRICES, usageUsd } from '../hooks/shared/pricing'
+import { appendLine, record, stateDirs } from '../hooks/shared/record'
+import { isPermanent, retryDelayS, tooManyFailed } from '../hooks/shared/retry'
+import { toolInputHead } from '../hooks/shared/text'
+import { contentText, isTypedText, NOT_TYPED, parseRow, SIBLING_TEXTS, typedText } from '../hooks/shared/typed'
 
 const humanRow = (content: unknown) => ({
   type: 'user',

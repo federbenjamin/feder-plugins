@@ -1,11 +1,11 @@
-import { TAIL_BYTES } from './judge/config.ts'
-import { buildInput, readTurn } from './judge/input.ts'
-import type { Turn } from './judge/input.ts'
-import { assistantText, splitTurn } from './judge/judge.ts'
-import { parseFiringLine } from './judge/shared/firing.ts'
-import type { FiringLine } from './judge/shared/firing.ts'
-import { isRecord, parseRow } from './judge/shared/typed.ts'
-import type { TranscriptRow } from './judge/shared/typed.ts'
+import { TAIL_BYTES } from './judge/config'
+import { buildInput, readTurn } from './judge/input'
+import type { Turn } from './judge/input'
+import { assistantText, splitTurn } from './judge/judge'
+import { parseFiringLine } from './judge/shared/firing'
+import type { FiringLine } from './judge/shared/firing'
+import { isRecord, parseRow } from './judge/shared/typed'
+import type { TranscriptRow } from './judge/shared/typed'
 
 // Records of judged stops: the request the judge builds at each firing, rebuilt from the session's
 // transcript through the judge's own builder. Also the key the run reads them back from.

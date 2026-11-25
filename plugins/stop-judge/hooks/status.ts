@@ -1,5 +1,5 @@
 import type { EngineInterface } from 'claude-code'
-import { SETTINGS_KEY, settingsFrom, statusLine } from './settings.ts'
+import { SETTINGS_KEY, settingsFrom, statusLine } from './settings'
 
 // The status line, written by the command and by a derive run: the stored settings and the run
 // in flight, so neither hides the other.

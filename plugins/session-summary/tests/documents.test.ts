@@ -1,8 +1,8 @@
 import { expect, test } from 'claude-code/testing'
 import type { Doc } from '../types'
-import { FILE_CANDIDATE_CHECKS_MAX, FILE_CANDIDATES_MAX, RECENT_FILE_MS } from '../hooks/config.ts'
-import { hasNewTop, filesScrollbar, absolutePath, capturedDocuments, clampOffset, documentsFrom, fileCandidates, fileLabel, fileRow, filesHeader, isDocumentPath, isOverFiles, isRecentFile, judgeablePaths, judgedDocuments, mergeDocuments, pathsIn, shownDocuments } from '../hooks/documents.ts'
-import { estimatedRows, paneHeight } from '../hooks/summary.ts'
+import { FILE_CANDIDATE_CHECKS_MAX, FILE_CANDIDATES_MAX, RECENT_FILE_MS } from '../hooks/config'
+import { hasNewTop, filesScrollbar, absolutePath, capturedDocuments, clampOffset, documentsFrom, fileCandidates, fileLabel, fileRow, filesHeader, isDocumentPath, isOverFiles, isRecentFile, judgeablePaths, judgedDocuments, mergeDocuments, pathsIn, shownDocuments } from '../hooks/documents'
+import { estimatedRows, paneHeight } from '../hooks/summary'
 
 const CWD = '/repo'
 const assistant = (...toolUses: unknown[]) => ({ role: 'assistant', text: '', toolUses })
@@ -124,6 +124,7 @@ test('a dock holds the tree to its rows; inline the tree takes what it needs, he
   expect(paneHeight({ placement: 'dock', bodyRows: 30, estimated: 5 })).toBe(30)
   expect(paneHeight({ placement: 'inline', bodyRows: 30, estimated: 5 })).toBe(undefined)
   expect(paneHeight({ placement: 'inline', bodyRows: 10, estimated: 11 })).toBe(10)
+  expect(paneHeight({ placement: 'widget', bodyRows: 6, estimated: 11 })).toBe(6)
   expect(estimatedRows(null, 40, 0)).toBe(1)
   expect(estimatedRows(null, 40, 9)).toBe(8)
   const view = { title: 'T', isRunning: true, age: '', now: 'x'.repeat(80), soFar: 'y', asked: '' }

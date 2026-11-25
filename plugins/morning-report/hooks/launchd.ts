@@ -1,6 +1,6 @@
-import { jobNames, plistText } from './shared/launchd.ts'
-import type { JobNames } from './shared/launchd.ts'
-import { REPORT_FIRES } from './pipeline.ts'
+import { jobNames, plistText } from './shared/launchd'
+import type { JobNames } from './shared/launchd'
+import { REPORT_FIRES } from './pipeline'
 
 // The nightly launchd job: its names, the plugin check it runs first, and its plist.
 

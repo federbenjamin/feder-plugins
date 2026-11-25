@@ -1,12 +1,12 @@
 import type { EngineInterface } from 'claude-code'
-import { LINKS_HTTPS_PORT, LINKS_LOCAL_PORT, LINKS_READY_TRIES, LINKS_READY_WAIT_MS, PLUGIN, TAILSCALE_APP_CLI, TAILSCALE_TIMEOUT_MS } from './config.ts'
-import { adoptShares, LOCAL_TARGET, linksJobNames, linksPaths, mergeShares, newToken, parseShares, REFUSED, renderLinksPlist, servePortHolder, sharesText, tailnetBase, wantedShares } from './links.ts'
-import type { Share } from './links.ts'
-import { readDocuments, writeDocuments } from './pane.tsx'
-import { isMacOS } from './shared/launchd.ts'
-import { loadJob, readLine, unloadJob } from './shared/launchd-run.ts'
-import { record, stateDirs } from './shared/record.ts'
-import { stderrHead } from './shared/text.ts'
+import { LINKS_HTTPS_PORT, LINKS_LOCAL_PORT, LINKS_READY_TRIES, LINKS_READY_WAIT_MS, PLUGIN, TAILSCALE_APP_CLI, TAILSCALE_TIMEOUT_MS } from './config'
+import { adoptShares, LOCAL_TARGET, linksJobNames, linksPaths, mergeShares, newToken, parseShares, REFUSED, renderLinksPlist, servePortHolder, sharesText, tailnetBase, wantedShares } from './links'
+import type { Share } from './links'
+import { readDocuments, writeDocuments } from './pane'
+import { isMacOS } from './shared/launchd'
+import { loadJob, readLine, unloadJob } from './shared/launchd-run'
+import { record, stateDirs } from './shared/record'
+import { stderrHead } from './shared/text'
 
 // /session-summary links' I/O: the job and the serve entry it turns on and off, and the shares file
 // each session keeps in step with its documents list. links.ts holds the decisions.

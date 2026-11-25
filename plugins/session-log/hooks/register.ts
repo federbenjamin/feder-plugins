@@ -1,7 +1,7 @@
 import type { Register } from 'claude-code'
-import { isConversationReplaced } from './shared/events.ts'
-import { record, stateDirs } from './shared/record.ts'
-import { compactSessionLog, logPaths, pruneReason, templateText } from './log.ts'
+import { isConversationReplaced } from './shared/events'
+import { record, stateDirs } from './shared/record'
+import { compactSessionLog, logPaths, pruneReason, templateText } from './log'
 
 // Keeps a session log per session under `<dir>/session-logs/`: `session.start` rewrites the
 // template there, and a compaction of the main conversation moves settled lines to the archive

@@ -1,4 +1,4 @@
-import type { Arm, Grade, RunRecord } from './score.ts'
+import type { Arm, Grade, RunRecord } from './score'
 
 // The measurement of a run: each arm against the graders' labels, each arm against its own
 // repeats (the noise), and the arms against each other.

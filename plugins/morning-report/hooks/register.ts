@@ -1,9 +1,9 @@
 import type { Register } from 'claude-code'
-import { record } from './shared/record.ts'
-import { readProfile, resolveConfig } from './io.ts'
-import { intOption, parseRunArgs, SCAN_TOOL, SETUP_ARGUMENT_HINT, SETUP_DAYS, type RunArgs } from './pipeline.ts'
-import { runMorning } from './run.ts'
-import { runSetup, runSetupScan } from './setup.ts'
+import { record } from './shared/record'
+import { readProfile, resolveConfig } from './io'
+import { intOption, parseRunArgs, SCAN_TOOL, SETUP_ARGUMENT_HINT, SETUP_DAYS, type RunArgs } from './pipeline'
+import { runMorning } from './run'
+import { runSetup, runSetupScan } from './setup'
 
 // Registers /morning-run (the nightly job's entry point), /morning-setup and the scan tool the
 // setup interview calls. run.ts writes the status and patterns; setup.ts runs the interview and

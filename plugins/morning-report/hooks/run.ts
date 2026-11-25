@@ -1,6 +1,6 @@
 import type { EngineInterface } from 'claude-code'
-import { commitData, complete, extractWindow, listNames, notify, readOr, readProfile, readPrompt, REPORT_MAX_TOKENS, REPORT_TIMEOUT_MS, summarizeSessions, type Config } from './io.ts'
-import { alreadyWritten, localDate, nextState, notSummarized, parseState, plural, runRecordName, SUMMARY_NO_PROFILE, windowForRun, type RunArgs, type UsageByModel } from './pipeline.ts'
+import { commitData, complete, extractWindow, listNames, notify, readOr, readProfile, readPrompt, REPORT_MAX_TOKENS, REPORT_TIMEOUT_MS, summarizeSessions, type Config } from './io'
+import { alreadyWritten, localDate, nextState, notSummarized, parseState, plural, runRecordName, SUMMARY_NO_PROFILE, windowForRun, type RunArgs, type UsageByModel } from './pipeline'
 import {
   applyDrops,
   carryForward,
@@ -16,7 +16,7 @@ import {
   statusPrompt,
   upsertPatterns,
   watchFor,
-} from './status.ts'
+} from './status'
 
 // The nightly run: extract the window, summarize each session, then write the day's status and
 // patterns entry. Nothing is written, and the watermark stays, unless every answer came back whole.

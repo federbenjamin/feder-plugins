@@ -1,5 +1,5 @@
 import { expect, test } from 'claude-code/testing'
-import { asksForProposal, decide, isOperatorQuote, judgeOutcome, parseAnswers } from '../hooks/decide.ts'
+import { asksForProposal, decide, isOperatorQuote, judgeOutcome, parseAnswers } from '../hooks/decide'
 
 // Answers that leave a step nothing holds; each case changes what its stop reason reads.
 const CLEAR = {

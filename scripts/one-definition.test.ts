@@ -2,7 +2,7 @@
 // firing log, resolves the state dir, or defines the event predicates, the call pool, the
 // model-call retry, the stored-settings reader or the slash-command parser again, and every turn
 // tracker goes through the shared main-turn reducers.
-//   node --test scripts/*.test.ts
+//   node --import ./scripts/resolve-ts.ts --test scripts/*.test.ts
 import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { test } from 'node:test'
@@ -53,7 +53,7 @@ test('every hooks file that handles the main turn at turn.start tracks it throug
   assert.ok(trackers.some(f => f.path.endsWith(join('dialog-timeout', 'hooks', 'register.ts'))))
   const missing = trackers.flatMap(f =>
     ['mainTurnStarted', 'mainTurnEnded']
-      .filter(name => !new RegExp(`import \\{[^}]*\\b${name}\\b[^}]*\\} from '\\./shared/events\\.ts'`).test(f.text))
+      .filter(name => !new RegExp(`import \\{[^}]*\\b${name}\\b[^}]*\\} from '\\./shared/events'`).test(f.text))
       .map(name => `${f.path}: ${name}`),
   )
   assert.deepEqual(missing, [])
@@ -65,7 +65,7 @@ test('the derive loop is its own hooks file, entered only through startDerive', 
   const exported = [...run.matchAll(/^export (?:async )?(?:function|const|type) (\w+)/gm)].map(m => m[1])
   assert.deepEqual(exported, ['DeriveState', 'startDerive'])
   const register = read('register.ts')
-  assert.match(register, /from '\.\/derive-run\.ts'/)
+  assert.match(register, /from '\.\/derive-run'/)
   for (const loop of ['scanSessions', 'deriveRun', 'deriveInBackground', 'completeWithRetry', 'startDerive']) {
     assert.doesNotMatch(register, new RegExp(`function ${loop}\\b`), loop)
   }
@@ -74,6 +74,6 @@ test('the derive loop is its own hooks file, entered only through startDerive', 
 test('every plugin with a firing log appends through the shared record', () => {
   for (const p of PLUGINS) {
     const text = readFileSync(join(REPO, 'plugins', p, 'hooks', 'register.ts'), 'utf8')
-    assert.match(text, /from '\.\/shared\/record\.ts'/, p)
+    assert.match(text, /from '\.\/shared\/record'/, p)
   }
 })

@@ -1,7 +1,7 @@
 import { test, expect, mock, type Engine } from 'claude-code/testing'
 import type { On } from 'claude-code'
-import { jobPluginCheck, launchdNames, MANUAL_RUN_TEXT, renderPlist } from '../hooks/launchd.ts'
-import { SCAN_NO_SESSIONS, SCAN_UNREADABLE, SETUP_NO_PROFILE, SETUP_USAGE, SUMMARY_NO_PROFILE, type Session } from '../hooks/pipeline.ts'
+import { jobPluginCheck, launchdNames, MANUAL_RUN_TEXT, renderPlist } from '../hooks/launchd'
+import { SCAN_NO_SESSIONS, SCAN_UNREADABLE, SETUP_NO_PROFILE, SETUP_USAGE, SUMMARY_NO_PROFILE, type Session } from '../hooks/pipeline'
 
 const DATA = '/data'
 const RUNS = `${DATA}/runs`

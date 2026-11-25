@@ -1,7 +1,7 @@
 import { expect, test } from 'claude-code/testing'
-import { fitContext, keepVerifiedBullets, parseDecisions, quoteKey, rulesOnly, validateDecisions } from '../hooks/decisions.ts'
-import { verifyReaderLines } from '../hooks/derive.ts'
-import type { ReaderLine } from '../hooks/derive.ts'
+import { fitContext, keepVerifiedBullets, parseDecisions, quoteKey, rulesOnly, validateDecisions } from '../hooks/decisions'
+import { verifyReaderLines } from '../hooks/derive'
+import type { ReaderLine } from '../hooks/derive'
 
 const DEFAULT_LINE = 'Decide everything you can yourself. Bring only what is listed under "Bring to me" to the operator.'
 

@@ -1,5 +1,5 @@
-import { parseCommand } from './shared/settings.ts'
-import type { Grammar } from './shared/settings.ts'
+import { parseCommand } from './shared/settings'
+import type { Grammar } from './shared/settings'
 
 // The /keepalive command's pure side: the grammar and the lines it prints. The off flag itself is
 // per conversation, in `$.state`'s timing, not in `$.store`.

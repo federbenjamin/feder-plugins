@@ -1,5 +1,5 @@
 import { expect, test } from 'claude-code/testing'
-import { settingsFrom, statusLine, statusText, stopJudgeCommand, USAGE } from '../hooks/settings.ts'
+import { settingsFrom, statusLine, statusText, stopJudgeCommand, USAGE } from '../hooks/settings'
 
 test('an invalid stored field defaults to on without discarding an independent setting', async () => {
   const defaults = { isOff: false, isContextOff: false }

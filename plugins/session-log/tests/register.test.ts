@@ -1,6 +1,6 @@
 import { expect, mock, test } from 'claude-code/testing'
 import type { On } from 'claude-code'
-import { isConversationReplaced } from '../hooks/shared/events.ts'
+import { isConversationReplaced } from '../hooks/shared/events'
 import { compactSessionLog, logPaths, templateText } from '../hooks/log'
 import { logPath } from '../hooks/shared/firing'
 

@@ -8,7 +8,7 @@ import {
   readSettings,
   type Checks,
   type Grammar,
-} from '../hooks/shared/settings.ts'
+} from '../hooks/shared/settings'
 
 type A =
   | { kind: 'status' }

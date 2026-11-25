@@ -1,7 +1,7 @@
 import type { Register } from 'claude-code'
-import { record } from './shared/record.ts'
-import { dueCalls, isTimed, noticeText, sleptMs, TICK_MS } from './stall.ts'
-import type { RunningCall } from './stall.ts'
+import { record } from './shared/record'
+import { dueCalls, isTimed, noticeText, sleptMs, TICK_MS } from './stall'
+import type { RunningCall } from './stall'
 
 // Times each subagent tool call from its start to its result. A call still running at STALL_MS
 // gets one prompt to the main session, which starts a turn as soon as that session is idle.

@@ -1,10 +1,10 @@
 import type { EngineInterface, Register } from 'claude-code'
 import type { KeepaliveTiming } from '../types'
-import { isConversationReplaced, mainTurnEnded, mainTurnStarted, PERSON_ORIGINS } from './shared/events.ts'
-import type { MainTurn } from './shared/events.ts'
-import { record } from './shared/record.ts'
-import { accountChangedText, accountOf, AUTH_STATUS, bumpText, capFor, COLD_LIMIT, COMMAND, followsFirstRequest, isAccountChanged, isDue, OFF_TOOL, TICK_MS, wasCold } from './keepalive.ts'
-import { keepaliveCommand, keepaliveReply } from './settings.ts'
+import { isConversationReplaced, mainTurnEnded, mainTurnStarted, PERSON_ORIGINS } from './shared/events'
+import type { MainTurn } from './shared/events'
+import { record } from './shared/record'
+import { accountChangedText, accountOf, AUTH_STATUS, bumpText, capFor, COLD_LIMIT, COMMAND, followsFirstRequest, isAccountChanged, isDue, OFF_TOOL, TICK_MS, wasCold } from './keepalive'
+import { keepaliveCommand, keepaliveReply } from './settings'
 
 export { isConversationReplaced }
 

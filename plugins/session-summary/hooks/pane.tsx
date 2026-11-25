@@ -1,10 +1,10 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 import type { Doc, Summary } from '../types'
-import { DOCUMENTS_SHAPE, PANE_BACKGROUND, PANE_TITLE, PLUGIN, SETTINGS_KEY, SHAPE } from './config.ts'
-import { filesScrollbar, clampOffset, fileRow, hasNewTop, filesHeader, isOverFiles, isRecentFile, shownDocuments } from './documents.ts'
-import { settingsFrom } from './settings.ts'
-import { EMPTY_SUMMARY, estimatedRows, paneHeight, paneView } from './summary.ts'
+import { DOCUMENTS_SHAPE, PANE_BACKGROUND, PANE_TITLE, PLUGIN, SETTINGS_KEY, SHAPE } from './config'
+import { filesScrollbar, clampOffset, fileRow, hasNewTop, filesHeader, isOverFiles, isRecentFile, shownDocuments } from './documents'
+import { settingsFrom } from './settings'
+import { EMPTY_SUMMARY, estimatedRows, paneHeight, paneView } from './summary'
 
 export const summaryAtom = atom({ plugin: 'session-summary', key: 'summary' } as const, EMPTY_SUMMARY, { shape: SHAPE })
 const documentsAtom = atom({ plugin: 'session-summary', key: 'documents' } as const, [] as Doc[], { shape: DOCUMENTS_SHAPE })

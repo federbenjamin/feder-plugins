@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
-import { guardOutcome, parseRows, splitTurn } from '../hooks/judge.ts'
-import type { TranscriptRow } from '../hooks/shared/typed.ts'
+import { guardOutcome, parseRows, splitTurn } from '../hooks/judge'
+import type { TranscriptRow } from '../hooks/shared/typed'
 
 const at = (minute: number) => `2026-10-20T12:${String(minute).padStart(2, '0')}:00.000Z`
 

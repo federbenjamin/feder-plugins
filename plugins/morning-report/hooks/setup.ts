@@ -1,6 +1,6 @@
 import type { EngineInterface } from 'claude-code'
-import { complete, extractWindow, readProfile, readPrompt, REPORT_MAX_TOKENS, REPORT_TIMEOUT_MS, SHORT_PROCESS_TIMEOUT_MS, summarizeSessions, type Config } from './io.ts'
-import { jobPluginCheck, launchdNames, MANUAL_RUN_TEXT, renderPlist } from './launchd.ts'
+import { complete, extractWindow, readProfile, readPrompt, REPORT_MAX_TOKENS, REPORT_TIMEOUT_MS, SHORT_PROCESS_TIMEOUT_MS, summarizeSessions, type Config } from './io'
+import { jobPluginCheck, launchdNames, MANUAL_RUN_TEXT, renderPlist } from './launchd'
 import {
   batchSessions,
   consentLine,
@@ -19,10 +19,10 @@ import {
   SUMMARY_NO_PROFILE,
   type Extracted,
   type UsageByModel,
-} from './pipeline.ts'
-import { isMacOS } from './shared/launchd.ts'
-import { loadJob, readLine, unloadJob } from './shared/launchd-run.ts'
-import { stderrHead } from './shared/text.ts'
+} from './pipeline'
+import { isMacOS } from './shared/launchd'
+import { loadJob, readLine, unloadJob } from './shared/launchd-run'
+import { stderrHead } from './shared/text'
 
 // /morning-setup: the interview and the scan it may call, and the launchd schedule and its removal.
 

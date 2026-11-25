@@ -1,9 +1,9 @@
-import { quoteKey } from './decisions.ts'
-import { isScratchProject } from './judge.ts'
-import { actionSummary, clip } from './shared/text.ts'
-import { isRecord, parseRow, typedText } from './shared/typed.ts'
+import { quoteKey } from './decisions'
+import { isScratchProject } from './judge'
+import { actionSummary, clip } from './shared/text'
+import { isRecord, parseRow, typedText } from './shared/typed'
 
-export { pool } from './shared/pool.ts'
+export { pool } from './shared/pool'
 
 // The derivation's pure side: which transcripts to read, their typed turns, the reader batches,
 // the estimate, and the reader lines that may reach the synthesis. derive-run.ts holds every `$` call.

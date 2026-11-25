@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
-import { mainTurnEnded, mainTurnStarted } from '../hooks/shared/events.ts'
-import type { MainTurn } from '../hooks/shared/events.ts'
+import { mainTurnEnded, mainTurnStarted } from '../hooks/shared/events'
+import type { MainTurn } from '../hooks/shared/events'
 
 const running: MainTurn = { turnId: 't1', startedAt: 100 }
 

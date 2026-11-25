@@ -1,5 +1,5 @@
-import { PASTED_BLOCK, PROPOSAL_ASK } from './config.ts'
-import { isRecord } from './shared/typed.ts'
+import { PASTED_BLOCK, PROPOSAL_ASK } from './config'
+import { isRecord } from './shared/typed'
 
 // What a model reply comes to: the answers it holds, whether its quotes are the operator's own
 // words, and the decision the answers make. Haiku reports; only this code decides.

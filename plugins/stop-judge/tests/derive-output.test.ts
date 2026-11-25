@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
-import { capSynthesisInput, contentOfReply, parseReaderLines, verifyReaderLines } from '../hooks/derive.ts'
-import type { ReaderLine } from '../hooks/derive.ts'
+import { capSynthesisInput, contentOfReply, parseReaderLines, verifyReaderLines } from '../hooks/derive'
+import type { ReaderLine } from '../hooks/derive'
 
 function finding(overrides: Partial<ReaderLine> = {}): ReaderLine {
   return {

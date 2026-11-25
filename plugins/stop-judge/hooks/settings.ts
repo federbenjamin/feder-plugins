@@ -1,6 +1,6 @@
-import { OUTCOMES } from './judge.ts'
-import { isFlag, parseCommand, readSettings } from './shared/settings.ts'
-import type { Grammar } from './shared/settings.ts'
+import { OUTCOMES } from './judge'
+import { isFlag, parseCommand, readSettings } from './shared/settings'
+import type { Grammar } from './shared/settings'
 
 // The /stop-judge command's pure side: the stored settings, the grammar, the status line.
 

@@ -1,5 +1,5 @@
 import type { EngineInterface } from 'claude-code'
-import { firingRecord, stateDir } from './firing.ts'
+import { firingRecord, stateDir } from './firing'
 
 // The I/O half of the firing log, for every plugin's hooks: the state dir read from the
 // environment, and the one append. firing.ts holds the pure half.

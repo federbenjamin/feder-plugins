@@ -30,10 +30,10 @@ echo "== marketplace"
 claude plugin validate . --strict
 
 echo "== generated copies"
-node scripts/sync-shared.ts --check
+node --import ./scripts/resolve-ts.ts scripts/sync-shared.ts --check
 
 echo "== script tests (the sync check, directive.sh against log.ts, the stop-judge context hook against decisions.ts, one definition per shared shape)"
-node --test scripts/*.test.ts
+node --import ./scripts/resolve-ts.ts --test scripts/*.test.ts
 
 echo "== public paths"
 if git ls-files -z --cached -- . ':(exclude)scripts/check.sh' |

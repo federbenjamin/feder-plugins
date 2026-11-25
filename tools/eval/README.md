@@ -2,7 +2,7 @@
 
 Dev tooling, never installed: it measures the stop judge (`plugins/stop-judge`) over firings a person has graded, so a prompt change ships only after it is measured. It is a mod, not a script, because production calls the model through `$.model.complete`, which prepends the CLI's identity block to the system prompt; `claude -p --system-prompt` would replace it and measure a different request. It is not listed in `.claude-plugin/marketplace.json`. Load it with `--plugin-dir` only.
 
-`hooks/judge/` is a generated copy of the judge's `config.ts`, `decide.ts`, `input.ts`, `judge.ts`, `plan-io.ts`, `prompt.ts` and `hooks/shared/` (a plugin cannot import outside its folder): edit `plugins/stop-judge`, then run `node scripts/sync-shared.ts`. The run builds every request with the judge's own `judgeRequest`, reads every reply with its `judgeOutcome`, and sends the production request: haiku, the fixed instructions marked for the prompt cache, 1024 tokens, effort low, 20 s timeout.
+`hooks/judge/` is a generated copy of the judge's `config.ts`, `decide.ts`, `input.ts`, `judge.ts`, `plan-io.ts`, `prompt.ts` and `hooks/shared/` (a plugin cannot import outside its folder): edit `plugins/stop-judge`, then run `node --import ./scripts/resolve-ts.ts scripts/sync-shared.ts`. The run builds every request with the judge's own `judgeRequest`, reads every reply with its `judgeOutcome`, and sends the production request: haiku, the fixed instructions marked for the prompt cache, 1024 tokens, effort low, 20 s timeout.
 
 ## Steps
 
@@ -24,7 +24,7 @@ Dev tooling, never installed: it measures the stop judge (`plugins/stop-judge`) 
 
    Calls: records × arms × repeats (190 × 2 × 2 = 760 haiku calls). `--candidate` is a file holding a whole system prompt; with it the `candidate` arm sends that text where the `base` arm sends `PROMPT`, on the same input, and without it only `base` runs. Its reply must answer the same fixed questions, since `decide.ts` reads them. `--repeats` (default 2) runs every arm that many times, so the run measures its own noise. A record's arms are sent side by side, so both meet the same API conditions. `--key` takes the extract's JSON lines or a JSON object of records by id; `--graders` takes a folder (its `grade-out-*.jsonl`) or one grades file. `--setting-sources ""` keeps the installed plugins from loading beside it. Keep the `--out` file: it is the run's raw output.
 
-`tools/eval/out/` is ignored by git. Records and grades come from real transcripts: never commit them. `fixtures/records.sample.jsonl` and `fixtures/grades.sample.jsonl` are synthetic: eight records and their grades, the shapes above. Their source is `fixtures/samples.ts`, which the tests import; edit it and run `node scripts/sync-shared.ts` to rewrite the two files (`--check` fails on drift).
+`tools/eval/out/` is ignored by git. Records and grades come from real transcripts: never commit them. `fixtures/records.sample.jsonl` and `fixtures/grades.sample.jsonl` are synthetic: eight records and their grades, the shapes above. Their source is `fixtures/samples.ts`, which the tests import; edit it and run `node --import ./scripts/resolve-ts.ts scripts/sync-shared.ts` to rewrite the two files (`--check` fails on drift).
 
 ## What it no longer does
 

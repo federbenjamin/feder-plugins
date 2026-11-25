@@ -19,7 +19,7 @@ Claude Code plugins by federbenjamin, in one marketplace: the mods that keep an 
 
 - Mod code: `$` only in hooks files (`hooks/register.ts` and the I/O modules it imports, `hooks/shared/record.ts` among them); decisions live in pure modules, exported from the other `hooks/*.ts` and tested in `tests/*.test.ts`.
 - Transcript parsing that reads whole files lives in a script the mod runs (morning-report's `scripts/extract.py`), not in the mod: `$.fs.read` caps a file at 4 MiB and a hook gets 10 s of its own CPU.
-- Generated copies: `hooks/shared/`, `tools/eval/hooks/judge/` and `tools/eval/fixtures/*.sample.jsonl` (from `fixtures/samples.ts`) are written by `scripts/sync-shared.ts`. Edit the source, run `node scripts/sync-shared.ts`, commit both; `scripts/check.sh` fails on drift.
+- Generated copies: `hooks/shared/`, `tools/eval/hooks/judge/` and `tools/eval/fixtures/*.sample.jsonl` (from `fixtures/samples.ts`) are written by `scripts/sync-shared.ts`. Edit the source, run `node --import ./scripts/resolve-ts.ts scripts/sync-shared.ts`, commit both; `scripts/check.sh` fails on drift.
 - Logs: every mechanism appends one line per firing to `~/.claude/stopstopping/logs/<plugin>.log` in `shared/firing.ts`'s line shape; its README names the read-back command.
 - Checks: `bash scripts/check.sh` before every push.
 

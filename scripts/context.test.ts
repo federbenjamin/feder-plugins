@@ -1,6 +1,6 @@
 // Runs stop-judge's SessionStart hook command from hooks/hooks.json against a fixture state dir:
 // a plugin test cannot start a process, so this is where the hook's sed meets decisions.ts.
-//   node --test scripts/*.test.ts
+//   node --import ./scripts/resolve-ts.ts --test scripts/*.test.ts
 import { spawnSync } from 'node:child_process'
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'

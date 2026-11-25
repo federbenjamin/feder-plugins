@@ -1,6 +1,6 @@
 import type { EngineInterface, ModelCompleteRequest, ModelCompleteResult } from 'claude-code'
-import { bulletCount, CONTEXT_MAX_CHARS, datedQuotesOf, decisionsPath, fitContext, headerLine, keepVerifiedBullets, validateDecisions, withHeader } from './decisions.ts'
-import { READER_PROMPT, SYNTH_PROMPT } from './derive-prompts.ts'
+import { bulletCount, CONTEXT_MAX_CHARS, datedQuotesOf, decisionsPath, fitContext, headerLine, keepVerifiedBullets, validateDecisions, withHeader } from './decisions'
+import { READER_PROMPT, SYNTH_PROMPT } from './derive-prompts'
 import {
   batches,
   capSynthesisInput,
@@ -23,14 +23,14 @@ import {
   typedTurnsOf,
   verifyReaderLines,
   windowText,
-} from './derive.ts'
-import type { Batch, Session } from './derive.ts'
-import { isPermanent, retryDelayS, tooManyFailed } from './shared/retry.ts'
-import { COMMAND } from './settings.ts'
-import { PRICES, usageUsd } from './shared/pricing.ts'
-import { record, stateDirs } from './shared/record.ts'
-import { setProgress, showStatus } from './status.ts'
-import type { DeriveRun, StatusState } from './status.ts'
+} from './derive'
+import type { Batch, Session } from './derive'
+import { isPermanent, retryDelayS, tooManyFailed } from './shared/retry'
+import { COMMAND } from './settings'
+import { PRICES, usageUsd } from './shared/pricing'
+import { record, stateDirs } from './shared/record'
+import { setProgress, showStatus } from './status'
+import type { DeriveRun, StatusState } from './status'
 
 // `/stop-judge derive`: the transcripts are scanned and the run confirmed inside the command;
 // on Run, the model calls go on in a loop detached from it. The pure side is derive.ts and

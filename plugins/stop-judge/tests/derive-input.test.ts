@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
-import { batches, packSessions, ROW_GREP_PATTERN, selectCandidates, typedTurnsOf } from '../hooks/derive.ts'
-import type { Session } from '../hooks/derive.ts'
+import { batches, packSessions, ROW_GREP_PATTERN, selectCandidates, typedTurnsOf } from '../hooks/derive'
+import type { Session } from '../hooks/derive'
 
 const turn = (ts: string, text: string, before = '(session start)') => ({ ts, text, before })
 

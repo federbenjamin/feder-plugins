@@ -1,6 +1,6 @@
-import { judgeOutcome } from './judge/decide.ts'
-import type { JudgeReply, Said } from './judge/decide.ts'
-import { isRecord } from './judge/shared/typed.ts'
+import { judgeOutcome } from './judge/decide'
+import type { JudgeReply, Said } from './judge/decide'
+import { isRecord } from './judge/shared/typed'
 
 // One model call of a run, the graders' labels, and the command's arguments.
 
